@@ -3,12 +3,23 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Framework](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 [![Database](https://img.shields.io/badge/database-SQLite%20%7C%20PostgreSQL-336791.svg)](docs/OPERATIONS.md)
-[![Language](https://img.shields.io/badge/language-English-lightgrey.svg)](README-en.md)
-[![Korean README](https://img.shields.io/badge/README-Korean-red.svg)](README.md)
+[![Open Source](https://img.shields.io/badge/open%20source-Apache--2.0-blueviolet.svg)](CONTRIBUTING.md)
+[![Language](https://img.shields.io/badge/language-English%20%7C%20Korean-lightgrey.svg)](README.md)
 
-**OpenOyster** is a product-oriented alpha for building durable, self-triggering intelligence systems. It watches heterogeneous documents, extracts signals and falsifiable hypotheses, plans bounded work, executes internal tools, creates decision artifacts, records downstream feedback, tunes guarded policy parameters through replay and shadow evaluation, and periodically reviews whether the whole system is looking at the wrong scope.
+> This is the English README. The Korean-first README is available in [README.md](README.md).
+
+**OpenOyster is an open-source intelligence runtime that reads documents, detects meaningful signals, builds falsifiable hypotheses, and turns evidence into traceable decision artifacts.**
+
+Give it files, URLs, RSS feeds, or GitHub issues/releases. OpenOyster will:
+
+1. ingest documents safely and split them into chunks;
+2. extract claims, signals, risks, and opportunities;
+3. create falsifiable hypotheses and connect support/counter-evidence;
+4. run internal tools for briefs, counter-evidence scans, and decision memos;
+5. use human feedback for policy replay and shadow evaluation;
+6. periodically review whether the system is looking at the wrong scope.
 
 ```text
 Sources -> Documents -> Claims / Signals -> Hypotheses -> Triggers -> Tasks -> Artifacts
@@ -16,36 +27,30 @@ Sources -> Documents -> Claims / Signals -> Hypotheses -> Triggers -> Tasks -> A
    |----- Meta-premise review <- Policy replay/shadow tuning <- Evaluation
 ```
 
-OpenOyster is **not** a magical fully autonomous general agent and it is **not yet an enterprise production platform**. It is a working, auditable, open-source foundation that can be run, tested, extended, and deployed as a small service.
+OpenOyster is not a magic general-purpose autonomous agent. It is an alpha implementation of an **auditable intelligence OS**: evidence graph first, event log first, policy record first.
 
-## Highlights
+## Why It Exists
 
-- Durable SQL event stream with per-loop checkpoints, idempotency keys, and database-backed worker leases.
-- Ten independent loops for intake, maintenance, extraction, hypothesis, planning, execution, utilisation, evaluation, optimisation, and meta-premise review.
-- Traceable documents, chunks, claims, signals, hypotheses, evidence edges, tasks, runs, artifacts, feedback, policies, experiments, and mission charters.
-- Local deterministic extraction plus an OpenAI-compatible structured JSON provider with visible fallback warnings.
-- Filesystem, guarded HTTP, RSS, and read-only GitHub release/issue ingestion.
-- Evidence-aware internal tools for hypothesis briefs, support scans, counter-evidence scans, and corpus baselines.
-- Retrieval metadata with matched terms, source-diversity caps, counter-evidence query mode, and optional PostgreSQL full-text mode.
-- Evidence/provenance inspection through CLI and read APIs without default raw-document body exposure.
-- Deterministic fixture evaluation for signal type, counter-evidence, and traceability regressions.
-- FastAPI service, read-only dashboard, API-key-protected mutations, Typer CLI, Alembic migrations, Docker Compose, CI, manuals, and tests.
+Many AI agent demos can produce fluent answers. They struggle with harder operational questions:
 
-## Status
+- Which source document supports this judgment?
+- Did the system look for counter-evidence?
+- Why did this task run?
+- Was a model failure or fallback recorded?
+- How does the system learn from good and bad outcomes?
+- Is it slowly drifting toward the wrong source universe?
 
-Release `0.3.0` is a **shareable product-oriented alpha/reference implementation** focused on open-source installability, evidence quality, read connectors, and inspection.
+OpenOyster treats those questions as product requirements. It prioritizes **evidence, traceability, replayability, and operational boundaries** over agent theater.
 
-Known boundaries:
+## Good Fits
 
-- no default vector index;
-- no RBAC or multi-tenant model;
-- no secret-manager integration;
-- no browser-scale crawler;
-- no external write-action SDK;
-- no distributed broker;
-- no load, chaos, or security certification.
+- Continuously monitoring research notes, policy material, release notes, and market signals.
+- Producing evidence-linked hypotheses instead of plain summaries.
+- Building autonomous agent systems with durable DB state, events, retries, idempotency, and policy tuning from day one.
+- Studying a reference architecture before turning LLM output into an operational system.
+- Experimenting with Korean/English intelligence workflows in one open-source runtime.
 
-## Quick Start
+## 5-Minute Demo
 
 Python 3.11-3.13 is supported.
 
@@ -56,31 +61,52 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 
 cp .env.example .env
-# Set OPENOYSTER_API_KEY in .env before exposing the API.
+# Set OPENOYSTER_API_KEY before exposing the API.
 
 openoyster init
 openoyster ingest examples/inbox
 openoyster run --cycles 4 --sleep 0
 openoyster status
-openoyster doctor
 openoyster serve --host 127.0.0.1 --port 8080
 ```
 
-Open the dashboard at `http://127.0.0.1:8080` and OpenAPI at `/docs`.
+Dashboard: `http://127.0.0.1:8080`
 
-## Docker Compose
+OpenAPI: `http://127.0.0.1:8080/docs`
+
+Inspect evidence directly:
 
 ```bash
-cp .env.example .env
-# Replace OPENOYSTER_API_KEY and OPENOYSTER_POSTGRES_PASSWORD.
-mkdir -p workspace/inbox
-cp examples/inbox/* workspace/inbox/
-docker compose up --build
+openoyster hypothesis show HYPOTHESIS_ID --evidence
+openoyster artifact show ARTIFACT_ID --provenance
+openoyster eval fixtures examples/eval
 ```
 
-Compose starts PostgreSQL, a one-shot migration service, the API, and a worker.
+## What Is Included
 
-## CLI
+- **Durable runtime**: SQL event stream, checkpoints, idempotency keys, DB-backed worker leases.
+- **Ten loops**: intake, maintenance, extraction, hypothesis, planning, execution, utilisation, evaluation, optimisation, meta-premise review.
+- **Traceable knowledge graph**: documents, chunks, claims, signals, hypotheses, evidence edges, tasks, runs, artifacts, feedback, policies, experiments, mission charters.
+- **Ingestion paths**: filesystem, guarded HTTP, RSS, GitHub releases/issues.
+- **LLM providers**: local deterministic extractor, OpenAI-compatible structured JSON provider, visible fallback warnings.
+- **Evidence tools**: hypothesis brief, support scan, counter-evidence scan, corpus baseline.
+- **Retrieval quality controls**: matched terms, source-diversity cap, counter-evidence query mode, optional PostgreSQL full-text retrieval.
+- **Operational surfaces**: FastAPI, read-only dashboard, API-key protected writes, Typer CLI, Alembic migrations, Docker Compose.
+- **Verification surfaces**: pytest, ruff, mypy, CI, fixture evaluation, release checklist, threat model.
+
+## Ingestion Examples
+
+```bash
+openoyster ingest ./research-notes
+openoyster ingest-url https://example.org/report
+openoyster ingest-rss feeds.yaml
+openoyster ingest-github owner/repo --kind releases
+openoyster ingest-github owner/repo --kind issues
+```
+
+A GitHub token is optional. If needed, inject it through `OPENOYSTER_GITHUB_TOKEN`; it is not stored in document metadata or event payloads.
+
+## CLI Map
 
 ```text
 openoyster init
@@ -106,47 +132,86 @@ openoyster policy promote POLICY_ID
 openoyster db upgrade
 ```
 
+## Docker Compose
+
+```bash
+cp .env.example .env
+# Set OPENOYSTER_API_KEY and OPENOYSTER_POSTGRES_PASSWORD.
+mkdir -p workspace/inbox
+cp examples/inbox/* workspace/inbox/
+docker compose up --build
+```
+
+Compose runs PostgreSQL, a one-shot migration service, the API, and a worker.
+
 ## Repository Layout
 
 ```text
 src/openoyster/
   api/          FastAPI application and escaped read-only dashboard
-  connectors/   Filesystem, HTTP, RSS, and GitHub ingestion
+  connectors/   Filesystem, HTTP, RSS, GitHub ingestion
   loops/        Ten independent event-driven loops
   migrations/   Alembic environment and versioned schema
-  services/     Parsing, retrieval, inspection, evaluation, tools, and artifacts
+  services/     Parsing, retrieval, inspection, evaluation, tools, artifacts
 
-tests/          Unit, API, migration, optimiser, retry, CLI, and E2E tests
-docs/           User, contributor, architecture, operations, security, and audit docs
-examples/       Demo documents, policy override, mission example, and eval fixtures
+tests/          Unit, API, migration, optimiser, retry, CLI, E2E tests
+docs/           User, contributor, architecture, operations, security, audit docs
+examples/       Demo documents, policy override, mission example, eval fixtures
 ```
+
+## Status And Limits
+
+Current release: `0.3.0` alpha. It is suitable as an open-source reference implementation, not as an unreviewed high-stakes decision system.
+
+Not included yet:
+
+- default vector index;
+- RBAC or multi-tenancy;
+- secret-manager integration;
+- browser-scale crawler;
+- external write-action SDK;
+- distributed broker;
+- load, chaos, or security certification.
 
 ## Design Principles
 
 1. The event graph is the spine.
 2. Knowledge, hypotheses, and actions are different objects.
-3. Autonomy is bounded.
-4. Optimisation needs labels.
-5. The global loop can challenge local loops.
-6. Fallbacks are visible.
+3. Autonomy must be bounded.
+4. Optimisation needs real labels.
+5. The global loop can challenge local assumptions.
+6. Fallbacks are recorded, not hidden.
 
 ## Documentation
 
-- `docs/USER_MANUAL.md` - full operator and user guide.
-- `docs/USER_MANUAL_KO.md` - Korean operational guide.
-- `docs/CONTRIBUTOR_MANUAL.md` - contributor workflow and extension contracts.
-- `docs/ARCHITECTURE.md` - event, data, loop, and transaction architecture.
-- `docs/OPERATIONS.md` - deployment, backup, migration, monitoring, and incident handling.
-- `docs/POLICY_TUNING.md` - hyperparameters, replay/shadow mechanics, and guardrails.
-- `docs/API_REFERENCE.md` - authentication and endpoints.
-- `docs/CONNECTORS.md` - parser and connector contracts.
-- `docs/THREAT_MODEL.md` - trust boundaries and mitigations.
-- `docs/AUDIT_REPORT_KO.md` - harsh audit, score, repairs, and residual risks.
+- [Korean README](README.md)
+- [Korean User Manual](docs/USER_MANUAL_KO.md)
+- [User Manual](docs/USER_MANUAL.md)
+- [Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Operations](docs/OPERATIONS.md)
+- [Policy Tuning](docs/POLICY_TUNING.md)
+- [API Reference](docs/API_REFERENCE.md)
+- [Connectors](docs/CONNECTORS.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Audit Report KO](docs/AUDIT_REPORT_KO.md)
+
+## Open Source Tags
+
+`open-source` `python` `fastapi` `sqlalchemy` `alembic` `postgresql` `sqlite` `llm` `agents` `event-driven` `retrieval` `rss` `github-api` `korean` `english`
 
 ## Contributing
 
-Read `CONTRIBUTING.md` and `docs/CONTRIBUTOR_MANUAL.md`. Pull requests must preserve auditability, add tests, pass lint/type checks, document new events and policy keys, and include an approval boundary for every external write capability.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/CONTRIBUTOR_MANUAL.md](docs/CONTRIBUTOR_MANUAL.md) before opening a PR.
+
+Pull requests should:
+
+- preserve auditable event/model flow;
+- add relevant tests;
+- pass lint, typecheck, and tests;
+- document new events, policy keys, commands, endpoints, or connectors;
+- include an explicit approval boundary for any external write capability.
 
 ## License
 
-Apache License 2.0. See `LICENSE` and `NOTICE`.
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
