@@ -1,0 +1,73 @@
+name: openoyster
+
+x-openoyster-environment: &openoyster-environment
+  OPENOYSTER_DB_URL: postgresql+psycopg://openoyster:${OPENOYSTER_POSTGRES_PASSWORD:?Set OPENOYSTER_POSTGRES_PASSWORD in .env}@db:5432/openoyster
+  OPENOYSTER_WORKSPACE: /app/workspace
+  OPENOYSTER_INBOX_DIR: /app/workspace/inbox
+  OPENOYSTER_ARCHIVE_DIR: /app/workspace/archive
+  OPENOYSTER_API_KEY: ${OPENOYSTER_API_KEY:?Set OPENOYSTER_API_KEY in .env}
+  OPENOYSTER_API_ALLOW_UNSAFE_NO_KEY: "false"
+  OPENOYSTER_LLM_PROVIDER: ${OPENOYSTER_LLM_PROVIDER:-local}
+  OPENOYSTER_LLM_API_KEY: ${OPENOYSTER_LLM_API_KEY:-}
+  OPENOYSTER_LLM_BASE_URL: ${OPENOYSTER_LLM_BASE_URL:-https://api.openai.com/v1}
+  OPENOYSTER_LLM_MODEL: ${OPENOYSTER_LLM_MODEL:-gpt-4.1-mini}
+  OPENOYSTER_LOG_LEVEL: ${OPENOYSTER_LOG_LEVEL:-INFO}
+  OPENOYSTER_LOG_JSON: ${OPENOYSTER_LOG_JSON:-true}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openoyster
+      POSTGRES_USER: openoyster
+      POSTGRES_PASSWORD: ${OPENOYSTER_POSTGRES_PASSWORD:?Set OPENOYSTER_POSTGRES_PASSWORD in .env}
+    volumes:
+      - openoyster_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openoyster -d openoyster"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    environment: *openoyster-environment
+    command: ["openoyster", "db", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - openoyster_workspace:/app/workspace
+      - ./workspace/inbox:/app/workspace/inbox:ro
+    restart: "no"
+
+  api:
+    build: .
+    environment: *openoyster-environment
+    command: ["openoyster", "serve", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - openoyster_workspace:/app/workspace
+      - ./workspace/inbox:/app/workspace/inbox:ro
+    restart: unless-stopped
+
+  worker:
+    build: .
+    environment: *openoyster-environment
+    command: ["openoyster", "run", "--forever", "--sleep", "30"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - openoyster_workspace:/app/workspace
+      - ./workspace/inbox:/app/workspace/inbox:ro
+    restart: unless-stopped
+
+volumes:
+  openoyster_postgres:
+  openoyster_workspace:

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests scripts
+      - run: mypy src/openoyster
+      - run: pytest --cov-fail-under=75
+      - run: python -m build
+      - name: Verify wheel contents and import
+        run: |
+          python -m venv /tmp/openoyster-wheel
+          /tmp/openoyster-wheel/bin/pip install dist/openoyster-*.whl
+          /tmp/openoyster-wheel/bin/openoyster --help
+          /tmp/openoyster-wheel/bin/python -c "from pathlib import Path; import openoyster; assert Path(openoyster.__file__).with_name('migrations').joinpath('script.py.mako').exists()"

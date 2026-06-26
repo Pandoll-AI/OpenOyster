@@ -1,0 +1,15 @@
+version: mission-local-example
+mission: >
+  Detect strategic signals from AI, healthcare, policy, and enterprise transformation documents;
+  convert them into validated hypotheses and useful artifacts.
+domains:
+  - AI strategy
+  - healthcare AI
+  - public policy
+anti_goals:
+  - Do not make external writes without human approval.
+  - Do not treat generated hypotheses as verified facts.
+success_criteria:
+  - Useful hypotheses become memos or backlog candidates.
+  - Counter-evidence is visible.
+  - The system warns when its source universe becomes narrow.

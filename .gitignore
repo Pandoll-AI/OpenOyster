@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+.venv/
+venv/
+*.zip
+
+# OpenOyster runtime
+openoyster.db
+workspace/
+*.sqlite
+*.db
+.env
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
