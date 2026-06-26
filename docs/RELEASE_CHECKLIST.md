@@ -31,8 +31,8 @@
 - [ ] Contributor manual reflects event/model/policy changes.
 - [ ] API and connector docs updated.
 - [ ] Changelog includes breaking changes and migrations.
-- [ ] Roadmap and known limitations updated.
-- [ ] Audit report or release notes include environments actually exercised.
+- [ ] Goal roadmap and known limitations updated.
+- [ ] Release notes include environments actually exercised.
 
 ## Packaging
 

@@ -10,6 +10,8 @@
 
 > This is the English README. The Korean-first README is available in [README.md](README.md).
 
+> Start here: [OpenOyster Goal-Oriented Roadmap](docs/GOAL_ROADMAP.md) — the project’s end goal, user value, and staged product direction.
+
 <p align="center">
   <img src="docs/assets/openoyster-hero.png" alt="OpenOyster intelligence runtime hero image showing documents, RSS, and GitHub signals flowing into an evidence graph and decision artifacts" width="100%">
 </p>
@@ -189,6 +191,7 @@ Not included yet:
 ## Documentation
 
 - [Korean README](README.md)
+- [Goal-Oriented Roadmap](docs/GOAL_ROADMAP.md)
 - [Korean User Manual](docs/USER_MANUAL_KO.md)
 - [User Manual](docs/USER_MANUAL.md)
 - [Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)
@@ -198,7 +201,6 @@ Not included yet:
 - [API Reference](docs/API_REFERENCE.md)
 - [Connectors](docs/CONNECTORS.md)
 - [Threat Model](docs/THREAT_MODEL.md)
-- [Audit Report KO](docs/AUDIT_REPORT_KO.md)
 
 ## Open Source Tags
 

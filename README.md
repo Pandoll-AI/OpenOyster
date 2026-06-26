@@ -10,6 +10,8 @@
 
 > 한국어 우선 문서입니다. English documentation is available in [README-en.md](README-en.md).
 
+> 먼저 읽기: [OpenOyster 목표 지향 로드맵](docs/GOAL_ROADMAP.md) — 최종 목적, 사용자 가치, 단계별 목표를 정리한 기준 문서입니다.
+
 <p align="center">
   <img src="docs/assets/openoyster-hero.png" alt="OpenOyster가 문서, RSS, GitHub 신호를 근거 그래프와 의사결정 산출물로 연결하는 인텔리전스 런타임 hero image" width="100%">
 </p>
@@ -189,6 +191,7 @@ examples/       Demo documents, policy override, mission example, eval fixtures
 ## 문서
 
 - [English README](README-en.md)
+- [목표 지향 로드맵](docs/GOAL_ROADMAP.md)
 - [사용자 매뉴얼](docs/USER_MANUAL_KO.md)
 - [User Manual](docs/USER_MANUAL.md)
 - [Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)
@@ -198,7 +201,6 @@ examples/       Demo documents, policy override, mission example, eval fixtures
 - [API Reference](docs/API_REFERENCE.md)
 - [Connectors](docs/CONNECTORS.md)
 - [Threat Model](docs/THREAT_MODEL.md)
-- [Audit Report KO](docs/AUDIT_REPORT_KO.md)
 
 ## Open Source Tags
 
