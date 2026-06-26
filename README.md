@@ -10,6 +10,10 @@
 
 > 한국어 우선 문서입니다. English documentation is available in [README-en.md](README-en.md).
 
+<p align="center">
+  <img src="docs/assets/openoyster-hero.png" alt="OpenOyster가 문서, RSS, GitHub 신호를 근거 그래프와 의사결정 산출물로 연결하는 인텔리전스 런타임 hero image" width="100%">
+</p>
+
 **OpenOyster는 문서를 읽고, 중요한 변화 신호를 찾고, 검증 가능한 가설과 근거 기반 산출물을 만드는 오픈소스 인텔리전스 런타임입니다.**
 
 파일, URL, RSS, GitHub 이슈/릴리즈처럼 흩어진 자료를 넣으면 OpenOyster는 다음 일을 합니다.

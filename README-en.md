@@ -10,6 +10,10 @@
 
 > This is the English README. The Korean-first README is available in [README.md](README.md).
 
+<p align="center">
+  <img src="docs/assets/openoyster-hero.png" alt="OpenOyster intelligence runtime hero image showing documents, RSS, and GitHub signals flowing into an evidence graph and decision artifacts" width="100%">
+</p>
+
 **OpenOyster is an open-source intelligence runtime that reads documents, detects meaningful signals, builds falsifiable hypotheses, and turns evidence into traceable decision artifacts.**
 
 Give it files, URLs, RSS feeds, or GitHub issues/releases. OpenOyster will:
