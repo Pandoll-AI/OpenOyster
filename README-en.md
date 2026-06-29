@@ -13,7 +13,7 @@
 > Start here: [OpenOyster Goal-Oriented Roadmap](docs/GOAL_ROADMAP.md) — the project’s end goal, user value, and staged product direction.
 
 <p align="center">
-  <img src="docs/assets/openoyster-hero.png" alt="OpenOyster intelligence runtime hero image showing documents, RSS, and GitHub signals flowing into an evidence graph and decision artifacts" width="100%">
+  <img src="assets/hero.png" alt="OpenOyster intelligence runtime hero image showing signals, hypotheses, events, and artifacts connected through an evidence graph" width="100%">
 </p>
 
 **OpenOyster is an open-source intelligence runtime that reads documents, detects meaningful signals, builds falsifiable hypotheses, and turns evidence into traceable decision artifacts.**

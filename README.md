@@ -13,7 +13,7 @@
 > 먼저 읽기: [OpenOyster 목표 지향 로드맵](docs/GOAL_ROADMAP.md) — 최종 목적, 사용자 가치, 단계별 목표를 정리한 기준 문서입니다.
 
 <p align="center">
-  <img src="docs/assets/openoyster-hero.png" alt="OpenOyster가 문서, RSS, GitHub 신호를 근거 그래프와 의사결정 산출물로 연결하는 인텔리전스 런타임 hero image" width="100%">
+  <img src="assets/hero.png" alt="OpenOyster가 신호, 가설, 이벤트, 산출물을 근거 그래프로 연결하는 인텔리전스 런타임 hero image" width="100%">
 </p>
 
 **OpenOyster는 문서를 읽고, 중요한 변화 신호를 찾고, 검증 가능한 가설과 근거 기반 산출물을 만드는 오픈소스 인텔리전스 런타임입니다.**
