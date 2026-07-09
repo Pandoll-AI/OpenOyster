@@ -14,7 +14,6 @@ from openoyster.connectors.rss import parse_rss
 from openoyster.database import make_engine, upgrade_database
 from openoyster.policies import DEFAULT_POLICY, get_nested, set_nested, validate_policy
 from openoyster.scoring import weighted_trigger_score
-from openoyster.services.evaluation import evaluate_fixture_path
 
 
 def test_nested_policy_helpers_do_not_mutate_original():
@@ -102,33 +101,3 @@ def test_github_connector_does_not_persist_token(monkeypatch):
     assert len(documents) == 1
     assert documents[0].source == "github:acme/demo"
     assert "secret-token" not in json.dumps(documents[0].metadata)
-
-
-def test_fixture_evaluation_reports_quality_metrics(tmp_path: Path):
-    fixture = tmp_path / "fixture.json"
-    fixture.write_text(
-        json.dumps(
-            {
-                "name": "fixture",
-                "documents": [
-                    {
-                        "text": (
-                            "Acme launched a product but no customer confirmed adoption. "
-                            "The strategic risk is governance approval delay."
-                        )
-                    }
-                ],
-                "expected_signal_types": ["product_release", "risk", "governance"],
-                "expected_counter_terms": ["no customer"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    report = evaluate_fixture_path(fixture)
-    assert report["fixture_count"] == 1
-    assert set(report["aggregate"]) == {
-        "signal_type_precision",
-        "signal_type_recall",
-        "counter_evidence_discovery_rate",
-        "artifact_traceability",
-    }

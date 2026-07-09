@@ -377,17 +377,6 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
         session.refresh(feedback)
         return feedback
 
-    @application.post("/v1/premise-review", dependencies=[Depends(_write_authorised)])
-    def request_premise_review(session: Session = Depends(get_session)) -> dict[str, int]:
-        emission = bus.emit(
-            session,
-            "premise.review_requested",
-            {"reason": "manual API request"},
-            source_loop="api",
-        )
-        session.commit()
-        return {"event_id": emission.event.id}
-
     @application.get("/v1/policies", response_model=list[PolicyOut])
     def list_policies(session: Session = Depends(get_session)) -> list[Policy]:
         return list(session.scalars(select(Policy).order_by(Policy.id.desc())))

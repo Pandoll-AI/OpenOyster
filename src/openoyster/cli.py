@@ -53,7 +53,6 @@ from .policies import (
     promote_policy,
     validate_policy,
 )
-from .services.evaluation import evaluate_fixture_path
 from .services.inspection import artifact_provenance, hypothesis_evidence
 
 app = typer.Typer(
@@ -64,12 +63,10 @@ policy_app = typer.Typer(help="Inspect and manage versioned policies.")
 db_app = typer.Typer(help="Database migration commands.")
 hypothesis_app = typer.Typer(help="Inspect hypotheses and evidence.")
 artifact_app = typer.Typer(help="Inspect artifacts and provenance.")
-eval_app = typer.Typer(help="Run local evaluation fixtures.")
 app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(artifact_app, name="artifact")
-app.add_typer(eval_app, name="eval")
 console = Console()
 
 
@@ -504,21 +501,6 @@ def feedback(
     console.print(f"[green]Feedback recorded for artifact {artifact_id}.[/]")
 
 
-@app.command("premise-review")
-def premise_review() -> None:
-    """Request the global scope and mission-alignment review loop."""
-
-    with _runtime() as (_, _, factory), factory() as session:
-        emission = bus.emit(
-            session,
-            "premise.review_requested",
-            {"reason": "manual CLI request"},
-            source_loop="cli",
-        )
-        session.commit()
-    console.print(f"[green]Premise review event {emission.event.id} queued.[/]")
-
-
 @app.command()
 def export(
     output: Annotated[Path, typer.Option(help="Output JSON file.")] = Path("openoyster-export.json"),
@@ -605,24 +587,6 @@ def artifact_show(
                 "linked_task_id": artifact.linked_task_id,
             }
     console.print(json.dumps(payload, ensure_ascii=False, indent=2))
-
-
-@eval_app.command("fixtures")
-def eval_fixtures(
-    path: Annotated[Path, typer.Argument(help="Evaluation fixture directory or JSON file.")] = Path(
-        "examples/eval"
-    ),
-    output: Annotated[Path | None, typer.Option(help="Optional JSON output file.")] = None,
-) -> None:
-    """Run deterministic extraction/evidence fixture checks."""
-
-    report = evaluate_fixture_path(path)
-    rendered = json.dumps(report, ensure_ascii=False, indent=2)
-    if output is not None:
-        output.write_text(rendered, encoding="utf-8")
-        console.print(f"[green]Wrote evaluation report[/] {output}")
-    else:
-        console.print(rendered)
 
 
 @policy_app.command("create")

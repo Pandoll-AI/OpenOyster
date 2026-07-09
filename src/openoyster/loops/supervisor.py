@@ -23,9 +23,7 @@ from .extraction import ExtractionLoop
 from .hypothesis import HypothesisLoop
 from .intake import DocumentIntakeLoop
 from .maintenance import MaintenanceLoop
-from .optimisation import HyperparameterOptimisationLoop
 from .planning import PlanningLoop
-from .premise import MetaPremiseReviewLoop
 from .utilisation import UtilisationLoop
 
 
@@ -55,8 +53,6 @@ class Supervisor:
             ExecutionLoop(self.settings),
             UtilisationLoop(self.settings),
             EvaluationLoop(self.settings),
-            HyperparameterOptimisationLoop(self.settings),
-            MetaPremiseReviewLoop(self.settings),
         ]
 
     def close(self) -> None:

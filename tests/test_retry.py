@@ -7,31 +7,9 @@ from sqlalchemy import func, select
 from openoyster.events import bus
 from openoyster.loops.execution import ExecutionLoop
 from openoyster.loops.maintenance import MaintenanceLoop
-from openoyster.loops.premise import MetaPremiseReviewLoop
-from openoyster.models import Artifact, Hypothesis, Run, Task
-from openoyster.policies import ensure_default_mission, ensure_default_policy
+from openoyster.models import Hypothesis, Run, Task
+from openoyster.policies import ensure_default_policy
 from openoyster.utils import stable_hash
-
-
-def test_premise_loop_does_not_trigger_itself_forever(temp_settings, session_factory):
-    loop = MetaPremiseReviewLoop(temp_settings)
-    with session_factory() as session:
-        ensure_default_policy(session, temp_settings)
-        ensure_default_mission(session)
-        bus.emit(session, "premise.review_requested", {"reason": "test"})
-        session.commit()
-    with session_factory() as session:
-        first = loop.run(session)
-        session.commit()
-    with session_factory() as session:
-        second = loop.run(session)
-        session.commit()
-        count = session.scalar(
-            select(func.count(Artifact.id)).where(Artifact.artifact_type == "premise_review")
-        )
-    assert first.created_records["premise_reviews"] == 1
-    assert second.created_records == {}
-    assert count == 1
 
 
 def test_failed_task_is_retryable(temp_settings, session_factory):

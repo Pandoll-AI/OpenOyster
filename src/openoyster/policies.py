@@ -83,28 +83,6 @@ DEFAULT_POLICY: dict[str, Any] = {
         "feedback_positive_verdicts": ["used", "useful"],
         "feedback_negative_verdicts": ["rejected", "stale", "not_useful"],
     },
-    "optimisation": {
-        "enabled": True,
-        "review_interval_hours": 12,
-        "window_days": 60,
-        "min_labelled_traces": 5,
-        "shadow_min_new_labels": 3,
-        "min_improvement": 0.03,
-        "mutation_step": 0.03,
-        "allow_auto_promotion": True,
-        "cooldown_hours": 12,
-        "max_candidate_age_days": 30,
-    },
-    "meta_review": {
-        "cadence_days": 7,
-        "window_days": 30,
-        "drift_threshold": 0.38,
-        "source_concentration_threshold": 0.72,
-        "signal_type_concentration_threshold": 0.78,
-        "low_adoption_threshold": 0.20,
-        "high_failure_rate_threshold": 0.20,
-        "max_open_hypothesis_age_days": 90,
-    },
     "maintenance": {
         "heartbeat_interval_minutes": 5,
         "failed_document_retry_minutes": 30,
@@ -143,7 +121,6 @@ DEFAULT_MISSION = {
         "Material signals are detected without excessive alert noise.",
         "Hypotheses retain traceable support and counter-evidence.",
         "Artifacts are adopted into real decisions, reports, or backlogs.",
-        "Policy changes improve labelled outcomes under replay and shadow evaluation.",
         "The observed source universe remains aligned with the mission charter.",
     ],
 }
@@ -207,8 +184,6 @@ def validate_policy(policy_json: dict[str, Any]) -> None:
         "retrieval.recency_weight",
         "planning.exploration_rate",
         "utilisation.report_candidate_threshold",
-        "optimisation.min_improvement",
-        "meta_review.drift_threshold",
     ):
         _bounded(get_nested(policy_json, path), name=path)
 

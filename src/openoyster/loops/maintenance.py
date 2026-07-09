@@ -16,8 +16,6 @@ from .base import BaseLoop, LoopResult
 
 
 class MaintenanceLoop(BaseLoop):
-    """Creates internal heartbeats and schedules retries, optimisation, and premise review."""
-
     name = "maintenance"
 
     def __init__(self, settings: Settings | None = None):
@@ -59,30 +57,6 @@ class MaintenanceLoop(BaseLoop):
             idempotency_key=f"system.heartbeat:{bucket}",
         )
         result.emitted_events += int(heartbeat.created)
-
-        optimisation_hours = float(policy["optimisation"]["review_interval_hours"])
-        if self._due(session, "schedule.optimisation", timedelta(hours=optimisation_hours)):
-            emission = bus.emit(
-                session,
-                "optimisation.review_requested",
-                {"reason": "scheduled", "at": now.isoformat()},
-                source_loop=self.name,
-                idempotency_key=f"optimisation.review:{now.date().isoformat()}:{now.hour // max(int(optimisation_hours), 1)}",
-            )
-            result.emitted_events += int(emission.created)
-            self._mark(session, "schedule.optimisation")
-
-        cadence_days = float(policy["meta_review"]["cadence_days"])
-        if self._due(session, "schedule.premise", timedelta(days=cadence_days)):
-            emission = bus.emit(
-                session,
-                "premise.review_requested",
-                {"reason": "scheduled", "at": now.isoformat()},
-                source_loop=self.name,
-                idempotency_key=f"premise.review:{now.date().isoformat()}",
-            )
-            result.emitted_events += int(emission.created)
-            self._mark(session, "schedule.premise")
 
         stale_scan_hours = float(policy["maintenance"]["stale_hypothesis_scan_hours"])
         if self._due(session, "schedule.staleness", timedelta(hours=stale_scan_hours)):

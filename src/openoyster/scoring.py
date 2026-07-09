@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import math
 import re
-from collections import Counter
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
@@ -101,52 +99,3 @@ def recompute_confidence(hypothesis: Hypothesis, policy: dict) -> float:
             alpha += strength * 0.15
             beta += strength * 0.15
     return clamp(alpha / max(alpha + beta, 1e-9))
-
-
-def concentration(items: list[str]) -> float:
-    return max(Counter(items).values()) / len(items) if items else 0.0
-
-
-def normalised_entropy(items: list[str]) -> float:
-    if not items:
-        return 0.0
-    counts = Counter(items)
-    if len(counts) == 1:
-        return 0.0
-    total = len(items)
-    entropy = -sum((count / total) * math.log(count / total) for count in counts.values())
-    return clamp(entropy / math.log(len(counts)))
-
-
-def binary_classification_metrics(labels: list[bool], predictions: list[bool]) -> dict[str, float]:
-    if len(labels) != len(predictions):
-        raise ValueError("labels and predictions must have the same length")
-    if not labels:
-        return {
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "accuracy": 0.0,
-            "alert_rate": 0.0,
-            "utility": 0.0,
-            "n": 0.0,
-        }
-    tp = sum(label and prediction for label, prediction in zip(labels, predictions, strict=True))
-    fp = sum((not label) and prediction for label, prediction in zip(labels, predictions, strict=True))
-    fn = sum(label and (not prediction) for label, prediction in zip(labels, predictions, strict=True))
-    tn = len(labels) - tp - fp - fn
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    accuracy = (tp + tn) / len(labels)
-    alert_rate = sum(predictions) / len(predictions)
-    utility = clamp(0.55 * f1 + 0.25 * precision + 0.20 * accuracy - 0.05 * max(alert_rate - 0.65, 0.0))
-    return {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "accuracy": accuracy,
-        "alert_rate": alert_rate,
-        "utility": utility,
-        "n": float(len(labels)),
-    }

@@ -61,6 +61,6 @@ def test_cli_local_lifecycle(tmp_path: Path, monkeypatch) -> None:
         assert exported.exit_code == 0, exported.output
         payload = json.loads(export_path.read_text(encoding="utf-8"))
         assert payload["hypotheses"]
-        assert payload["artifacts"]
+        assert "artifacts" in payload
     finally:
         clear_settings_cache()
