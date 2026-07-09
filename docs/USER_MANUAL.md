@@ -1,31 +1,18 @@
 # OpenOyster User Manual
 
-This manual covers installation, configuration, ingestion, operation, feedback, policy management, deployment, and troubleshooting for OpenOyster `0.3.0`.
+This manual covers OpenOyster `0.4.0`: an alpha runtime that ingests documents, extracts structured signals with a codex CLI based LLM pipeline, connects evidence with FTS5 retrieval and LLM judges, and records the resulting hypotheses, artifacts, feedback, and evaluation data.
 
-## 1. Read this first
+OpenOyster is not a finished autonomous agent or enterprise platform. Generated hypotheses remain decision support. Extraction backend failures leave chunks deferred with recorded reasons instead of silently substituting a lower-quality heuristic analyzer.
 
-OpenOyster is a product-oriented alpha. It persists its reasoning trail and can run unattended inside configured boundaries, but its output remains decision support. Extraction uses a configured LLM backend, and backend unavailability defers analysis with a recorded reason instead of silently substituting a lower-quality analyzer. Do not use generated hypotheses as clinical, legal, financial, or operational truth without review.
-
-OpenOyster separates four types of autonomy:
-
-| Type | Behaviour |
-|---|---|
-| Exploratory | Generates evidence gaps and investigation tasks from signals. |
-| Operational | Executes bounded, registered internal tools. |
-| Optimisation | Mutates selected policy parameters using labelled replay and shadow evaluation. |
-| Strategic | Produces premise-review recommendations when scope or source drift is detected. |
-
-External writes and mission changes are not performed by the default runtime.
-
-## 2. Requirements
+## 1. Requirements
 
 - Python 3.11, 3.12, or 3.13.
-- SQLite for local/single-node use; PostgreSQL is recommended for service deployment.
+- SQLite for local/single-host use; PostgreSQL for service deployment.
 - A writable workspace.
 - An API key before exposing mutation endpoints.
-- codex CLI for the default local extraction backend, or OpenAI-compatible model credentials for production extraction.
+- codex CLI for the default extraction backend, or OpenAI-compatible model credentials for the remote provider.
 
-## 3. Local installation
+## 2. Local installation
 
 ```bash
 python -m venv .venv
@@ -41,9 +28,9 @@ Replace `OPENOYSTER_API_KEY` in `.env` with a long random value. Initialise the 
 openoyster init
 ```
 
-`init` applies Alembic migrations, creates the default policy and mission charter, and prepares the workspace. Migration failure is fatal by default. The `--allow-create-all-fallback` option exists only for disposable local recovery and should not be used for a managed database.
+`init` applies Alembic migrations, creates the default policy and mission charter, and prepares the workspace.
 
-## 4. Configuration
+## 3. Configuration
 
 OpenOyster uses environment variables prefixed with `OPENOYSTER_`.
 
@@ -56,7 +43,7 @@ OpenOyster uses environment variables prefixed with `OPENOYSTER_`.
 | `OPENOYSTER_INBOX_DIR` | `<workspace>/inbox` | Filesystem intake directory. |
 | `OPENOYSTER_ARCHIVE_DIR` | `<workspace>/archive` | Optional processed-file archive. |
 | `OPENOYSTER_MAX_EVENTS_PER_LOOP` | `100` | Maximum selected events per loop cycle. |
-| `OPENOYSTER_EVENT_SCAN_MULTIPLIER` | `20` | How far a filtered consumer scans beyond its limit. |
+| `OPENOYSTER_EVENT_SCAN_MULTIPLIER` | `20` | Deprecated compatibility setting; event polling now filters wanted event types in SQL. |
 | `OPENOYSTER_LOOP_LEASE_SECONDS` | `300` | Database lease duration for one loop worker. |
 | `OPENOYSTER_SCHEDULER_TICK_SECONDS` | `30` | Default scheduler heartbeat interval. |
 | `OPENOYSTER_ARCHIVE_PROCESSED_FILES` | `false` | Move successfully ingested files after commit. |
@@ -87,15 +74,17 @@ With no API key and unsafe mode disabled, read endpoints work and write endpoint
 | `OPENOYSTER_CODEX_TIMEOUT_SECONDS` | `300` | codex CLI subprocess timeout. |
 | `OPENOYSTER_CODEX_CONFIG_DIR` | `.codex-llm` | Model and pipeline catalog directory. |
 
-Remote extraction expects a chat-completions-compatible endpoint returning structured JSON. A malformed or failed model response leaves the affected chunk deferred with a reason. It is never replaced by heuristic output.
+Remote extraction expects a chat-completions-compatible endpoint returning structured JSON. A malformed or failed model response leaves the affected chunk deferred with a reason.
 
-## 5. Ingesting documents
-
-### Copy a file or directory into the inbox
+## 4. Ingesting documents
 
 ```bash
 openoyster ingest ./research
 openoyster ingest ./memo.docx
+openoyster ingest-url https://example.org/report
+openoyster ingest-rss examples/feeds.yaml
+openoyster ingest-github owner/repo --kind releases
+openoyster ingest-github owner/repo --kind issues
 ```
 
 Supported formats:
@@ -104,49 +93,36 @@ Supported formats:
 .txt .md .markdown .json .jsonl .csv .tsv .log .yaml .yml .html .htm .pdf .docx
 ```
 
-The command copies files; the document-intake loop performs parsing and durable ingestion on the next cycle. Content and parser version contribute to the ingest key. Re-scanning an unchanged source item does not create another document.
+URL ingestion rejects non-HTTP schemes, embedded credentials, private/loopback/link-local/reserved addresses, unsupported content types, oversized responses, and excessive redirects. RSS and GitHub ingestion are read-only. GitHub can use `OPENOYSTER_GITHUB_TOKEN` for API limits, and tokens are not persisted in document metadata.
 
-### Ingest one public URL
+Raw extracted text is stored in the database. Do not ingest sensitive material unless the database, backups, logs, operator access, and retention policy are appropriate for it.
 
-```bash
-openoyster ingest-url https://example.org/report
-```
+## 5. Running the system
 
-The connector rejects non-HTTP schemes, embedded credentials, private/loopback/link-local/reserved addresses, unsupported content types, oversized responses, and excessive redirects. It is a single-resource fetcher, not a crawler.
-
-### Ingest RSS and GitHub sources
-
-```bash
-openoyster ingest-rss feeds.yaml
-openoyster ingest-github owner/repo --kind releases
-openoyster ingest-github owner/repo --kind issues
-```
-
-RSS config accepts a YAML list or a `feeds:` list. GitHub ingestion is read-only and can use `OPENOYSTER_GITHUB_TOKEN` for API limits. Tokens are not persisted in document metadata.
-
-### Data handling warning
-
-Raw extracted text is stored in the database. Do not ingest sensitive material unless the database, backups, logs, operator access, and retention policy are appropriate for that material.
-
-## 6. Running the system
-
-### Bounded cycles
+Bounded cycles:
 
 ```bash
 openoyster run --cycles 4 --sleep 0
 ```
 
-A cycle runs each loop in order, but loops communicate through durable events and use independent transactions. Four cycles are normally enough for a fresh small corpus to settle.
-
-### Long-running worker
+Long-running worker:
 
 ```bash
 openoyster run --forever --sleep 30
 ```
 
-The worker acquires a database lease for each loop. A second worker can run, but only one owner executes the same loop while the lease is valid. This is coordination, not distributed exactly-once delivery; all writes still need idempotency.
+Local development launcher:
 
-### Inspect status and health
+```bash
+./run.sh start
+./run.sh stop
+```
+
+`run.sh` starts the API on `0.0.0.0:3377` and a worker using `.venv/bin/openoyster`, with logs under `workspace/logs/`. It is a local development helper, not a production service manager.
+
+Read endpoints and the dashboard are not protected by the API key. Do not use the `0.0.0.0` launcher on an untrusted network.
+
+Inspect status and health:
 
 ```bash
 openoyster status
@@ -154,61 +130,35 @@ openoyster doctor
 openoyster doctor-dev
 ```
 
-`status` shows object counts, failed work, active policy, and recent hypotheses. `doctor` verifies workspace write access, database connectivity, policy validity, provider configuration, and API write posture. `doctor-dev` checks whether the local verification toolchain is importable. Both doctor commands exit non-zero when a critical check fails.
+`doctor` verifies workspace write access, database connectivity, policy validity, provider configuration, and API write posture. `doctor-dev` checks whether the local verification toolchain is importable.
 
-## 7. Understanding outputs
-
-### Hypothesis states
-
-- `active`: currently investigated.
-- `mature`: support and source-diversity requirements are met.
-- `challenged`: opposition materially weakens the hypothesis.
-- `stale`: due for review or refresh.
-
-Confidence is evidence-derived, not a calibrated probability of truth. The evidence graph should be inspected before relying on it.
-
-Inspection commands:
+## 6. Inspecting outputs
 
 ```bash
 openoyster hypothesis show HYPOTHESIS_ID --evidence
 openoyster artifact show ARTIFACT_ID --provenance
-openoyster eval fixtures examples/eval
 ```
 
 Evidence/provenance inspection returns source metadata and bounded chunk excerpts, not full raw document bodies by default.
 
-### Task types
-
-The default planner can create:
+Default internal tool artifact types include:
 
 - `hypothesis_brief`
 - `support_evidence_scan`
-- `counter_evidence_scan`
-- `baseline_compare`
+- `oppose_evidence_scan`
+- `baseline_comparison`
+- `utilisation_memo`
 
 Execution is limited to tools in the registry. Unknown tool types fail visibly, create a failed run, and enter the maintenance retry path up to the policy limit.
 
-### Artifact types
-
-- `hypothesis_brief`: claim, evidence posture, uncertainty, and next questions.
-- `support_evidence_scan`: candidate support from unlinked corpus chunks.
-- `oppose_evidence_scan`: candidate counter-evidence.
-- `baseline_comparison`: corpus/source distribution context.
-- `utilisation_memo`: decision-oriented output for a sufficiently grounded hypothesis.
-- `premise_review`: system-level scope and drift audit.
-
-Artifacts are versioned per task or hypothesis context and retain links to their generating task/hypothesis.
-
-## 8. Human feedback
-
-Feedback is the strongest available optimisation label.
+## 7. Human feedback
 
 ```bash
 openoyster feedback 12 --verdict useful --score 0.9 --comment "Used in weekly review"
 openoyster feedback 13 --verdict rejected --comment "Evidence too narrow"
 ```
 
-Allowed verdicts are `used`, `useful`, `rejected`, `stale`, and `not_useful`. The evaluation loop aggregates feedback, changes artifact status, and labels matching trigger decision traces. Policy optimisation will not start until the configured minimum labelled traces exists.
+Allowed verdicts are `used`, `useful`, `rejected`, `stale`, and `not_useful`. Feedback updates artifact evaluation state and labels matching trigger decision traces when available.
 
 API equivalent:
 
@@ -219,7 +169,7 @@ curl -X POST http://127.0.0.1:8080/v1/artifacts/12/feedback \
   -d '{"verdict":"useful","score":0.9,"comment":"adopted"}'
 ```
 
-## 9. Policy management
+## 8. Policy management
 
 Inspect policies:
 
@@ -247,29 +197,19 @@ Or promote a stored candidate:
 openoyster policy promote POLICY_ID
 ```
 
-Manual promotion is an operator decision. Automatic optimisation only mutates a small allow-list and must clear replay and a later shadow-label window.
+Manual promotion is an operator decision. Keep overrides small and retain rejected policies for audit.
 
-## 10. Premise review
-
-Request an immediate global review:
+## 9. Evaluation
 
 ```bash
-openoyster premise-review
-openoyster run --cycles 2 --sleep 0
+openoyster eval gold --limit 5
+openoyster eval counter --cycles 1
+openoyster gold review
 ```
 
-The review checks, among other things:
+The gold-set harness measures core entity recall, signal type F1, and quote existence. The counter-evidence harness checks directional opposition quality. Current gold labels are still marked unreviewed, and the counter judge is only quasi-independent because it is another LLM judge in the same runtime family.
 
-- whether one source dominates the document universe;
-- whether one signal type dominates extraction;
-- whether artifacts are produced but not adopted;
-- whether loop failure rates are elevated;
-- whether open hypotheses are ageing without resolution;
-- whether the mission charter and observed behaviour appear misaligned.
-
-The output proposes action and marks mission/scope changes as requiring human approval. It does not rewrite the charter automatically.
-
-## 11. API and dashboard
+## 10. API and dashboard
 
 ```bash
 openoyster serve --host 127.0.0.1 --port 8080
@@ -284,7 +224,7 @@ openoyster serve --host 127.0.0.1 --port 8080
 
 Use an API gateway/TLS terminator for network deployment. The built-in API key is a minimal single-secret control, not RBAC.
 
-## 12. Docker Compose deployment
+## 11. Docker Compose deployment
 
 ```bash
 cp .env.example .env
@@ -294,20 +234,9 @@ cp examples/inbox/* workspace/inbox/
 docker compose up --build
 ```
 
-Services:
+Compose runs PostgreSQL, a one-shot migration service, the API, and a worker. The host inbox is mounted read-only.
 
-| Service | Function |
-|---|---|
-| `db` | PostgreSQL 16 with health check and named data volume. |
-| `migrate` | One-shot Alembic upgrade. |
-| `api` | FastAPI/dashboard, starts after migration succeeds. |
-| `worker` | Long-running loop supervisor, starts after migration succeeds. |
-
-The host inbox is mounted read-only. Stop with `docker compose down`; add `-v` only when intentionally deleting database and workspace volumes.
-
-## 13. Export and backup
-
-Portable intelligence export:
+## 12. Export and backup
 
 ```bash
 openoyster export --output openoyster-export.json
@@ -315,9 +244,9 @@ openoyster export --output openoyster-export.json
 
 The export contains policy identity, hypotheses, and artifact content. It is not a full backup because it omits raw event history and some provenance.
 
-For SQLite, stop writers and back up the database plus workspace. For PostgreSQL, use `pg_dump` and back up the workspace volume. Validate restoration regularly; a backup that has never been restored is unproven.
+For SQLite, stop writers and back up the database plus workspace. For PostgreSQL, use `pg_dump` and back up the workspace volume. Validate restoration regularly.
 
-## 14. Troubleshooting
+## 13. Troubleshooting
 
 ### `doctor` reports write API auth failure
 
@@ -335,20 +264,16 @@ Inspect chunk `last_error`, deferred events, and provider metadata. A backend ou
 
 Raise `trigger.fire_threshold`, lower `planning.max_tasks_per_cycle`, or reduce `planning.exploration_rate`. Do not tune solely for fewer objects; monitor adopted artifacts and missed signals.
 
-### Optimisation never starts
-
-Provide explicit feedback. The optimiser requires labelled trigger traces, and a new shadow policy requires additional labels that were not part of the replay baseline.
-
 ### A worker appears stuck
 
 Inspect `loop_leases` and `loop_runs`. Leases expire, but a transaction blocked by the database may still require operational intervention. Do not manually delete audit records without preserving incident evidence.
 
-## 15. Safe usage checklist
+## 14. Safe usage checklist
 
 - Keep mutation endpoints behind TLS and network access controls.
 - Use a strong API key and rotate it operationally.
 - Prefer PostgreSQL for multiple services/workers.
-- Review premise artifacts and policy promotions.
+- Review policy promotions and evidence quality.
 - Collect explicit downstream feedback.
 - Back up raw documents, database, and policy versions.
 - Never attach irreversible tools without an approval gate and audit trail.

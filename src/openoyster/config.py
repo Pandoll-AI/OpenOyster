@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     api_key_header: str = Field(default="X-OpenOyster-Key")
     api_allow_unsafe_no_key: bool = Field(default=False)
     api_max_page_size: int = Field(default=200, ge=10, le=1000)
-    default_policy_version: str = Field(default="default-0.3.0")
+    default_policy_version: str = Field(default="default-0.4.0")
 
     @field_validator("log_level")
     @classmethod

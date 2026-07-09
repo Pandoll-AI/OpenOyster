@@ -206,7 +206,7 @@ A new policy key requires:
 
 Do not add decorative “tunable” keys that are never consumed. The earlier prototype had this failure mode and it is explicitly rejected.
 
-Optimiser mutations must be allow-listed. New mutation families need an objective, labels, replay evaluation, shadow evaluation, safety bounds, and rollback semantics.
+Policy changes that alter trigger or planning behaviour need an objective, labels or fixtures, evaluation evidence, safety bounds, and rollback semantics.
 
 ## 10. Database migrations
 
@@ -230,8 +230,6 @@ A contribution should test the failure mode it could introduce.
 | Hypothesis | exact/semantic merge, evidence deduplication, contradiction, revision idempotency. |
 | Planning/execution | task bounds, unknown tools, retry, budget, duplicate events. |
 | Evaluation | evidence quality, explicit feedback, trace labels. |
-| Optimisation | insufficient labels, replay rejection, shadow waiting, promotion, expiry. |
-| Premise | drift metrics, no self-trigger loop, approval-required proposals. |
 | API | authentication, escaping, pagination, validation, error status. |
 | CLI | lifecycle and non-zero failure paths. |
 | Migrations | fresh install and upgrade. |
@@ -273,7 +271,7 @@ Suggested commit style:
 ```text
 feat(connectors): add bounded RSS ingestion
 fix(events): preserve checkpoint on partial failure
-test(optimisation): require fresh shadow labels
+test(policy): require labelled promotion evidence
 docs(operations): add PostgreSQL restore drill
 ```
 

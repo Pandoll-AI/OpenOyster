@@ -152,14 +152,14 @@ Deleting a source document may cascade some child records but can also invalidat
 1. stop the worker if failures are destructive or costly;
 2. preserve `loop_runs`, failed tasks/chunks, and related events;
 3. identify first failing policy/version/provider;
-4. disable the affected connector/tool or optimisation in policy;
+4. disable the affected connector, tool, or policy setting;
 5. patch and test against a copy of the incident data;
 6. resume with bounded cycles;
 7. document root cause and recovery.
 
 ### Bad policy promotion
 
-1. stop workers or disable optimisation;
+1. stop workers or disable policy promotion;
 2. inspect `policies`, `experiments`, and labelled decision traces;
 3. manually promote the previous validated policy;
 4. run bounded cycles and compare behaviour;

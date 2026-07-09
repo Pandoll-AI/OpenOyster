@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-A fixed plan/act agent loop is insufficient for a system that must discover its own triggers, tune its own thresholds, and review its own scope. A single task tree also makes it difficult to run document extraction, utilisation, evaluation, hyperparameter tuning, and meta-premise review in parallel.
+A fixed plan/act agent loop is insufficient for a system that must discover triggers from persisted observations and keep extraction, hypothesis work, planning, execution, utilisation, and evaluation independently retryable. A single task tree makes it difficult to preserve durable provenance and loop-level failure isolation.
 
 ## Decision
 
@@ -19,7 +19,7 @@ Positive:
 - Multiple loops can consume the same event.
 - Behaviour is auditable.
 - Local supervisor and distributed workers can share the same contract.
-- Policy tuning and premise review can observe system behaviour.
+- Evaluation and feedback can observe system behaviour.
 
 Negative:
 

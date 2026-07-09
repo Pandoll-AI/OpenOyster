@@ -78,13 +78,13 @@ Mitigation: local provider is default; remote provider requires explicit configu
 
 Residual risk: remote calls send chunk text to the configured endpoint. Operators must obtain appropriate consent, contracts, regional controls, and redaction.
 
-### Poisoned feedback / optimiser manipulation
+### Poisoned feedback / policy manipulation
 
 Threat: malicious labels drive thresholds toward noisy or suppressed behaviour.
 
-Mitigations: label minimum, bounded mutation, replay improvement, separate shadow labels, policy versioning, experiment records, and manual promotion command.
+Mitigations: policy versioning, experiment records, and manual promotion command.
 
-Residual risk: shared-key feedback has no individual trust weighting; small samples and collusion can still poison optimisation.
+Residual risk: shared-key feedback has no individual trust weighting; small samples and collusion can still bias policy decisions.
 
 ### Duplicate or lost work
 
@@ -98,7 +98,7 @@ Residual risk: exactly-once is not globally guaranteed. Future external tools ne
 
 Threat: oversized files, event storms, model retries, expensive tools, or unbounded scans.
 
-Mitigations: size limits, event limits, bounded scan multiplier, chunk/task/tool bounds, retry caps, timeouts, cost fields, and registered tools.
+Mitigations: size limits, event limits, SQL-side event type filtering, chunk/task/tool bounds, retry caps, timeouts, cost fields, and registered tools.
 
 Residual risk: no global API rate limiter and no OS/container quotas in the application.
 
@@ -130,5 +130,5 @@ Residual risk: dependencies are not hash-locked or signed in this repository. De
 - Keep inbox read-only to the service where possible.
 - Run containers as non-root with CPU/memory limits.
 - Keep LLM backend failures deferred with recorded reasons; do not add silent heuristic substitutions.
-- Monitor policy promotion and premise-review events.
+- Monitor policy promotion, loop failure, and extraction-deferred events.
 - Test restore and incident procedures.

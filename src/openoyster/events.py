@@ -3,14 +3,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Final
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import Event, EventCursor, LoopLease
 from .utils import ensure_utc
+
+_POSTGRES_EVENT_STREAM_LOCK_KEY: Final = 3_377_001
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,11 @@ class EventBus:
             existing = session.scalar(select(Event).where(Event.idempotency_key == idempotency_key))
             if existing:
                 return EventEmission(existing, False)
+        _lock_postgres_event_stream_until_commit(session)
+        if idempotency_key:
+            existing = session.scalar(select(Event).where(Event.idempotency_key == idempotency_key))
+            if existing:
+                return EventEmission(existing, False)
         event = Event(
             event_type=event_type,
             payload_json=payload or {},
@@ -75,30 +83,36 @@ class EventBus:
         limit: int = 100,
         scan_multiplier: int = 20,
     ) -> EventBatch:
+        # Deprecated compatibility parameter: SQL-side type filtering makes scan widening unnecessary.
+        _ = scan_multiplier
         wanted = set(event_types)
         cursor = session.get(EventCursor, loop_name)
         last_event_id = cursor.last_event_id if cursor else 0
-        scan_limit = max(limit * scan_multiplier, limit)
-        raw = list(
-            session.scalars(
-                select(Event).where(Event.id > last_event_id).order_by(Event.id.asc()).limit(scan_limit)
+        locked = _lock_postgres_event_stream(session)
+        try:
+            max_event_id = session.scalar(select(func.max(Event.id)))
+            upper_bound = max_event_id if max_event_id is not None and max_event_id > last_event_id else last_event_id
+            selected = list(
+                session.scalars(
+                    select(Event)
+                    .where(
+                        Event.id > last_event_id,
+                        Event.id <= upper_bound,
+                        Event.event_type.in_(wanted),
+                    )
+                    .order_by(Event.id.asc())
+                    .limit(limit)
+                )
             )
-        )
-        selected: list[Event] = []
-        checkpoint = last_event_id
-        scanned = 0
-        for item in raw:
-            if item.event_type in wanted and len(selected) >= limit:
-                break
-            checkpoint = item.id
-            scanned += 1
-            if item.event_type in wanted:
-                selected.append(item)
+        finally:
+            if locked:
+                _unlock_postgres_event_stream(session)
+        checkpoint = selected[-1].id if len(selected) == limit else upper_bound
         return EventBatch(
             loop_name=loop_name,
             events=selected,
             checkpoint_id=checkpoint,
-            scanned_count=scanned,
+            scanned_count=len(selected),
         )
 
     def ack(self, session: Session, batch: EventBatch) -> None:
@@ -170,3 +184,26 @@ class EventBus:
 
 
 bus = EventBus()
+
+
+def _lock_postgres_event_stream(session: Session) -> bool:
+    if session.get_bind().dialect.name != "postgresql":
+        return False
+    session.execute(text("SELECT pg_advisory_lock(:lock_key)"), {"lock_key": _POSTGRES_EVENT_STREAM_LOCK_KEY})
+    return True
+
+
+def _lock_postgres_event_stream_until_commit(session: Session) -> None:
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": _POSTGRES_EVENT_STREAM_LOCK_KEY},
+    )
+
+
+def _unlock_postgres_event_stream(session: Session) -> None:
+    session.execute(
+        text("SELECT pg_advisory_unlock(:lock_key)"),
+        {"lock_key": _POSTGRES_EVENT_STREAM_LOCK_KEY},
+    )

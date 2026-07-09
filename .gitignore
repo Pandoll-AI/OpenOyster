@@ -17,6 +17,8 @@ venv/
 openoyster.db
 workspace/
 .codex-llm/logs/
+.omo/
+file:memdb*
 *.sqlite
 *.db
 .env

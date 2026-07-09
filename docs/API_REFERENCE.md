@@ -31,7 +31,7 @@ The built-in mechanism is one shared secret. Put the API behind TLS and an ident
 Liveness response:
 
 ```json
-{"status":"ok","version":"0.3.0"}
+{"status":"ok","version":"0.4.0"}
 ```
 
 ### `GET /ready`
@@ -133,13 +133,7 @@ Authentication required.
 
 `score` is optional and must be in `[0,1]`. The event is evaluated on a later worker cycle.
 
-## 11. Premise review
-
-### `POST /v1/premise-review`
-
-Authentication required. Queues a manual `premise.review_requested` event and returns its ID.
-
-## 12. Policies
+## 11. Policies
 
 ### `GET /v1/policies`
 
@@ -149,25 +143,22 @@ Returns active, candidate, shadow, and archived policies.
 
 Authentication required. Validates and manually promotes the selected policy, archives the previous active policy, and emits `policy.promoted`.
 
-## 13. Loop telemetry
+## 12. Loop telemetry
 
 ### `GET /v1/loop-runs?limit=50&offset=0`
 
 Returns loop owner, status, timing, consumed/emitted counts, created-record counts, notes, and errors.
 
-## 14. Example calls
+## 13. Example calls
 
 ```bash
 curl http://127.0.0.1:8080/v1/status
 
 curl -X POST http://127.0.0.1:8080/v1/run-cycle \
   -H 'X-OpenOyster-Key: YOUR_KEY'
-
-curl -X POST http://127.0.0.1:8080/v1/premise-review \
-  -H 'X-OpenOyster-Key: YOUR_KEY'
 ```
 
-## 15. API limitations
+## 14. API limitations
 
 - No RBAC or user identity.
 - No cursor-token pagination; list endpoints use offset/limit.

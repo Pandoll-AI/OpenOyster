@@ -2,6 +2,32 @@
 
 All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility may change between minor releases.
 
+## 0.4.0 — LLM-first rebuild
+
+### Removed
+
+- Removed keyword rule-engine extraction as the product claim for intelligence quality.
+- Removed circular evaluation paths that judged extraction quality against self-generated outputs.
+- Removed self-label policy tuning as a claimed quality loop.
+- Removed documentation claims for shipped autonomous policy tuning and system-wide scope-review behavior that the current code does not provide.
+
+### Added
+
+- Added codex CLI based batch extraction with structured schema validation, bounded JSON repair, and deferred failure recording.
+- Added SQLite FTS5 retrieval over chunks with matched-term/provenance inspection.
+- Added LLM-based hypothesis merge decisions for similar scoped claims.
+- Added directional counter-evidence evaluation that requires opposing posture and verbatim quotes.
+- Added the gold-set evaluation harness for core entity recall, signal type F1, quote existence, and counter-evidence precision.
+- Added SQL-side event polling by wanted event type and max-id checkpoint advancement for sparse streams.
+- Added local development `run.sh` launcher and real AI/tech RSS examples.
+
+### Notes
+
+- Gold-set labels are still marked unreviewed.
+- Counter-evidence precision should be read with the judge-independence caveat in `docs/EVAL_REPORT.md`.
+
+> Correction: the 0.1.0-0.3.0 entries below were reconstructed retroactively in a single initial commit. Treat them as historical reconstruction, not as a verified sequence of tagged release notes.
+
 ## 0.3.0 — open-source evidence quality alpha
 
 ### Retrieval and evidence
@@ -41,7 +67,7 @@ All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility 
 - Split planning from execution and maintenance from intake.
 - Added registered support, counter-evidence, baseline, and hypothesis-brief tools.
 - Added evidence-derived hypothesis confidence, contradiction, staleness, and decision traces.
-- Added grounded utilisation and system-behaviour premise review.
+- Added grounded utilisation records and system-behaviour telemetry.
 
 ### Providers and connectors
 
@@ -49,11 +75,11 @@ All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility 
 - Remote fallback records provider identity and warnings.
 - Added PDF, DOCX, HTML, YAML, JSONL, TSV, and guarded public HTTP ingestion.
 
-### Evaluation and optimisation
+### Evaluation and policy records
 
 - Replaced prose-length self-rating with evidence posture and verified completion metrics.
 - Added explicit artifact feedback and trace outcome labels.
-- Added bounded labelled replay, fresh-label shadow evaluation, policy expiry, promotion, rejection, and experiment records.
+- Added policy expiry, promotion, rejection, and experiment records.
 
 ### Security and operations
 
@@ -71,4 +97,4 @@ All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility 
 ## 0.1.0 — initial prototype
 
 - Initial event-loop scaffold, SQLite persistence, CLI/API/dashboard, local heuristics, and basic documentation.
-- This version was subsequently judged demo-grade because event safety, provider behaviour, evaluation, optimisation, security, migrations, and tests were insufficient.
+- This version was subsequently judged demo-grade because event safety, provider behaviour, evaluation, policy records, security, migrations, and tests were insufficient.

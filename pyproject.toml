@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openoyster"
-version = "0.3.0"
+version = "0.4.0"
 description = "A durable, self-triggering signal-hypothesis-action intelligence operating system."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,0 +1,7 @@
+feeds:
+  - name: AI Times
+    url: https://www.aitimes.com/rss/allArticle.xml
+  - name: Byline Network
+    url: https://byline.network/feed/
+  - name: TechCrunch AI
+    url: https://techcrunch.com/category/artificial-intelligence/feed/
