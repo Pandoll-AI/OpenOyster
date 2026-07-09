@@ -1,0 +1,10 @@
+{
+  "id": "en-release-001",
+  "title": "vLLM v0.24.0 release notes",
+  "url": "https://github.com/vllm-project/vllm/releases/tag/v0.24.0",
+  "source": "github.com/vllm-project/vllm",
+  "language": "en",
+  "kind": "github_release",
+  "collected_at": "2026-07-10",
+  "text": "vLLM v0.24.0 (published 2026-06-29). This release features 571 commits from 256 contributors (77 new). Key highlights include MiniMax-M3 support, DeepSeek-V4 optimizations across multiple backends, Model Runner V2 expanded quantized model support, a new streaming parser engine for tool-call parsing, DiffusionGemma addition, DeepEP v2 integration, and Rust frontend maturation with new APIs. The release also changed device selection by removing internal CUDA_VISIBLE_DEVICES setting in favor of a new device_ids argument. Security improvements addressed denial-of-service vulnerabilities in audio decompression and speculative decoding, information disclosure in GGUF kernels, and input validation hardening. Multiple model support expansions included Hierarchical Reasoning Model and OpenMOSS, with significant enhancements to Gemma 4, DeepSeek-V4, and Qwen multimodal variants. Engine core improvements featured quantized-model support by default in MRv2, dynamic speculative decoding, KV-cache watermarking, and attention optimizations. Large-scale serving included DeepEP v2, multi-tier KV offloading, and distributed improvements. Hardware optimization spanned NVIDIA with SM90 CUTLASS improvements, AMD ROCm with torch 2.11 support, Intel XPU with sequence parallelism, and CPU/TPU enhancements. Quantization advances covered online FP8, MXFP formats, and backend consolidation. API improvements unified tool-call and reasoning parsing, added Anthropic Messages API cache reporting, and expanded Rust frontend endpoints."
+}

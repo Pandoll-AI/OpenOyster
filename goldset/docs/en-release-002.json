@@ -1,0 +1,10 @@
+{
+  "id": "en-release-002",
+  "title": "vLLM v0.23.0 release notes",
+  "url": "https://github.com/vllm-project/vllm/releases/tag/v0.23.0",
+  "source": "github.com/vllm-project/vllm",
+  "language": "en",
+  "kind": "github_release",
+  "collected_at": "2026-07-10",
+  "text": "vLLM v0.23.0 (published 2026-06-15). This release features 408 commits from 200 contributors (63 new). DeepSeek-V4 continued maturation with sparse MLA metadata decoupling, TRTLLM attention kernels, and various optimization passes. Model Runner V2 expanded to Llama and Mistral dense models by default, gaining a FlashInfer sampler and breakable CUDA graphs. The Rust frontend added streaming generate endpoints, dynamic LoRA endpoints, and new tool parsers. Gemma 4 received encoder-free Unified support and MTP functionality. Transformers v5 compatibility was addressed through vendored MiniCPM-V/O processors. Multi-tier KV cache offloading gained object-store secondary tier support with HMA enabled by default. A unified parser interface consolidated reasoning and tool-call parsing. New models included Step-3.7-Flash, Cosmos3 Reasoner, and JetBrains Mellum v2. Engine core improvements featured Model Runner V2 defaults for dense models, speculative decoding enhancements including DFlash variants, attention and hybrid/Mamba optimizations, KV cache scheduler improvements, and core infrastructure changes. Large-scale serving included KV cache offloading multi-tier support, KV connector improvements, EPLB async by default, and data-parallel enhancements. Hardware optimization spanned NVIDIA kernel enhancements, AMD ROCm 7.2.3, Intel XPU improvements, CPU architecture support, and TPU upgrades. Quantization advances included online FP8, ModelOpt improvements, and kernel consolidation. API changes unified parsers, added Anthropic Messages support, expanded OpenAI/Responses compatibility, and grew the Rust frontend. Security included SSL/TLS transport encryption and untrusted-input hardening."
+}

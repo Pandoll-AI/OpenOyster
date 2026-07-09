@@ -1,0 +1,10 @@
+{
+  "id": "en-release-003",
+  "title": "vLLM v0.22.1 release notes",
+  "url": "https://github.com/vllm-project/vllm/releases/tag/v0.22.1",
+  "source": "github.com/vllm-project/vllm",
+  "language": "en",
+  "kind": "github_release",
+  "collected_at": "2026-07-10",
+  "text": "vLLM v0.22.1 (published 2026-06-05). This release features 8 commits from 6 contributors (1 new). This patch release provided targeted bug fixes plus select additions. Model support expanded with JetBrains Mellum v2, an open-weights Mixture-of-Experts code-generation model. DeepSeek-V4 initialization was fixed to resolve a CUTLASS compatibility issue. OlmoHybridForCausalLM loading was corrected after upstream checkpoint changes to rope_parameters. HyperCLOVAX was registered to use vLLM's vendored config for transformers versions lacking remote code support. AMD Zen CPU hardware optimization routed W8A8 and W4A16 linear inference through zentorch kernels with transparent fallback. Large-scale serving fixed a deterministic hang in multi-node Ray data-parallel serving by excluding the Ray backend from deferred port allocation. Build and CI improvements addressed flashinfer-jit-cache installation quarantine and NIXL wheel normalization for CUDA compatibility."
+}
