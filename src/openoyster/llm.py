@@ -253,7 +253,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
 
 class StubProvider(LLMProvider):
-    """Deterministic test double for extraction plus merge_judge and stance_judge JSON calls."""
+    """Deterministic test double for extraction and configured JSON judgement stages."""
 
     name = "stub"
 

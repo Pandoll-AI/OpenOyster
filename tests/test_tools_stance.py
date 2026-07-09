@@ -24,6 +24,15 @@ class UnavailableStanceProvider(LLMProvider):
         raise ExtractionUnavailable("stance judge unavailable")
 
 
+class UnavailableOpposeVerifyProvider(StubProvider):
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        match stage:
+            case "oppose_verify":
+                raise ExtractionUnavailable("oppose verifier unavailable")
+            case _:
+                return super().query_json(prompt, stage)
+
+
 def _document(session, *, title: str, text: str) -> Document:
     document = Document(
         source="rss",
@@ -82,6 +91,50 @@ def test_counter_scan_uses_stance_judge_oppose_evidence_for_korean_marker(sessio
     assert candidate.stance == "oppose"
     assert "반대한다" in candidate.metadata["quoted_evidence"]
     assert 0.25 <= candidate.strength <= 0.9
+    assert result.metadata["oppose_rejected_by_verifier"] == 0
+    assert result.metadata["oppose_verify_unavailable"] == 0
+
+
+def test_counter_scan_discards_oppose_when_verifier_rejects(session_factory):
+    with session_factory() as session:
+        hypothesis = _hypothesis(session, "model quality blocker")
+        _document(
+            session,
+            title="Verifier reject",
+            text="VERIFY_REJECT no evidence shows model quality blocker is the issue.",
+        )
+        session.commit()
+
+        result = run_tool(
+            session,
+            task_type="counter_evidence_scan",
+            hypothesis=hypothesis,
+            policy=DEFAULT_POLICY,
+            provider=StubProvider(),
+        )
+
+    assert result.evidence_candidates == []
+    assert result.metadata["oppose_rejected_by_verifier"] == 1
+    assert result.metadata["oppose_verify_unavailable"] == 0
+
+
+def test_counter_scan_discards_oppose_when_verifier_unavailable(session_factory):
+    with session_factory() as session:
+        hypothesis = _hypothesis(session, "model quality blocker")
+        _document(session, title="Verifier unavailable", text="no evidence shows model quality blocker is the issue.")
+        session.commit()
+
+        result = run_tool(
+            session,
+            task_type="counter_evidence_scan",
+            hypothesis=hypothesis,
+            policy=DEFAULT_POLICY,
+            provider=UnavailableOpposeVerifyProvider(),
+        )
+
+    assert result.evidence_candidates == []
+    assert result.metadata["oppose_rejected_by_verifier"] == 0
+    assert result.metadata["oppose_verify_unavailable"] == 1
 
 
 def test_counter_scan_discards_non_verbatim_quote(session_factory):

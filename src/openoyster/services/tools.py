@@ -94,7 +94,7 @@ def _scan(
     )
     limit = int(policy.get("execution", {}).get("max_candidate_evidence", 8))
     selected = hits[:limit]
-    judgements, quote_misses = judge_stance(context.provider, hypothesis.claim, selected)
+    judgements, stats = judge_stance(context.provider, hypothesis.claim, selected)
     candidates = _evidence_candidates(selected, judgements, requested=stance)
     heading = "Counter-evidence" if stance == "oppose" else "Supporting evidence"
     lines = [f"# {heading} scan", "", f"Hypothesis: {hypothesis.claim}", ""]
@@ -116,7 +116,9 @@ def _scan(
             "retrieval_hits": len(hits),
             "judged": len(selected),
             "selected": len(candidates),
-            "quote_not_verbatim": quote_misses,
+            "quote_not_verbatim": stats.quote_not_verbatim,
+            "oppose_rejected_by_verifier": stats.oppose_rejected_by_verifier,
+            "oppose_verify_unavailable": stats.oppose_verify_unavailable,
             "retrieval_mode": hits[0].retrieval_mode if hits else policy.get("retrieval", {}).get("mode", "lexical"),
         },
     )

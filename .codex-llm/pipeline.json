@@ -2,6 +2,7 @@
   "stages": [
     {"name": "extract", "purpose": "문서 청크 배치에서 entities/claims/signals/hypotheses 추출", "tier": "T1", "model_type": "reasoning"},
     {"name": "stance_judge", "purpose": "청크가 가설을 지지/반박/무관한지 방향성 판정", "tier": "T1", "model_type": "reasoning"},
+    {"name": "oppose_verify", "purpose": "oppose 판정 저장 전 반박 여부 재검증", "tier": "T1", "model_type": "chat"},
     {"name": "merge_judge", "purpose": "신규 주장과 기존 가설의 동일성 판정", "tier": "T1", "model_type": "chat"},
     {"name": "gold_label", "purpose": "gold set 초벌 라벨링 (추출자와 다른 모델)", "tier": "T1", "model_type": "secondary"}
   ],

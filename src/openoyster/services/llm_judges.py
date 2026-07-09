@@ -22,6 +22,8 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_merge_judge(prompt)
         case "stance_judge":
             return _stub_stance_judge(prompt)
+        case "oppose_verify":
+            return _stub_oppose_verify(prompt)
         case "gold_label":
             return _stub_gold_label(prompt)
         case _:
@@ -80,5 +82,13 @@ def _stub_gold_label(prompt: str) -> dict[str, Any]:
     return {
         "contradicts": contradicts,
         "reasoning": "deterministic stub counter audit from evidence quote marker",
+        "model": "test-double",
+    }
+
+
+def _stub_oppose_verify(prompt: str) -> dict[str, Any]:
+    return {
+        "contradicts": "VERIFY_REJECT" not in prompt,
+        "reasoning": "deterministic stub oppose verifier from prompt marker",
         "model": "test-double",
     }

@@ -172,3 +172,13 @@ def test_stub_provider_stance_judge_uses_chunk_text_markers():
 
     assert payload["judgements"][0]["stance"] == "oppose"
     assert payload["judgements"][0]["quoted_evidence"].startswith("Acme has no evidence")
+
+
+def test_stub_provider_oppose_verify_uses_reject_marker():
+    provider = StubProvider()
+
+    accepted = provider.query_json("[SOURCE CHUNK]\nno evidence\n[/SOURCE CHUNK]", "oppose_verify")
+    rejected = provider.query_json("[SOURCE CHUNK]\nVERIFY_REJECT no evidence\n[/SOURCE CHUNK]", "oppose_verify")
+
+    assert accepted["contradicts"] is True
+    assert rejected["contradicts"] is False
