@@ -165,9 +165,9 @@ Deleting a source document may cascade some child records but can also invalidat
 4. run bounded cycles and compare behaviour;
 5. preserve the rejected policy for audit rather than deleting it.
 
-### Remote model degradation
+### Extraction backend degradation
 
-Inspect chunk metadata for provider warnings and fallback identity. Decide whether to pause intake, disable fallback, switch model endpoint, or accept local degraded mode. Never assume a fluent output proves the configured remote model ran.
+Inspect deferred chunks, `extraction.deferred` events, and chunk `last_error` values. Decide whether to pause intake, repair the codex CLI or model endpoint, or switch the configured provider. Never substitute a heuristic result for a failed extraction backend.
 
 ### Suspected SSRF or connector abuse
 

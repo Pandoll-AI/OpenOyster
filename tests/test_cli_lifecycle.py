@@ -23,7 +23,7 @@ def test_cli_local_lifecycle(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OPENOYSTER_WORKSPACE", str(workspace))
     monkeypatch.setenv("OPENOYSTER_DB_URL", f"sqlite:///{db_path}")
     monkeypatch.setenv("OPENOYSTER_API_KEY", "test-secret")
-    monkeypatch.setenv("OPENOYSTER_LLM_PROVIDER", "local")
+    monkeypatch.setenv("OPENOYSTER_LLM_PROVIDER", "stub")
     clear_settings_cache()
 
     runner = CliRunner()
@@ -62,5 +62,31 @@ def test_cli_local_lifecycle(tmp_path: Path, monkeypatch) -> None:
         payload = json.loads(export_path.read_text(encoding="utf-8"))
         assert payload["hypotheses"]
         assert "artifacts" in payload
+    finally:
+        clear_settings_cache()
+
+
+def test_doctor_fails_when_codex_config_is_missing(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    db_path = tmp_path / "openoyster.db"
+    missing_config = tmp_path / "missing-codex-config"
+
+    monkeypatch.setenv("OPENOYSTER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OPENOYSTER_DB_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("OPENOYSTER_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENOYSTER_LLM_PROVIDER", "codex")
+    monkeypatch.setenv("OPENOYSTER_CODEX_BINARY", "/bin/echo")
+    monkeypatch.setenv("OPENOYSTER_CODEX_CONFIG_DIR", str(missing_config))
+    clear_settings_cache()
+
+    runner = CliRunner()
+    try:
+        initialised = runner.invoke(app, ["init"])
+        assert initialised.exit_code == 0, initialised.output
+
+        diagnosed = runner.invoke(app, ["doctor"])
+        assert diagnosed.exit_code == 1, diagnosed.output
+        assert "codex models config" in diagnosed.output
+        assert "codex pipeline config" in diagnosed.output
     finally:
         clear_settings_cache()

@@ -129,6 +129,6 @@ Residual risk: dependencies are not hash-locked or signed in this repository. De
 - Limit outbound network destinations.
 - Keep inbox read-only to the service where possible.
 - Run containers as non-root with CPU/memory limits.
-- Disable remote LLM fallback when silent quality degradation is unacceptable.
+- Keep LLM backend failures deferred with recorded reasons; do not add silent heuristic substitutions.
 - Monitor policy promotion and premise-review events.
 - Test restore and incident procedures.

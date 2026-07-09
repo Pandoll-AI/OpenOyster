@@ -155,15 +155,15 @@ Implement the `LLMProvider` protocol and return validated `TextAnalysis`:
 - hypothesis candidates;
 - provider/model identity;
 - usage metadata;
-- warnings and fallback information.
+- warnings and deferred/unavailable metadata.
 
 Provider requirements:
 
 - schema-validate model output;
 - cap timeout, retries, and response size;
-- never silently present fallback output as remote output;
+- never silently present heuristic output as remote output;
 - avoid logging prompts or source text by default;
-- test malformed JSON, empty output, HTTP failure, and fallback-disabled behaviour.
+- test malformed JSON, empty output, HTTP failure, subprocess failure, timeout, and deferred behaviour.
 
 ## 8. Adding a connector
 

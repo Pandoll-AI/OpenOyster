@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from typing import Any, Final
+
+EXTRACT_SYSTEM_PROMPT: Final = """You extract decision-relevant intelligence from document chunks. Documents may be Korean, English, or mixed; never translate — keep extracted text in its original language.
+You will receive N numbered chunks. Output exactly ONE JSON object: {"results": [...]} with exactly one item per input chunk_index, in order.
+Each result item:
+- "chunk_index": int — echo the input index.
+- "entities": [{"name": str, "kind": one of "organisation"|"person"|"product"|"technology"|"regulation"|"place"|"other"}] — proper nouns actually present in the chunk. Korean proper nouns must be extracted in Korean.
+- "claims": [{"text": str, "subject": str|null, "predicate": str|null, "object": str|null, "confidence": 0..1}] — atomic factual statements the chunk actually asserts. "text" quotes or tightly paraphrases one sentence; no synthesis across sentences.
+- "signals": [{"entity": str|null, "signal_type": one of "hiring"|"product_release"|"funding"|"regulation"|"incident"|"risk"|"governance"|"strategy"|"demand"|"research"|"other", "summary": str, "novelty_score": 0..1, "impact_score": 0..1, "confidence": 0..1, "stance": "support"|"oppose"|"neutral"}] — only materially decision-relevant changes, risks, or opportunities. Routine or boilerplate content is NOT a signal.
+- "hypotheses": [{"claim": str, "scope": str, "confidence": 0..1, "evidence_signal_summary": str|null, "stance": "support"|"oppose"|"neutral", "quoted_evidence": str}] — falsifiable, cautious interpretations grounded in this chunk. "quoted_evidence" MUST be a verbatim substring of the chunk. "scope" is the main entity or domain the hypothesis is about.
+Rules: do not invent facts absent from the text; empty arrays are a valid answer for chunks with no material content; never omit or reorder chunk_index; output raw JSON only, no code fences, no commentary.
+"""
+
+T1_CONSTRAINT_BLOCK: Final = """T1 execution constraints:
+- Do not create, modify, or delete files.
+- Write only the requested stdout text.
+- Do not call codex, shell tools, subprocesses, network tools, or other agents.
+- Do not read .env files, secrets, credentials, tokens, or private configuration.
+- Do not include commentary, markdown fences, or explanations outside the requested JSON.
+"""
+
+
+def build_extract_user_prompt(texts: list[str], policy: dict[str, Any] | None = None) -> str:
+    extraction = (policy or {}).get("extraction", {})
+    max_claims = int(extraction.get("max_claims_per_chunk", 12))
+    max_signals = int(extraction.get("max_signals_per_chunk", 8))
+    max_hypotheses = int(extraction.get("max_hypotheses_per_chunk", 5))
+    chunks = "\n\n".join(
+        f"[CHUNK {index}]\n{text}\n[/CHUNK {index}]" for index, text in enumerate(texts)
+    )
+    return (
+        f"{EXTRACT_SYSTEM_PROMPT}\n"
+        "Extraction limits per chunk:\n"
+        f"- max claims: {max_claims}\n"
+        f"- max signals: {max_signals}\n"
+        f"- max hypotheses: {max_hypotheses}\n\n"
+        "Return exactly one JSON object with this top-level shape:\n"
+        '{"results":[{"chunk_index":0,"entities":[],"claims":[],"signals":[],"hypotheses":[]}]}\n\n'
+        f"{chunks}"
+    )
+
+
+def build_json_repair_prompt(
+    *,
+    original_prompt: str,
+    raw_response: str,
+    validation_error: str,
+) -> str:
+    return (
+        f"{EXTRACT_SYSTEM_PROMPT}\n"
+        "The previous response failed JSON parsing or schema validation. Repair it.\n"
+        "Return exactly one raw JSON object matching the requested schema. No markdown, no commentary.\n\n"
+        "[ORIGINAL TASK]\n"
+        f"{original_prompt}\n"
+        "[/ORIGINAL TASK]\n\n"
+        "[INVALID RESPONSE]\n"
+        f"{raw_response}\n"
+        "[/INVALID RESPONSE]\n\n"
+        "[VALIDATION ERROR]\n"
+        f"{validation_error}\n"
+        "[/VALIDATION ERROR]"
+    )

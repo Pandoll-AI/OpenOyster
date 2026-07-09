@@ -16,6 +16,7 @@ venv/
 # OpenOyster runtime
 openoyster.db
 workspace/
+.codex-llm/logs/
 *.sqlite
 *.db
 .env

@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import func, select, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import Settings, get_settings
@@ -400,11 +400,25 @@ def doctor() -> None:
             session.execute(text("SELECT 1"))
             policy = get_active_policy(session)
             validate_policy(policy.policy_json)
-            checks.append(("database", True, settings.db_url))
+            checks.append(("database", True, _redact_url(settings.db_url)))
             checks.append(("active policy", True, policy.version))
     except Exception as exc:
         checks.append(("database/policy", False, str(exc)))
-    if settings.llm_provider == "openai-compatible" and not settings.llm_api_key:
+    if settings.llm_provider == "codex":
+        binary = shutil.which(settings.codex_binary)
+        checks.append(
+            (
+                "codex CLI",
+                binary is not None,
+                binary or f"{settings.codex_binary} not found on PATH",
+            )
+        )
+        config_dir = settings.codex_config_dir
+        checks.append(("codex models config", (config_dir / "models.json").is_file(), str(config_dir / "models.json")))
+        checks.append(
+            ("codex pipeline config", (config_dir / "pipeline.json").is_file(), str(config_dir / "pipeline.json"))
+        )
+    elif settings.llm_provider == "openai-compatible" and not settings.llm_api_key:
         checks.append(("remote LLM credentials", False, "provider selected but API key missing"))
     else:
         checks.append(("LLM provider", True, settings.llm_provider))
@@ -430,6 +444,23 @@ def doctor() -> None:
     console.print(table)
     if failed:
         raise typer.Exit(code=1)
+
+
+def _redact_url(raw_url: str) -> str:
+    try:
+        url = make_url(raw_url)
+    except ValueError:
+        return "<invalid database URL>"
+    query = {
+        key: "***" if _query_key_is_secret(key) else value
+        for key, value in url.query.items()
+    }
+    return url.set(query=query).render_as_string(hide_password=True)
+
+
+def _query_key_is_secret(key: str) -> bool:
+    lowered = key.casefold()
+    return any(token in lowered for token in ("password", "passwd", "pwd", "secret", "token", "key"))
 
 
 @app.command("doctor-dev")

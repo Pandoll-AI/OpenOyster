@@ -4,7 +4,7 @@ This manual covers installation, configuration, ingestion, operation, feedback, 
 
 ## 1. Read this first
 
-OpenOyster is a product-oriented alpha. It persists its reasoning trail and can run unattended inside configured boundaries, but its output remains decision support. The local heuristic extractor is useful for deterministic demos and pipeline testing; it is not equivalent to a domain-tuned semantic model. Do not use generated hypotheses as clinical, legal, financial, or operational truth without review.
+OpenOyster is a product-oriented alpha. It persists its reasoning trail and can run unattended inside configured boundaries, but its output remains decision support. Extraction uses a configured LLM backend, and backend unavailability defers analysis with a recorded reason instead of silently substituting a lower-quality analyzer. Do not use generated hypotheses as clinical, legal, financial, or operational truth without review.
 
 OpenOyster separates four types of autonomy:
 
@@ -23,7 +23,7 @@ External writes and mission changes are not performed by the default runtime.
 - SQLite for local/single-node use; PostgreSQL is recommended for service deployment.
 - A writable workspace.
 - An API key before exposing mutation endpoints.
-- Optional OpenAI-compatible model credentials for remote extraction.
+- codex CLI for the default local extraction backend, or OpenAI-compatible model credentials for production extraction.
 
 ## 3. Local installation
 
@@ -76,15 +76,18 @@ With no API key and unsafe mode disabled, read endpoints work and write endpoint
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENOYSTER_LLM_PROVIDER` | `local` | `local` or `openai-compatible`. |
+| `OPENOYSTER_LLM_PROVIDER` | `codex` | `codex`, `openai-compatible`, or `stub`. Use `stub` only for tests and pipeline smoke checks. |
 | `OPENOYSTER_LLM_API_KEY` | empty | Remote provider key. |
 | `OPENOYSTER_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL. |
 | `OPENOYSTER_LLM_MODEL` | `gpt-4.1-mini` | Configured remote model identifier. |
 | `OPENOYSTER_LLM_TIMEOUT_SECONDS` | `45` | Remote request timeout. |
 | `OPENOYSTER_LLM_MAX_RETRIES` | `2` | Remote retry count. |
-| `OPENOYSTER_LLM_FALLBACK_TO_LOCAL` | `true` | Fall back with explicit warning metadata. |
+| `OPENOYSTER_CODEX_BINARY` | `codex` | codex CLI executable used by the default provider. |
+| `OPENOYSTER_CODEX_BATCH_SIZE` | `5` | Extraction chunks per codex batch. |
+| `OPENOYSTER_CODEX_TIMEOUT_SECONDS` | `300` | codex CLI subprocess timeout. |
+| `OPENOYSTER_CODEX_CONFIG_DIR` | `.codex-llm` | Model and pipeline catalog directory. |
 
-Remote extraction expects a chat-completions-compatible endpoint returning structured JSON. A malformed or failed remote response is recorded in chunk warnings. It is never labelled as a successful remote analysis.
+Remote extraction expects a chat-completions-compatible endpoint returning structured JSON. A malformed or failed model response leaves the affected chunk deferred with a reason. It is never replaced by heuristic output.
 
 ## 5. Ingesting documents
 
@@ -326,7 +329,7 @@ Run at least one worker cycle. Check `status`, `loop_runs`, and chunk errors. Co
 
 ### No useful hypotheses appear
 
-The local extractor is conservative and lexical. Try better source material, a domain extractor, or the remote provider. Inspect chunk warnings before assuming a model ran successfully.
+Inspect chunk `last_error`, deferred events, and provider metadata. A backend outage leaves chunks deferred; fix the codex CLI or OpenAI-compatible endpoint, then let maintenance requeue deferred chunks after the cooldown.
 
 ### Too many tasks
 

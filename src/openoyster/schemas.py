@@ -43,6 +43,19 @@ class SignalDraft(BaseModel):
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
 
+class EntityDraft(BaseModel):
+    name: str
+    kind: Literal[
+        "organisation",
+        "person",
+        "product",
+        "technology",
+        "regulation",
+        "place",
+        "other",
+    ] = "other"
+
+
 class ClaimDraft(BaseModel):
     text: str
     subject: str | None = None
@@ -58,7 +71,32 @@ class HypothesisDraft(BaseModel):
     confidence: float = Field(default=0.35, ge=0, le=1)
     evidence_signal_summary: str | None = None
     stance: Literal["support", "oppose", "neutral"] = "support"
+    quoted_evidence: str | None = None
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChunkAnalysis(BaseModel):
+    chunk_index: int
+    entities: list[EntityDraft] = Field(default_factory=list)
+    claims: list[ClaimDraft] = Field(default_factory=list)
+    signals: list[SignalDraft] = Field(default_factory=list)
+    hypotheses: list[HypothesisDraft] = Field(default_factory=list)
+
+
+class BatchAnalysisResponse(BaseModel):
+    results: list[ChunkAnalysis]
+
+
+class TextAnalysis(BaseModel):
+    entities: list[EntityDraft] = Field(default_factory=list)
+    claims: list[ClaimDraft] = Field(default_factory=list)
+    signals: list[SignalDraft] = Field(default_factory=list)
+    hypotheses: list[HypothesisDraft] = Field(default_factory=list)
+    provider: str
+    model: str
+    usage: dict[str, int | float] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class HypothesisOut(BaseModel):

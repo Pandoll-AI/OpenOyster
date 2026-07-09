@@ -1,0 +1,9 @@
+{
+  "_fetched_from": "https://developers.openai.com/codex/models.md",
+  "_fetched_at": "2026-07-10",
+  "chat": "gpt-5.4-mini",
+  "fast_complex": "gpt-5.3-codex-spark",
+  "code": "gpt-5.5",
+  "reasoning": "gpt-5.5",
+  "secondary": "gpt-5.4"
+}

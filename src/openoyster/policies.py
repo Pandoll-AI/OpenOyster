@@ -33,7 +33,6 @@ DEFAULT_POLICY: dict[str, Any] = {
     "extraction": {
         "chunk_size": 1800,
         "chunk_overlap": 180,
-        "min_sentence_length": 28,
         "max_hypotheses_per_chunk": 5,
         "max_signals_per_chunk": 8,
         "max_claims_per_chunk": 12,
@@ -66,7 +65,7 @@ DEFAULT_POLICY: dict[str, Any] = {
     "execution": {
         "daily_cost_limit": 5.0,
         "max_tool_calls_per_task": 8,
-        "default_model": "local-heuristic",
+        "default_model": "codex",
         "max_candidate_evidence": 8,
     },
     "utilisation": {
@@ -86,6 +85,7 @@ DEFAULT_POLICY: dict[str, Any] = {
     "maintenance": {
         "heartbeat_interval_minutes": 5,
         "failed_document_retry_minutes": 30,
+        "deferred_chunk_retry_minutes": 60,
         "stale_hypothesis_scan_hours": 6,
         "max_document_failures": 3,
     },

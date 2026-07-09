@@ -22,7 +22,7 @@ def temp_settings(tmp_path: Path) -> Settings:
         workspace=workspace,
         inbox_dir=inbox,
         archive_dir=archive,
-        llm_provider="local",
+        llm_provider="stub",
         api_key="test-secret",
         api_allow_unsafe_no_key=False,
         scheduler_tick_seconds=0.1,

@@ -130,6 +130,41 @@ class MaintenanceLoop(BaseLoop):
             result.emitted_events += int(emission.created)
         result.created_records["chunk_retries"] = len(failed_chunks)
 
+        deferred_retry_minutes = float(policy["maintenance"]["deferred_chunk_retry_minutes"])
+        deferred_retry_interval = timedelta(minutes=deferred_retry_minutes)
+        deferred_retries = 0
+        if self._due(session, "schedule.deferred_retry", deferred_retry_interval):
+            deferred_chunks = list(
+                session.scalars(select(Chunk).where(Chunk.status == "deferred").limit(limit))
+            )
+            for chunk in deferred_chunks:
+                metadata = dict(chunk.metadata_json or {})
+                deferred_count = int(metadata.get("deferred_count", 0))
+                if deferred_count >= 10:
+                    continue
+                raw_deferred_at = metadata.get("deferred_at")
+                if isinstance(raw_deferred_at, str):
+                    try:
+                        deferred_at = ensure_utc(datetime.fromisoformat(raw_deferred_at))
+                    except ValueError:
+                        deferred_at = now - deferred_retry_interval
+                    if now - deferred_at < deferred_retry_interval:
+                        continue
+                chunk.status = "pending"
+                metadata["deferred_retry_requested_at"] = now.isoformat()
+                chunk.metadata_json = metadata
+                emission = bus.emit(
+                    session,
+                    "chunk.retry_requested",
+                    {"chunk_id": chunk.id, "document_id": chunk.document_id, "deferred_count": deferred_count},
+                    source_loop=self.name,
+                    idempotency_key=f"chunk.deferred_retry:{chunk.id}:{deferred_count}",
+                )
+                result.emitted_events += int(emission.created)
+                deferred_retries += 1
+            self._mark(session, "schedule.deferred_retry")
+        result.created_records["deferred_chunk_retries"] = deferred_retries
+
         # Archiving occurs here, after the intake transaction has committed.
         archive_items = list(
             session.scalars(select(SourceItem).where(SourceItem.status == "ingested").limit(limit))

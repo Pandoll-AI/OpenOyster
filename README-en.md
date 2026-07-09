@@ -42,7 +42,7 @@ Many AI agent demos can produce fluent answers. They struggle with harder operat
 - Which source document supports this judgment?
 - Did the system look for counter-evidence?
 - Why did this task run?
-- Was a model failure or fallback recorded?
+- Was a model failure or deferred extraction reason recorded?
 - How does the system learn from good and bad outcomes?
 - Is it slowly drifting toward the wrong source universe?
 
@@ -94,7 +94,7 @@ openoyster eval fixtures examples/eval
 - **Ten loops**: intake, maintenance, extraction, hypothesis, planning, execution, utilisation, evaluation, optimisation, meta-premise review.
 - **Traceable knowledge graph**: documents, chunks, claims, signals, hypotheses, evidence edges, tasks, runs, artifacts, feedback, policies, experiments, mission charters.
 - **Ingestion paths**: filesystem, guarded HTTP, RSS, GitHub releases/issues.
-- **LLM providers**: local deterministic extractor, OpenAI-compatible structured JSON provider, visible fallback warnings.
+- **LLM providers**: codex CLI batch extractor, OpenAI-compatible structured JSON provider, test-only stub provider, deferred-on-failure recording.
 - **Evidence tools**: hypothesis brief, support scan, counter-evidence scan, corpus baseline.
 - **Retrieval quality controls**: matched terms, source-diversity cap, counter-evidence query mode, optional PostgreSQL full-text retrieval.
 - **Operational surfaces**: FastAPI, read-only dashboard, API-key protected writes, Typer CLI, Alembic migrations, Docker Compose.
@@ -186,7 +186,7 @@ Not included yet:
 3. Autonomy must be bounded.
 4. Optimisation needs real labels.
 5. The global loop can challenge local assumptions.
-6. Fallbacks are recorded, not hidden.
+6. Unavailable extraction backends defer with a reason instead of silently degrading to a lower-quality analyzer.
 
 ## Documentation
 
