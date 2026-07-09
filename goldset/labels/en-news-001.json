@@ -1,0 +1,78 @@
+{
+  "doc_id": "en-news-001",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Ollama",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Theory Ventures",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Jeff Morgan",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Peter Fenton",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Benchmark",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "OpenClaw",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "funding",
+      "summary": "Ollama raised a $65 million Series B led by Theory Ventures, bringing total funding to $88 million.",
+      "anchor_quote": "raised a $65 million Series B",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "Morgan said Ollama is used by over 8.9 million developers every month and is present in 85% of the Fortune 500.",
+      "anchor_quote": "used by over 8.9 million developers every month",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Ollama monetizes access to larger hosted models through neocloud subscription tiers and GPU-time pricing.",
+      "anchor_quote": "hosts on its neocloud via several subscription tiers",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Morgan said larger open models becoming useful for agentic coding work around January was a business proving point for Ollama.",
+      "anchor_quote": "the proving point for Ollama as a business happened around January",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "Some users criticized Ollama's push into cloud services as attention shifting away from the free project.",
+      "anchor_quote": "drawing attention away from its beloved free project",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Ollama and its board member said the cloud business does not change the free desktop product's core premise.",
+      "anchor_quote": "Nothing has changed for the core product that's free on the desktop",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Core subject is Ollama as company/tool. Manual proof: each anchor_quote was cross-checked as a verbatim substring in the provided text; this extraction-only task has no separate runnable verifier."
+}

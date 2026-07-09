@@ -1,0 +1,100 @@
+{
+  "doc_id": "en-release-003",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "vLLM",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "JetBrains Mellum v2",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "DeepSeek-V4",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "CUTLASS",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "OlmoHybridForCausalLM",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "HyperCLOVAX",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "AMD Zen CPU",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Ray",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "vLLM published patch release v0.22.1 with targeted bug fixes and select additions.",
+      "anchor_quote": "vLLM v0.22.1",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release added model support for JetBrains Mellum v2.",
+      "anchor_quote": "Model support expanded with JetBrains Mellum v2",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "DeepSeek-V4 initialization had a CUTLASS compatibility issue that was fixed in this release.",
+      "anchor_quote": "resolve a CUTLASS compatibility issue",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "OlmoHybridForCausalLM loading was corrected after upstream checkpoint changes to rope_parameters.",
+      "anchor_quote": "upstream checkpoint changes to rope_parameters",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "HyperCLOVAX was registered to use vLLM's vendored config when transformers versions lack remote code support.",
+      "anchor_quote": "registered to use vLLM's vendored config",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "AMD Zen CPU inference paths were optimized through zentorch kernels with transparent fallback.",
+      "anchor_quote": "through zentorch kernels with transparent fallback",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "A deterministic hang in multi-node Ray data-parallel serving was fixed by excluding the Ray backend from deferred port allocation.",
+      "anchor_quote": "fixed a deterministic hang in multi-node Ray data-parallel serving",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "Build and CI fixes addressed installation quarantine and CUDA compatibility issues.",
+      "anchor_quote": "CUDA compatibility",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Release-note extraction task only. No runnable verifier applies because the output is a judgment-based JSON label set derived directly from the provided text, not executable behavior."
+}

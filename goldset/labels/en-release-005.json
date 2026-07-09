@@ -1,0 +1,51 @@
+{
+  "doc_id": "en-release-005",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "langchain",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "ToolRetryMiddleware",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "anthropic",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "langchain 1.3.12 is released.",
+      "anchor_quote": "release(langchain): 1.3.12",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The release fixes interrupt propagation in ToolRetryMiddleware.",
+      "anchor_quote": "propagate interrupts through ToolRetryMiddleware",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The release fixes a shell middleware issue involving shared process-group kill behavior.",
+      "anchor_quote": "avoid shared process-group kill in shell middleware",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The release fixes fallback-retry handling around anthropic cache markers.",
+      "anchor_quote": "sanitize anthropic cache markers on fallback retries",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Patch release notes only: version bump plus three substantive fixes; style and test-type changes are maintenance. No runnable verifier: this is a static labeling task over the provided text, so observable evidence is limited to the quoted source anchors."
+}

@@ -1,0 +1,52 @@
+{
+  "doc_id": "en-arxiv-001",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "SciReasoner",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "Gene Ontology",
+      "kind": "other",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "research",
+      "summary": "Introduces SciReasoner as a multimodal scientific foundation model for native structural reasoning across proteins, small molecules, and inorganic crystals.",
+      "anchor_quote": "Here we introduce SciReasoner",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Reports improved low-homology protein Gene Ontology performance, with Cellular Component annotation increasing from 0.42 to 0.55.",
+      "anchor_quote": "from 0.42 to 0.55",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Claims single-step retrosynthesis accuracy improves from 0.63 to 0.72 while generating fragment-level disconnection and precursor-verification traces.",
+      "anchor_quote": "from 0.63 to 0.72",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Claims broad benchmark leadership, achieving state-of-the-art results on 67 of 86 tasks.",
+      "anchor_quote": "state-of-the-art performance on 67 tasks",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Says double-blind expert evaluation found its reasoning traces preferred or at least comparable to an unnamed frontier large language model in 98% of cases.",
+      "anchor_quote": "in 98% of cases",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof for this labeling task is limited to source-text grounding: each anchor_quote is a verbatim substring from the provided abstract. The comparator large language model is unnamed and should not be normalized to a specific vendor or model."
+}

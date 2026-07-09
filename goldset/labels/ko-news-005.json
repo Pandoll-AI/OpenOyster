@@ -1,0 +1,123 @@
+{
+  "doc_id": "ko-news-005",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "AI 에이전트",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "AI 레드팀",
+      "kind": "other",
+      "salience": "core"
+    },
+    {
+      "name": "에임인텔리전스",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "라온시큐어",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "네이버",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "KISA",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "NSHC",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "에이전틱 AI 관리(AAM, Agentic AI Management)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "StrongREJECT",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "AI 보안 점검을 일회성 공격 시험이 아니라 반복 가능한 운영체계로 전환해야 한다는 방향이 강조됐다.",
+      "anchor_quote": "일회성 공격 시험이 아닌 반복 가능한 운영체계",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "AI 레드티밍은 입력·출력만이 아니라 메일 읽기, 링크 열기, 파일 접근, 외부 전송으로 이어지는 에이전트의 전체 행동 경로를 검증해야 한다는 주장이 제시됐다.",
+      "anchor_quote": "작업 흐름 전체를 살펴봐야 한다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "개별적으로 허용된 권한 사용도 연속 실행되면 데이터 유출 공격이 될 수 있다는 위험이 제시됐다.",
+      "anchor_quote": "전체 흐름은 정보 유출 공격이다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "MCP, 스킬, CLI를 포함한 에이전트 도구 생태계가 새로운 공격표면으로 지목됐다.",
+      "anchor_quote": "도구 생태계 전체를 통제해야 한다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "민감정보 접근, 외부 통신, 신뢰할 수 없는 문서 입력이 결합될 때 위험이 커지므로 구간별 통제와 사람 승인을 두는 설계가 필요하다고 설명했다.",
+      "anchor_quote": "외부 전송에는 사람의 승인을 받도록 설계할 수 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "멀티모달 입력과 피지컬 AI 확장으로 사람이 알아채기 어려운 공격 지시와 더 심각한 사고 가능성이 제기됐다.",
+      "anchor_quote": "훨씬 심각한 사고를 일으킬 수도 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "라온시큐어는 AI 에이전트에 별도 신원을 부여하고 권한 위임, 변경 이력, 작업 내역을 관리하는 AAM 체계를 제시했다.",
+      "anchor_quote": "고유 신원을 부여하고 권한 위임과 변경 이력, 작업 내역을 관리하는 체계",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "패치 적용은 위험도에 따라 자동 적용, 사람 승인, 긴급위원회 검토로 절차를 구분해야 한다는 운영 원칙이 제시됐다.",
+      "anchor_quote": "긴급위원회에서 검토하는 방식이 필요하다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "네이버는 공격 유형과 성공 기준을 정의하고 거절 여부뿐 아니라 답변의 구체성과 실행 가능성까지 보는 StrongREJECT 기반 AI 레드팀 프레임워크를 소개했다.",
+      "anchor_quote": "StrongREJECT 기반 기준",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "영어 중심 공격 기법을 한국어로 단순 번역하면 의도가 달라질 수 있어 한국어 평가체계 고도화가 과제로 제시됐다.",
+      "anchor_quote": "한국어로 단순 번역하면 공격 의도가 달라질 수 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "KISA는 에임인텔리전스 컨소시엄, NSHC와 함께 올해 하반기 국내 22개 기업 AI 서비스를 대상으로 에이전트, 외부 도구, RAG, 멀티모달, A2A까지 포함한 레드티밍과 재점검을 진행할 계획이다.",
+      "anchor_quote": "올해 하반기 국내 22개 기업의 AI 서비스를 대상으로 레드티밍을 진행",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "핵심은 AI 레드팀의 초점이 모델 출력 점검에서 에이전트 전체 행동 검증과 상시 운영체계로 이동하고 있다는 점, 라온시큐어·네이버의 통제/평가 프레임워크, KISA의 하반기 사업 계획이다. 셀렉트스타와 행사 장소는 중심 정보가 아니다. 이 작업은 문서 추출 답안 키 작성이므로 runnable verifier가 없고, 입력 본문과의 수동 대조만 가능하다."
+}

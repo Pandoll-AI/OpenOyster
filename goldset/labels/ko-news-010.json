@@ -1,0 +1,90 @@
+{
+  "doc_id": "ko-news-010",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "애플",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "창신 메모리 테크놀로지(CXMT)",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "팀 쿡",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "1260H",
+      "kind": "regulation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "고대역폭메모리(HBM)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "ASML",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "애플이 중국 시장용 기기에 CXMT DRAM 칩 적용 가능성을 검토하며 시험 적용 중인 것으로 보도됐다.",
+      "anchor_quote": "CXMT의 DRAM 칩을 시험 적용하고 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "팀 쿡은 미국 정부를 상대로 CXMT 제품 활용 범위 확대 허용을 요청하는 로비를 벌인 것으로 전해졌다.",
+      "anchor_quote": "로비 활동을 벌이는",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "CXMT는 PLA 연계로 국가안보 우려 대상인 1260H 블랙리스트에 올라 있다.",
+      "anchor_quote": "블랙리스트 '1260H'에 오른 기업",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "애플은 리스크 때문에 CXMT 도입을 중국 판매용 제품으로 한정할 계획이다.",
+      "anchor_quote": "중국 판매용 제품에만 도입을 한정",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "스마트폰·서버·AI 메모리 수요 급증이 CXMT의 실적 개선 배경으로 제시됐다.",
+      "anchor_quote": "AI용 메모리 수요가 급증",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "funding",
+      "summary": "CXMT는 2023~2025년 최소 60억위안의 정부 보조금을 받는다고 전해졌다.",
+      "anchor_quote": "최소 60억위안(약 1조원)의 정부 보조금",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "국유 투자기관들이 CXMT 전체 지분의 36%를 보유하고 있다.",
+      "anchor_quote": "전체 지분의 36%를 보유",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "CXMT는 HBM 개발에 투자 중이지만 미국 수출 규제로 ASML EUV 장비를 확보하지 못해 수율 확보에 어려움을 겪는 것으로 알려졌다.",
+      "anchor_quote": "수율 확보에 어려움",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "정적 기사 텍스트 추출 과제라 별도 runnable verifier는 없다. 각 signal의 anchor_quote를 관찰 가능한 근거로 사용한다."
+}

@@ -1,0 +1,51 @@
+{
+  "doc_id": "en-news-007",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "General Intuition",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Pim de Witte",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Vinod Khosla",
+      "kind": "person",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "General Intuition argues embodied AI should shift from specialized robot models and massive real-world data collection toward general foundation models built from higher-quality data.",
+      "anchor_quote": "focus on better quality datasets",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "funding",
+      "summary": "General Intuition raised $320 million at a $2.3 billion valuation.",
+      "anchor_quote": "raised $320 million at a $2.3 billion valuation",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "The company says its model powered a quadrupedal robot after fine-tuning on only eight minutes of real-world robotics data.",
+      "anchor_quote": "just eight minutes of real-world robotics data",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "General Intuition says it aims to provide a base model for robotics companies rather than build robots itself.",
+      "anchor_quote": "become the foundation model of physical AI",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof is limited to the provided document text via the anchor quotes; there is no separate runnable verifier for this labeling task. Model-capability statements are reported as company or investor claims, not independent validation."
+}

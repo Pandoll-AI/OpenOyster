@@ -1,0 +1,102 @@
+{
+  "doc_id": "ko-news-006",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "엔타이어(Entire)",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "토마스 돔케",
+      "kind": "person",
+      "salience": "core"
+    },
+    {
+      "name": "Entire.io",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "깃허브",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "깃",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "커서 오리진(Cursor Origin)",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "엔타이어가 분산형 깃 네트워크 Entire.io의 프리뷰 버전을 출시한다고 밝혔다.",
+      "anchor_quote": "프리뷰 버전을 출시",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "엔타이어는 중앙집중형 깃 호스팅 대신 탈중앙화 네트워크 아키텍처를 내세워 AI 에이전트 트래픽 처리 문제를 공략한다.",
+      "anchor_quote": "탈중앙화 네트워크 아키텍처",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "AI 에이전트의 깃 저장소 접근 급증이 새 서비스의 수요 배경으로 제시된다.",
+      "anchor_quote": "AI 에이전트들의 깃 저장소 접근 폭증",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "기존 중앙 서버 기반 깃 호스팅은 에이전트 동시 요청 증가로 속도 제한과 장애 위험을 드러냈다고 주장한다.",
+      "anchor_quote": "속도 제한, 높은 지연 시간, 심지어 서비스 중단",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "회사는 여러 지역과 관할 구역에 분산 노드를 운영하고 데이터 상주와 주권을 보장하는 완전한 네트워크 분산화를 계획한다고 밝혔다.",
+      "anchor_quote": "데이터 상주, 주권 및 확장성을 보장하는 완전한 네트워크 분산화",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "향후 몇 달 안에 공개 및 비공개 저장소 기본 호스팅까지 지원하겠다는 제품 확장 계획을 밝혔다.",
+      "anchor_quote": "새로운 공개 및 비공개 저장소를 기본적으로 호스팅",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "엔타이어는 초기 테스트에서 높은 clone/push 처리량을 보였고 Cursor Origin 대비 우위를 주장했다.",
+      "anchor_quote": "초기 테스트에서 우수한 결과를 보였다고 주장했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "엔타이어는 자사의 깃 백엔드를 오픈소스로 공개할 예정이라고 밝혔다.",
+      "anchor_quote": "오픈소스로 공개할 예정",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "엔타이어는 시맨틱 메모리 레이어와 Entire Blame, Entire Review, Code and Semantic Search 같은 새 기능을 제시했다.",
+      "anchor_quote": "시맨틱 메모리 레이어",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "hiring",
+      "summary": "회사는 현재 40여명이며 연말까지 60명 수준으로 인력을 늘릴 계획이라고 밝혔다.",
+      "anchor_quote": "연말까지 60명 수준으로 늘릴 계획",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "수치 성능 비교와 효익 평가는 기사에서 회사 주장으로 제시된다. Runnable verifier 없음: 제공된 단일 문서 텍스트를 수동 라벨링하는 과제이며, observable proof는 각 signal의 anchor_quote가 원문 verbatim substring이라는 점이다."
+}

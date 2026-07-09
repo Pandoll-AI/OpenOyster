@@ -1,0 +1,45 @@
+{
+  "doc_id": "en-release-001",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "vLLM",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Model Runner V2",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Rust frontend",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "vLLM published version 0.24.0 with broad model, engine, parser, serving, quantization, and API updates.",
+      "anchor_quote": "vLLM v0.24.0 (published 2026-06-29)",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The release fixes denial-of-service, information disclosure, and input-validation issues.",
+      "anchor_quote": "Security improvements addressed denial-of-service vulnerabilities",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The release changes device selection to use an explicit device_ids argument instead of internal CUDA_VISIBLE_DEVICES handling.",
+      "anchor_quote": "new device_ids argument",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Do not miss the security fixes or the device-selection change. No runnable verifier: this is a static document-labeling task; the anchor quotes are the observable evidence."
+}

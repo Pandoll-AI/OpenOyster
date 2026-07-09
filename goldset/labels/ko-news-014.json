@@ -1,0 +1,128 @@
+{
+  "doc_id": "ko-news-014",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "AI",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "거대언어모델(LLM)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "삼성전자",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "갤럭시 AI",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "토스증권",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "AI 시그널",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "AI 어닝콜",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "카카오",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "카나나",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "네이버",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "프로덕트 네이티브 LLM",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "카페24",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "카페24 PRO(프로)",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "더존비즈온",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "프로액티브 AI",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "위하고 T AI 에디션",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "AI 경쟁의 중심이 더 크고 정교한 LLM 자체보다 서비스 안에 AI를 보이지 않게 녹여내는 방향으로 이동하고 있다는 점이 핵심 주장이다.",
+      "anchor_quote": "AI가 '보이지 않아도 잘 작동하는' 경쟁",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "고성능 AI 모델을 누구나 쓸 수 있게 되면서 모델 성능만으로 차별화하기 어려워지고 있다는 위험을 짚는다.",
+      "anchor_quote": "모델 성능 자체는 차별화 요소로서의 힘을 잃어가고",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "소비자 서비스 기업들이 AI 앱을 따로 열지 않아도 추천, 분석, 요약, 검색-실행 연결이 동작하는 built-in AI 경쟁에 먼저 나서고 있다고 설명한다.",
+      "anchor_quote": "이미 소비자 서비스 기업들이 먼저 움직이고 있습니다.",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "카페24는 '카페24 PRO(프로)'로 상품 정보만으로 상세페이지 생성과 쇼핑몰 디자인 제안을 자동화해 창업·운영 과정 자체에 AI를 내장하는 방향을 제시한다.",
+      "anchor_quote": "카페24 PRO(프로)",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "더존비즈온은 '위하고 T AI 에디션'에 '프로액티브 AI'를 적용해 신고서 초안 준비와 누락 전표 점검을 사용자 요청 전에 처리하는 업무 자동화 사례로 제시된다.",
+      "anchor_quote": "프로액티브 AI",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "이용자 선택의 기준이 어떤 AI 모델인지보다 더 편리한 앱·기기·서비스인지로 이동하고 있으며, 결과적으로 AI가 잘 내장된 서비스를 고르게 된다는 수요 신호를 제시한다.",
+      "anchor_quote": "AI 빌트인이 잘 된 서비스를 고른 것입니다.",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "시장 동향 해설 기사다. 기업 사례들은 자금조달·규제·채용 뉴스가 아니라 AI 빌트인 전략 전환을 뒷받침하는 예시다. Runnable verifier는 없다. 이 과제의 관측 가능한 근거는 각 expected_signals의 anchor_quote가 원문 내 verbatim substring이라는 점이다."
+}

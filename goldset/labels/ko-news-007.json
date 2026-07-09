@@ -1,0 +1,98 @@
+{
+  "doc_id": "ko-news-007",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "메타",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "슈퍼 센싱(Super Sensing)",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "레이밴 스마트 안경",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "아리아(Aria)",
+      "kind": "other",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "research",
+      "summary": "메타가 카메라와 오디오 녹음을 상시 활성화하는 '슈퍼 센싱' 스마트 안경 프로토타입을 개발·시험 중이다.",
+      "anchor_quote": "스마트 안경 프로토타입을 개발하고 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "메타 내부에서는 사용자 동의 기반 활성화 가능성과 별개로, 새로운 개인정보 보호 문제 대응을 두고 논쟁이 이어지고 있다.",
+      "anchor_quote": "치열한 논쟁이 이어지는",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "메타 경영진은 슈퍼 센싱 작동 중 촬영 표시 LED를 켜지 않는 방안을 검토 중이며, 이는 주변인의 촬영·음성 수집 인지 가능성을 낮춰 사생활 침해 우려를 키운다.",
+      "anchor_quote": "LED를 켜지 않는 방안",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "슈퍼 센싱은 신규 제품뿐 아니라 기존 메타 스마트 안경에도 소프트웨어 업데이트로 적용될 가능성이 언급됐다.",
+      "anchor_quote": "소프트웨어 업데이트를 통해 적용될 가능성",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "메타는 원본 사진·음성 대신 추출 메타데이터만 서버에 보내는 방식으로 프라이버시 보호 설계를 검토 중이다.",
+      "anchor_quote": "메타데이터만 서버에 전송",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "메타는 이렇게 수집된 데이터를 자체 AI 모델 학습에 활용할지 내부 논의 중이다.",
+      "anchor_quote": "자체 AI 모델 학습에 활용",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "메타는 연구 프로젝트 '아리아(Aria)'를 통해 개인정보를 보호하는 웨어러블 AI 기술을 개발 중이라고 밝혔다.",
+      "anchor_quote": "연구 프로젝트 '아리아(Aria)'",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "올해 초 AI 학습 과정에서 케냐의 외주 인력이 스마트 안경으로 촬영된 은밀한 장면을 검토했다는 폭로가 있었다.",
+      "anchor_quote": "은밀한 장면 등을 검토했다는 폭로",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "최근에는 공개되지 않은 안면 인식 기능 코드가 발견됐다가 삭제된 사례가 언급됐다.",
+      "anchor_quote": "안면 인식 기능 코드가 발견됐다가 삭제",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "메타는 LED 표시등을 가리거나 훼손하면 카메라 기능 자체를 비활성화하는 보안 업데이트를 발표했다.",
+      "anchor_quote": "카메라 기능 자체를 비활성화하는 보안 업데이트",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "시민단체와 개인정보 보호 전문가들은 항상 보고 항상 듣는 AI 기기에 대한 새로운 규제 마련이 필요하다고 지적했다.",
+      "anchor_quote": "새로운 규제 마련이 필요",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "프로토타입, 검토, 내부 논의 수준의 내용만 포함했다. LED 비활성화, 기존 제품 적용, 수집 데이터의 자체 AI 모델 학습 활용은 확정이 아니라 검토·논의로 서술된다. 이 작업은 제공된 단일 문서 텍스트를 분석해 라벨을 정하는 과업이라 별도의 runnable verifier는 없고, observable proof는 각 signal의 anchor_quote가 문서 원문에 그대로 존재한다는 점이다."
+}

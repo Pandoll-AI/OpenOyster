@@ -1,0 +1,83 @@
+{
+  "doc_id": "en-news-002",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "SpaceXAI",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Grok 4.5",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Elon Musk",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Anthropic",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Opus 4.7",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "OpenAI",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Trump administration",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "SpaceXAI released Grok 4.5, its first model release since going public.",
+      "anchor_quote": "has released its latest model, Grok 4.5",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "Musk said the beta program produced strong positive customer feedback ahead of the public launch.",
+      "anchor_quote": "strong positive feedback from customers in our beta test program",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "SpaceXAI positioned Grok 4.5 as an Opus-class model that is faster, more token-efficient, and lower cost.",
+      "anchor_quote": "It is an Opus-class model",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "The article says SpaceXAI's benchmark results showed competitiveness with top rivals but not best-in-class performance.",
+      "anchor_quote": "just short of best-in-class",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "SpaceXAI priced Grok 4.5 at $2 per million input tokens and $6 per million output tokens.",
+      "anchor_quote": "costs $2 per million input tokens and $6 per million output tokens",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "The article says OpenAI's GPT 5.6 release had previously been limited by the Trump administration over security concerns.",
+      "anchor_quote": "limited by the Trump administration",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Core subject is SpaceXAI's Grok 4.5 release and its cost-performance positioning. Manual proof: each anchor_quote was cross-checked as a verbatim substring in the provided text; this extraction-only task has no separate runnable verifier."
+}

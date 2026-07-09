@@ -1,0 +1,100 @@
+{
+  "doc_id": "ko-news-008",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "메타",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "뮤즈 이미지(Muse Image)",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "인스타그램",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "슈퍼인텔리전스 랩스(Meta Superintelligence Labs)",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "뮤즈 스파크(Muse Spark)",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "뮤즈 비디오(Muse Video)",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "미국 연방거래위원회(FTC)",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "케임브리지 애널리티카(Cambridge Analytica)",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "메타가 슈퍼인텔리전스 랩스의 첫 AI 이미지 생성 모델인 뮤즈 이미지를 공개했다.",
+      "anchor_quote": "첫 AI 이미지 생성 모델인 '뮤즈 이미지'를 공개했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "뮤즈 이미지는 메타 AI 앱, 인스타그램 스토리, 왓츠앱에서 무료 제공되며 앞으로 페이스북과 메신저에도 확대 적용될 예정이다.",
+      "anchor_quote": "앞으로 페이스북과 메신저에도 적용될 예정이다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "메타는 앞으로 AI 영상 생성 모델인 뮤즈 비디오도 출시할 계획이라고 밝혔다.",
+      "anchor_quote": "뮤즈 비디오(Muse Video)'도 출시할 계획",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "공개 인스타그램 계정을 태그하면 해당 사용자의 프로필 사진과 공개 게시물을 바탕으로 새 AI 이미지를 만들 수 있고, 별도 동의가 필요하지 않아 사생활 침해 우려가 제기됐다.",
+      "anchor_quote": "명시적인 허가를 받을 필요가 없으며",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "공개 계정은 기본적으로 기능 사용에 동의한 옵트아웃 방식으로 설정되며, 생성 사실 알림이나 삭제 요구 수단도 없다.",
+      "anchor_quote": "공개 계정은 기본적으로 기능 사용에 동의한 상태(옵트아웃 방식)",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "메타는 인스타그램의 공유 및 재사용 메뉴에서 AI 재사용 허용 옵션을 꺼서 기능을 비활성화할 수 있다고 설명했다.",
+      "anchor_quote": "AI 재사용 허용 옵션을 끄면",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "뮤즈 이미지는 Muse Spark와 연계해 웹 검색과 추론 뒤 이미지를 생성하는 에이전트형 모델로 소개됐다.",
+      "anchor_quote": "'에이전트형 모델'로 소개됐다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "기사는 메타의 기존 개인정보 논란 배경으로 2019년 Cambridge Analytica 사건 관련 FTC의 50억달러 과징금 전례를 상기시킨다.",
+      "anchor_quote": "미국 연방거래위원회(FTC)로부터 50억달러",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "핵심은 공개 인스타그램 콘텐츠의 무통지·옵트아웃식 AI 재사용 논란과 메타의 설정 기반 비활성화 대응이다. 관찰 가능한 근거는 각 anchor_quote의 원문 부분문자열 대조이며, 이 과제는 제공 기사에 대한 수동 라벨링이라 별도 runnable verifier는 없다."
+}

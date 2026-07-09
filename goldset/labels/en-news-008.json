@@ -1,0 +1,57 @@
+{
+  "doc_id": "en-news-008",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Meta",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Meta AI glasses",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Meta AI",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "governance",
+      "summary": "Meta announced a safeguard that disables the glasses camera if the recording LED has been tampered with.",
+      "anchor_quote": "disable the camera if the LED light",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "Meta acknowledges that some users have tried to hide recording by modifying or destroying the capture LED.",
+      "anchor_quote": "modify or destroy the capture LED",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The article says Meta's broader AI strategy depends on collecting more personal data for AI features and training.",
+      "anchor_quote": "collecting more of your personal data",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Meta is reportedly testing AI glasses that would continuously collect audio and take photos every few seconds.",
+      "anchor_quote": "continuously collect audio while taking photos every few seconds",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "Meta is facing investigations and lawsuits over privacy violations tied to its AI glasses.",
+      "anchor_quote": "facing multiple investigations and lawsuits over Meta AI glasses privacy violations",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof is limited to the provided document text via the anchor quotes; there is no separate runnable verifier for this labeling task. Keep reported or alleged framing for the prototype, worker-content allegations, and legal/privacy claims."
+}

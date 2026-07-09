@@ -1,0 +1,55 @@
+{
+  "doc_id": "en-news-009",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Lovable",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Menlo Ventures",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Workday",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Asana",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Nvidia",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "funding",
+      "summary": "Lovable is reportedly in talks to raise $300 million at a $13.2 billion valuation, with Menlo Ventures expected to lead.",
+      "anchor_quote": "in talks to raise $300 million at a valuation of $13.2 billion",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "Lovable reached a $500 million annualized revenue run rate in June.",
+      "anchor_quote": "hit $500 million in annualized revenue run rate in June",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "Lovable already counts major enterprises among customers for its vibe-coding tool.",
+      "anchor_quote": "including Workday, Asana, and Nvidia",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof is limited to the provided document text via the anchor quotes; there is no separate runnable verifier for this labeling task. Do not treat the financing as closed; the report says the company is in talks."
+}

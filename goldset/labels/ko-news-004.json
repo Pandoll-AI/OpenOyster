@@ -1,0 +1,56 @@
+{
+  "doc_id": "ko-news-004",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "SK텔레콤",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "소프트뱅크",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "사회적가치연구원",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "AI·ICT 기술",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "governance",
+      "summary": "SK텔레콤이 소프트뱅크, 사회적가치연구원과 AI·ICT 기술의 사회적 가치 측정 및 상호 협력을 위한 MOU를 체결했다.",
+      "anchor_quote": "업무협약(MOU)을 체결",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "3사는 AI·ICT가 만드는 사회적 가치를 여러 기업과 산업이 활용할 수 있는 표준 측정 체계로 개발하려 한다.",
+      "anchor_quote": "표준 측정 체계로 개발",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "기존 협력의 연장선에서 소프트뱅크의 사회적 가치 측정 결과를 공시하고 SKT 지표와 비교·분석한 이력이 제시됐다.",
+      "anchor_quote": "측정 결과를 공시하고",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "각 사의 사업 경험, 데이터, 측정 노하우를 바탕으로 AI·ICT 서비스의 사회적 가치 측정 지표를 구체화할 계획이다.",
+      "anchor_quote": "측정 지표를 구체화할 예정이다",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "핵심은 3사의 협약과 AI·ICT 사회적 가치 측정 표준화 추진이다. 제품 출시, 채용, 자금조달, 규제 변화, 사고는 기사에 없다. 원문 기반 추출 과제라 별도 runnable verifier는 없고, 각 signal은 anchor_quote로 직접 대조 가능하다."
+}

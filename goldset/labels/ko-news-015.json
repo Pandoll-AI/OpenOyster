@@ -1,0 +1,89 @@
+{
+  "doc_id": "ko-news-015",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "뮤직카우",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "정현경",
+      "kind": "person",
+      "salience": "core"
+    },
+    {
+      "name": "문화체육관광부",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "금융위원회",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "혁신금융서비스",
+      "kind": "regulation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "저작권법",
+      "kind": "regulation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "자본시장법",
+      "kind": "regulation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "governance",
+      "summary": "정현경은 문화 IP 금융화가 저작권법과 자본시장법의 결합을 전제로 설계되지 않아 법적 정합성이 부족하다고 주장했다.",
+      "anchor_quote": "법적 정합성이 부족합니다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "뮤직카우는 현재 혁신금융서비스 예외 운영에 머물러 있으며 제도권 편입을 위해 근본적 제도 개선이 필요하다고 밝혔다.",
+      "anchor_quote": "혁신금융서비스에서는 예외적으로 운영",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "음악 저작권 신탁과 금융 신탁을 함께 요구하는 구조가 현행 자본시장법의 이중 신탁 금지와 충돌한다고 지적했다.",
+      "anchor_quote": "이중 신탁은 원칙적으로 금지",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "뮤직카우는 문화 산업 자산의 자금조달 문제를 풀기 위해 문화 IP의 금융 유동화를 사업 취지로 내세웠다.",
+      "anchor_quote": "문화 IP를 금융 유동화하자는 취지로 사업을 시작",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "정현경은 음악 저작권이 발매 초기 이후 고정 소비층을 바탕으로 예측 가능한 안정적 현금흐름을 만드는 금융자산이라고 주장했다.",
+      "anchor_quote": "안정적인 현금흐름을 만든다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "뮤직카우 설문조사에서 20% 이상이 좋아하는 아티스트를 응원하기 위해 음악증권을 구매했고 절반 이상이 팬 활동과 금융 투자의 결합을 매력으로 꼽았다고 밝혔다.",
+      "anchor_quote": "20% 이상은 좋아하는 아티스트를 응원하기 위해",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "문화 자산의 특수성을 반영한 금융정책과 컨트롤타워 중심의 제도 정비가 필요하다고 주장했다.",
+      "anchor_quote": "컨트롤타워를 중심으로 제도를 정비해야",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "세미나 발언 기사다. 핵심은 법·제도 정합성 부족, 이중 신탁 충돌, 문화 IP 금융화 전략, 팬덤 기반 수요 주장이다. Runnable verifier 없음: 제공된 문서 텍스트와 anchor_quote 일치 여부만 사람 검토로 확인 가능하다."
+}

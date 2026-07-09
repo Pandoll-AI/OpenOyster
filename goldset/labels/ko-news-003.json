@@ -1,0 +1,77 @@
+{
+  "doc_id": "ko-news-003",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "오픈AI",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "하네스(Harness)",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "구글",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "앤트로픽",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "노엄 브라운",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "알렉산더 엠비리코스",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "로건 킬패트릭",
+      "kind": "person",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "오픈AI는 차세대 모델이 현재 하네스 기능 상당수를 흡수해 모델 위 소프트웨어 계층의 가치가 빠르게 줄 수 있다고 전망했다.",
+      "anchor_quote": "하네스 대부분을 쓸모없게 만들 가능성이 높다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "오픈AI 제품팀은 미래 모델에 기본 포함될 가능성이 큰 기능을 별도 제품 기능으로 직접 구현하지 않으려는 방침을 밝혔다.",
+      "anchor_quote": "기능을 제품에 직접 구현하는 일을 최대한 피하고 있다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "하네스 차별화에 의존해 온 AI 애플리케이션 기업들은 모델이 같은 기능을 제공할 경우 경쟁력 약화 위험에 직면할 수 있다는 분석이 제시됐다.",
+      "anchor_quote": "경쟁력이 약해질 수 있기 때문이다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "오픈AI가 모델 자체 기능을 계속 추가하면서 기존 스타트업 영역을 잠식한다는 스타트업 멸종 논란이 있었던 전례가 언급됐다.",
+      "anchor_quote": "스타트업 멸종",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "주요 모델 기업들이 하네스와 업무 기능을 모델 자체로 흡수하면서 AI 애플리케이션 개발 전략 변화 가능성이 커졌다는 분석이 제시됐다.",
+      "anchor_quote": "하네스 기능까지 흡수하기 시작하며",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "정적 라벨링 과제라 별도 실행형 검증기는 없고, 각 signal은 제공된 원문에서 직접 뽑은 짧은 verbatim anchor_quote로 관찰 가능하게 고정했다."
+}

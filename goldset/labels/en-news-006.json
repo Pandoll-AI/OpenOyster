@@ -1,0 +1,61 @@
+{
+  "doc_id": "en-news-006",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Google",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "SynthID",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "Mitch McConnell",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "OpenAI",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Anthropic",
+      "kind": "organisation",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "incident",
+      "summary": "SynthID was used to debunk a widely shared fake image showing Mitch McConnell in severe distress in a hospital bed.",
+      "anchor_quote": "used to debunk a high-profile AI-generated hoax image",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "The article presents this as a notable success for watermark-based anti-deepfake detection.",
+      "anchor_quote": "a rare but significant win for the system",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "SynthID is limited because it only works when image generators opt into the watermarking program.",
+      "anchor_quote": "can only be used when an image-generation tool actively participates in the program",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "Vendor participation differs: OpenAI joined the program in May 2026, while Anthropic does not participate.",
+      "anchor_quote": "Anthropic does not participate in the program",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "No runnable verifier: this is a static-document extraction task. Observable proof is that each anchor_quote is an exact substring from the provided text. The document says the McConnell image was fake; it does not establish new facts about his actual health."
+}

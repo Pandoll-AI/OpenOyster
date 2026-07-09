@@ -1,0 +1,51 @@
+{
+  "doc_id": "en-news-004",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "SpaceX",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Anthropic",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "OpenAI",
+      "kind": "organisation",
+      "salience": "core"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "funding",
+      "summary": "SpaceX is described as already public at a $1.77 trillion valuation, while Anthropic and OpenAI are framed as prospective trillion-scale IPOs.",
+      "anchor_quote": "SpaceX has already gone public at a $1.77 trillion valuation",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "The NCVA-Pitchbook Venture Monitor report claims the SpaceX IPO plus pending Anthropic and OpenAI IPOs would create more value than all U.S. VC-backed exits since 2000.",
+      "anchor_quote": "these exits will generate more value than all U.S. VC-backed exits since 2000",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "funding",
+      "summary": "The article says private-market capital is concentrating in AI, driving intense fundraising and higher valuations.",
+      "anchor_quote": "all of the money in private markets is flooding into AI",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The article says the scale of these offerings is straining market infrastructure.",
+      "anchor_quote": "pushing the financial infrastructure to its limit",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "No runnable verifier: this is a static-document extraction task. Observable proof is that each anchor_quote is an exact substring from the provided text. Anthropic and OpenAI IPOs are described as pending or possible, while SpaceX is described as already public."
+}

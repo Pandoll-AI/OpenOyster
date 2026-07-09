@@ -1,0 +1,57 @@
+{
+  "doc_id": "en-news-003",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Anthropic",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Claude",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Reflect",
+      "kind": "product",
+      "salience": "core"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "Anthropic introduced Reflect, a Claude dashboard feature, and made it available in beta for Free, Pro, and Max users with memory turned on.",
+      "anchor_quote": "introduced \"Reflect,\" a built-in dashboard",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The feature is presented as shaping how users think about AI by framing Claude as part of everyday workflow.",
+      "anchor_quote": "shaping how users think about AI itself",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Reflect can deepen workflow integration and support retention by steering users toward more embedded Claude usage.",
+      "anchor_quote": "helps retain users and discourage them from switching",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "Anthropic acknowledges the potentially addictive nature of AI chatbot use by offering quiet hours and break nudges.",
+      "anchor_quote": "potentially addictive nature of working with AI chatbots",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "Anthropic said sensitive conversations appear only at a high level, health-linked chats are excluded, and insights data is not reused for other purposes.",
+      "anchor_quote": "None of the data in your insights is used for other purposes",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Core subject is Anthropic's Reflect feature and the article's interpretation of its retention role. Manual proof: each anchor_quote was cross-checked as a verbatim substring in the provided text; this extraction-only task has no separate runnable verifier."
+}

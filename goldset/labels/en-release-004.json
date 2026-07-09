@@ -1,0 +1,184 @@
+{
+  "doc_id": "en-release-004",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "transformers",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "HfExporters",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Kimi K2.5",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "MiMo-V2-Flash",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Nemotron 3.5 ASR",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Nemotron ASR Streaming",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Qwen3 ASR",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "ZAYA1",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "VideoPrism",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "RADIO",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "MiniCPM3",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Gemma 3/4",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Kernels",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Expert Parallelism (EP)",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "transformers v5.13.0 is released.",
+      "anchor_quote": "Release v5.13.0",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds Kimi K2.5 architecture support used by versions 2.5-2.7.",
+      "anchor_quote": "includes the architecture for Kimi 2.5",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds MiMo-V2-Flash support.",
+      "anchor_quote": "Add Xiaomi MiMo-V2",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds Nemotron 3.5 ASR support.",
+      "anchor_quote": "Add Nemotron 3.5 ASR Streaming",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds Nemotron ASR Streaming support.",
+      "anchor_quote": "Add Nemotron ASR Streaming",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds Qwen3 ASR support and a forced aligner.",
+      "anchor_quote": "forced aligner model is also included",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds ZAYA1 support.",
+      "anchor_quote": "Add Zyphra/ZAYA1-8B",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds VideoPrism support.",
+      "anchor_quote": "Add Videoprism",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds RADIO support.",
+      "anchor_quote": "Add support for RADIO models",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release adds MiniCPM3 support.",
+      "anchor_quote": "Add MiniCPM3",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The release standardizes modeling internals to improve exportability and compilation across runtimes.",
+      "anchor_quote": "standardize layer declarations",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The modeling refactor is breaking for users relying on internal modeling APIs.",
+      "anchor_quote": "may need to update their code accordingly",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The Gemma 3/4 masking fix changes behavior and may affect reproducibility.",
+      "anchor_quote": "may affect reproducibility of previous results",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The EP router and FP8 handling fixes require affected users to verify configurations and possibly update mappings.",
+      "anchor_quote": "verify their configurations and potentially update conversion mappings",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The Kernels integration has a breaking repository-format change.",
+      "anchor_quote": "model-type repositories are no longer accepted",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "The release introduces HfExporters as a unified native export pipeline for PyTorch, ONNX, and ExecuTorch.",
+      "anchor_quote": "one unified API",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "VideoPrism is claimed to reach state-of-the-art results on most listed benchmarks.",
+      "anchor_quote": "state-of-the-art performance on 31 out of 33",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Text-only labeling task with no runnable verifier; verification is limited to source-grounded extraction from the provided release text, using short verbatim anchor quotes for each signal."
+}

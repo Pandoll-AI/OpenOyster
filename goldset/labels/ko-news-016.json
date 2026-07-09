@@ -1,0 +1,79 @@
+{
+  "doc_id": "ko-news-016",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "스페이스XAI",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "그록 4.5(Grok 4.5)",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "일론 머스크",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "아티피셜애널리시스",
+      "kind": "organisation",
+      "salience": "peripheral"
+    },
+    {
+      "name": "EU",
+      "kind": "other",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "스페이스XAI가 최신 프론티어 AI 모델 그록 4.5를 공개했다.",
+      "anchor_quote": "'그록 4.5(Grok 4.5)'를 공개했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "아티피셜애널리시스 벤치마크에서 그록 4.5는 클로드 페이블5보다 낮고 GPT-5.5, 클로드 오푸스 4.8, 소넷 5와 유사한 성능으로 소개됐다.",
+      "anchor_quote": "유사한 성능이다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "일론 머스크는 그록 4.5가 오푸스급이면서 더 빠르고 토큰 효율이 높으며 비용도 저렴하다고 주장했다.",
+      "anchor_quote": "오푸스급 모델이지만, 더 빠르고",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "회사는 토큰 단위 지능에 중점을 둔 강화 학습 확장과 대규모 비동기 학습 스택을 핵심 개발 방향으로 설명했다.",
+      "anchor_quote": "토큰 단위 지능에 중점을 두고 강화 학습을 확장했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "그록 4.5 가격은 입력 100만 토큰당 2달러, 출력 100만 토큰당 6달러로 제시됐고 회사는 경쟁 모델 대비 약 2배 높은 토큰 효율성을 주장했다.",
+      "anchor_quote": "입력 토큰 100만개당 2달러",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "그록은 딥페이크 포르노와 반유대주의 이미지 생성 등 안전조치 부족 논란을 겪은 전력이 있다고 기사에서 짚었다.",
+      "anchor_quote": "AI 안전조치 부족으로 뭇매",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "EU 조사, 파리 검찰 압수수색, 일부 아시아 국가 사용 금지 등 규제 대응을 받았다고 전했다.",
+      "anchor_quote": "EU는 불법 콘텐츠 유포 혐의로 조사",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "출시 기사다. 핵심은 모델 공개, 성능·가격·효율 주장, 외부 벤치마크 비교, 안전 논란과 규제 이력이다. Runnable verifier 없음: 제공된 문서 텍스트와 anchor_quote 일치 여부만 사람 검토로 확인 가능하다."
+}

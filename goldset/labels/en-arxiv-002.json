@@ -1,0 +1,62 @@
+{
+  "doc_id": "en-arxiv-002",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Co-LMLM",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "SimpleQA",
+      "kind": "other",
+      "salience": "peripheral"
+    },
+    {
+      "name": "gpt-4o-mini",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Claude Sonnet 4.5",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "research",
+      "summary": "Presents a continuous-query limited memory language model design in which the knowledge base uses continuous keys and textual knowledge values.",
+      "anchor_quote": "pairs continuous keys with textual knowledge values",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Adds an annotation pipeline for tagging free-form factual spans in arbitrary text, removing the prior restriction to Wikipedia.",
+      "anchor_quote": "removing prior work's restriction to Wikipedia",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Claims Co-LMLM outperforms prior limited-memory language models and vanilla LLMs in perplexity and factual precision across multiple scales.",
+      "anchor_quote": "outperforms prior LMLMs and vanilla LLMs",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "At 360M scale, reports lower perplexity than models pretrained on 40 times more data.",
+      "anchor_quote": "40x more data",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Claims SimpleQA-verified performance is in line with gpt-4o-mini and higher than Claude Sonnet 4.5.",
+      "anchor_quote": "in line with gpt-4o-mini and higher than Claude Sonnet 4.5",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof for this labeling task is limited to source-text grounding: each anchor_quote is a verbatim substring from the provided abstract. The method name appears as Co-LMLM in the title and CO-LMLM in the abstract."
+}

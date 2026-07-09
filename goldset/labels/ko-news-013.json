@@ -1,0 +1,84 @@
+{
+  "doc_id": "ko-news-013",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "세일포인트",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "정보보호 및 개인정보보호 관리체계(ISMS-P)",
+      "kind": "regulation",
+      "salience": "core"
+    },
+    {
+      "name": "AI 에이전트",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "0-1-4 커넥티비티(0-1-4 Connectivity)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "세일포인트 에이전틱 패브릭(SailPoint Agentic Fabric)",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "공유 신호 프레임워크(SSF)",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "세일포인트가 계정·애플리케이션 발견, 인사 이벤트 연계 권한 자동 조정, AI 에이전트 통합 관리를 묶은 3단계 아이덴티티 보안 대응안을 제시했다.",
+      "anchor_quote": "세단계 방안을 제시했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "regulation",
+      "summary": "정부가 ISMS-P 심사를 서류·증적 중심에서 실제 운영 검증, 기술 검증, 현장 시연 중심으로 강화하고 있다는 설명이 제시됐다.",
+      "anchor_quote": "실제 운영 상태를 확인하는 방향으로 바꾸고 있다고 설명했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "incident",
+      "summary": "최근 3년간 ISMS·ISMS-P 인증기업 중 약 14%인 179개사에서 침해사고가 발생했다는 수치가 사후 점검 강화 배경으로 제시됐다.",
+      "anchor_quote": "약 14%에 해당하는 179개사에서 침해사고가 발생",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "세일포인트가 모든 시스템에 일괄 통제를 적용하지 않고 중요도와 위험도별로 관리 수준을 달리하는 0-1-4 커넥티비티 모델을 제시했다.",
+      "anchor_quote": "관리 수준을 나누는 '0-1-4 커넥티비티(0-1-4 Connectivity)' 체계",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "세일포인트가 AI 에이전트를 기업의 공식적인 아이덴티티 관리 대상에 편입해야 한다고 주장했다.",
+      "anchor_quote": "AI 에이전트를 기업의 공식적인 아이덴티티 관리 대상으로 편입해야 한다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "세일포인트가 AI 에이전트 탐지·통합 등록, 실시간 거버넌스·감사, 권한 부여·보호·대응을 포함한 Agentic Fabric 관리체계를 제시했다.",
+      "anchor_quote": "관리체계로 '세일포인트 에이전틱 패브릭(SailPoint Agentic Fabric)'",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "과도한 권한을 가진 AI 에이전트가 침해되거나 오작동하면 짧은 시간에 여러 시스템과 데이터로 피해가 확산할 수 있다는 위험이 제기됐다.",
+      "anchor_quote": "과도한 권한을 가진 에이전트가 침해되거나 잘못 작동하면",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "벤더 웨비나를 바탕으로 한 기사다. 핵심은 ISMS-P 대응 강화, 계정 생애주기 자동화, 그리고 AI 에이전트를 정식 아이덴티티 거버넌스 범위로 편입하려는 세일포인트의 전략과 그 근거가 되는 위험·사고 수치다. Runnable verifier는 없다. 이 작업은 제공된 단일 문서 텍스트를 사람처럼 읽고, 반환된 엔티티·시그널이 문서 내 짧은 verbatim anchor_quote로 직접 뒷받침되는지 확인하는 수동 추출 과제이기 때문이다."
+}

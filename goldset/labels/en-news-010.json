@@ -1,0 +1,50 @@
+{
+  "doc_id": "en-news-010",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Google Photos",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Video Remix",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Google",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Gemini Omni",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "Google announced the new Video Remix feature for Google Photos.",
+      "anchor_quote": "new \"Video Remix\" feature",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The launch extends Google's push to add generative AI into consumer apps and keep users inside its ecosystem.",
+      "anchor_quote": "latest push to bring more generative AI tools into its consumer apps",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "Google says Video Remix is powered by Gemini Omni.",
+      "anchor_quote": "powered by Gemini Omni",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Rollout is limited to eligible Google AI Plus, Pro, and Ultra subscribers in listed countries. No runnable verifier: this is a static document-labeling task; the anchor quotes are the observable evidence."
+}

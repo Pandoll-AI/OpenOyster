@@ -1,0 +1,96 @@
+{
+  "doc_id": "ko-news-001",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "미니맥스",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "M3 프로(Pro)",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "전문가 혼합(MoE)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "H3",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "딥시크-V4 프로",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "롱캣-2.0",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "미니맥스가 중국 기업 최대 규모인 2조7000억 매개변수 차세대 LLM을 이르면 3분기 공개할 계획으로 보도됐다.",
+      "anchor_quote": "3분기 공개",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "차세대 모델의 내부 명칭은 'M3 프로(Pro)'이며 오픈소스 형태 공개를 추진 중이라고 전해졌다.",
+      "anchor_quote": "오픈소스 형태로 공개하는 방안을 추진 중",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "대규모 모델 확장의 목적은 복잡한 추론과 장시간 다단계 작업이 가능한 AI 에이전트 개발로 제시됐다.",
+      "anchor_quote": "AI 에이전트 개발을 위한 것이다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "초거대 모델을 실제 서비스에 적용하려면 높은 연산 비용을 낮춰야 한다는 리스크가 강조됐다.",
+      "anchor_quote": "막대한 연산 비용을 줄이는 기술이 필수적",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "미니맥스는 비용과 속도 문제를 완화하기 위해 전문가 혼합(MoE) 구조를 적용한 것으로 알려졌다.",
+      "anchor_quote": "전문가 혼합(MoE) 구조를 적용",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "중국 오픈웨이트 모델들이 해외 개발자들 사이에서 비용 효율적 대안으로 빠르게 인기를 얻고 있다는 수요 신호가 제시됐다.",
+      "anchor_quote": "빠르게 인기를 얻었다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "funding",
+      "summary": "미니맥스는 올해 1월 홍콩 증시 상장을 통해 약 6억1400만달러를 조달했다.",
+      "anchor_quote": "약 6억1400만달러",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "미니맥스는 상하이 STAR 시장 추가 상장을 추진하고 있다.",
+      "anchor_quote": "상하이 STAR 시장 추가 상장도 추진",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "product_release",
+      "summary": "이달 말 차세대 멀티모달 영상 생성 모델 H3 공개 계획도 언급됐다.",
+      "anchor_quote": "'H3'도 공개할 계획",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "계획·전망 중심 기사다. 'M3 프로(Pro)'는 내부 명칭이며 정식 출시명은 미정이고, 3분기 공개·오픈소스 공개·H3 공개·추가 상장은 모두 추진 또는 계획 단계로 서술된다. 검증 근거: anchor_quote \"오픈소스 형태로 공개하는 방안을 추진 중\"은 원문에 그대로 등장하는 짧은 verbatim substring이다."
+}

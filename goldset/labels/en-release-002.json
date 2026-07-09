@@ -1,0 +1,45 @@
+{
+  "doc_id": "en-release-002",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "vLLM",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "Model Runner V2",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Rust frontend",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "vLLM published version 0.23.0 with major updates across DeepSeek-V4, Model Runner V2, Rust frontend, parsers, KV offloading, and new model support.",
+      "anchor_quote": "vLLM v0.23.0 (published 2026-06-15)",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Model Runner V2 became the default for additional dense model families.",
+      "anchor_quote": "expanded to Llama and Mistral dense models by default",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "The release adds SSL/TLS transport encryption and hardening for untrusted input.",
+      "anchor_quote": "SSL/TLS transport encryption and untrusted-input hardening",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "The default expansion of Model Runner V2 is a key strategy signal. No runnable verifier: this is a static document-labeling task; the anchor quotes are the observable evidence."
+}

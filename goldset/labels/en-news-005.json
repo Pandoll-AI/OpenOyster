@@ -1,0 +1,66 @@
+{
+  "doc_id": "en-news-005",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Character.AI",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "Last Summer",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "The Nighttime Game",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Eden Fall",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "c.ai FM",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "c.ai Reads",
+      "kind": "product",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "Character.AI is launching three microdramas and says users over 18 can chat with the characters and roleplay alternate storylines.",
+      "anchor_quote": "Users older than 18 can chat with these shows' characters",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The company says it is starting with a studio-led model and plans to turn the resulting workflow into creator tools for user-made series.",
+      "anchor_quote": "Starting with a studio-led model",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "The article explicitly frames these launches as part of Character.AI's shift toward entertainment-focused features.",
+      "anchor_quote": "shift toward entertainment-focused features last year",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "The article cites strong engagement, saying users spent more than 950 minutes per month on Character.AI in the first half of 2026.",
+      "anchor_quote": "spent more than 950 minutes on Character.AI each month",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "No runnable verifier: this is a static-document extraction task. Observable proof is that each anchor_quote is an exact substring from the provided text. The interactive chat/roleplay capability is explicitly limited to users older than 18."
+}

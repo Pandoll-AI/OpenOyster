@@ -1,0 +1,73 @@
+{
+  "doc_id": "en-arxiv-003",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "Jailbreak",
+      "kind": "technology",
+      "salience": "core"
+    },
+    {
+      "name": "PostgreSQL",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "MySQL",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "Apache Arrow",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "TPC-H",
+      "kind": "other",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "risk",
+      "summary": "Frames external-database analytics as constrained by a driver-layer bottleneck unsuited to bulk columnar reads.",
+      "anchor_quote": "fundamental bottleneck",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Introduces Jailbreak as a database-bypass approach that reads storage files directly and materializes columnar buffers without going through the database engine.",
+      "anchor_quote": "bypasses the database engine entirely",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Uses LLM-assisted code synthesis to regenerate database storage readers from source code and documentation rather than hand-built parsing logic.",
+      "anchor_quote": "without human-engineered parsing logic",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Evaluates the approach on PostgreSQL and MySQL storage files and validates correctness against JDBC/ODBC-based baselines on TPC-H query results.",
+      "anchor_quote": "validate correctness against JDBC/ODBC-based baselines",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "research",
+      "summary": "Reports major end-to-end analytical throughput gains, with speedups up to 27x.",
+      "anchor_quote": "achieving up to 27x speedups",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "Claims the methodology can break database lock-in beyond the two evaluated systems when file formats are available from documentation or source code.",
+      "anchor_quote": "breaking data lock-in across database systems",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "Observable proof for this labeling task is limited to source-text grounding: each anchor_quote is a verbatim substring from the provided abstract. 'Jailbreak' is the method name here, not a security incident; the paper explicitly centers database bypass and lock-in."
+}

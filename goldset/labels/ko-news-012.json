@@ -1,0 +1,78 @@
+{
+  "doc_id": "ko-news-012",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {
+      "name": "센드버드",
+      "kind": "organisation",
+      "salience": "core"
+    },
+    {
+      "name": "에이전트 스튜어드(Agent Steward)",
+      "kind": "product",
+      "salience": "core"
+    },
+    {
+      "name": "김동신",
+      "kind": "person",
+      "salience": "peripheral"
+    },
+    {
+      "name": "딜라이트 데스크",
+      "kind": "product",
+      "salience": "peripheral"
+    },
+    {
+      "name": "제로 터치 개선(ZTI)",
+      "kind": "technology",
+      "salience": "peripheral"
+    },
+    {
+      "name": "트러스트 OS 2.0",
+      "kind": "technology",
+      "salience": "peripheral"
+    }
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "센드버드가 차세대 AI 에이전트 솔루션 에이전트 스튜어드(Agent Steward)를 공개했다.",
+      "anchor_quote": "에이전트 스튜어드(Agent Steward)'를 공개했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "demand",
+      "summary": "기존 AI 상담 자동화는 약 70% 문의를 처리하지만 단순 영역에 머물고 인수인계 문제도 남아 있어 고도화 수요를 드러낸다.",
+      "anchor_quote": "고객이 같은 설명을 반복해야 하는 문제가 여전하다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "other",
+      "summary": "에이전트 스튜어드는 5개 서브 에이전트가 API·이메일·음성 채널을 넘나들며 복잡한 문의를 처리하는 구조라고 설명됐다.",
+      "anchor_quote": "5개 서브 에이전트가 API·이메일·음성 등 다양한 채널을 넘나들며",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "센드버드는 제로 터치 개선(ZTI)과 트러스트 OS 2.0을 결합해 AI가 스스로 개선되는 완전 자동화 운영 방향을 내세웠다.",
+      "anchor_quote": "AI 갓(God) 모드",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "상담사용 솔루션과 AI 에이전트 서비스 과금의 중복을 줄이기 위해 딜라이트 데스크를 무료 제공하겠다고 밝혔다.",
+      "anchor_quote": "무료로 제공하겠다는 파격적인 조건",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "strategy",
+      "summary": "기존 타사 솔루션 이용 기업의 전환 장벽을 낮추기 위해 원클릭 마이그레이션을 지원한다고 했다.",
+      "anchor_quote": "'원클릭 마이그레이션' 기능을 지원한다",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "정적 문서 라벨링 작업이라 별도 runnable verifier는 없다. Observable proof는 각 expected_signal이 문서 원문 verbatim anchor_quote에 직접 연결된다는 점이다."
+}
