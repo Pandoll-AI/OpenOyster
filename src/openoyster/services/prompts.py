@@ -21,6 +21,8 @@ Do not invent candidates. Use zero-based candidate indexes. If relation is not "
 
 STANCE_JUDGE_PROMPT: Final = """You judge whether retrieved evidence supports or opposes a hypothesis. Documents may be Korean, English, or mixed; never translate quoted evidence.
 For each chunk, first decide whether the chunk is about the same topic as the hypothesis. If it is not about the same topic, return stance "unrelated".
+Apply the probability test: assume the chunk is true. If the hypothesis claim becomes MORE likely, the stance is "support". If it becomes LESS likely, the stance is "oppose". Direction is relative to the claim, not to the tone of the text.
+Beware the skeptical-hypothesis trap: when the hypothesis itself asserts a risk, limitation, or doubt (e.g. "adoption may be constrained by X"), a chunk confirming that risk SUPPORTS the hypothesis even though its tone is negative. Only content indicating the claim is false is "oppose".
 Negation words alone do NOT make evidence oppose. Use "oppose" only when the chunk directly rebuts the hypothesis claim itself. Use "support" only when the chunk directly supports the claim.
 quoted_evidence MUST be a verbatim substring copied from that chunk. If there is no relevant verbatim evidence, use an empty string and stance "unrelated".
 Output raw JSON only with exactly this shape: {"judgements":[{"chunk_index":int,"stance":"support"|"oppose"|"unrelated","quoted_evidence":str,"strength":0..1,"reasoning":str}]}
