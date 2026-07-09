@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,3 +142,19 @@ def timeout_output(value: str | bytes | None) -> str:
 
 def is_usage_dict(value: object) -> bool:
     return isinstance(value, dict) and all(isinstance(item, int | float) for item in value.values())
+
+
+def codex_subprocess_env() -> dict[str, str]:
+    allowed = {
+        "CODEX_HOME",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LOGNAME",
+        "PATH",
+        "TERM",
+        "TMPDIR",
+        "USER",
+    }
+    return {key: value for key, value in os.environ.items() if key in allowed}

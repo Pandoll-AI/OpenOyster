@@ -1,24 +1,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import Settings, get_settings
 from ..events import bus
-from ..models import DecisionTrace, EvidenceEdge, Hypothesis, Signal
+from ..llm import LLMProvider, provider_from_settings
+from ..models import DecisionTrace, Hypothesis, Signal
 from ..policies import get_active_policy
 from ..schemas import HypothesisDraft
 from ..scoring import (
     contradiction_score,
     evidence_gap_score,
     evidence_source_diversity,
-    jaccard,
     recompute_confidence,
     staleness_score,
     weighted_trigger_score,
 )
+from ..services.hypothesis_evidence import add_evidence
+from ..services.hypothesis_merge import match_hypothesis, record_merge_decision
 from ..utils import normalise_text, stable_hash
 from .base import BaseLoop, LoopResult
 
@@ -33,90 +35,9 @@ class HypothesisLoop(BaseLoop):
         "hypothesis.stale",
     )
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(self, settings: Settings | None = None, provider: LLMProvider | None = None):
         self.settings = settings or get_settings()
-
-    @staticmethod
-    def _match_hypothesis(
-        session: Session,
-        draft: HypothesisDraft,
-        threshold: float,
-    ) -> tuple[Hypothesis | None, float]:
-        claim_hash = stable_hash(normalise_text(draft.claim).casefold())
-        exact = session.scalar(
-            select(Hypothesis).where(
-                Hypothesis.scope == draft.scope,
-                Hypothesis.claim_hash == claim_hash,
-            )
-        )
-        if exact:
-            return exact, 1.0
-        candidates = list(
-            session.scalars(
-                select(Hypothesis).where(
-                    Hypothesis.scope == draft.scope,
-                    Hypothesis.status.in_(["active", "mature", "challenged"]),
-                )
-            )
-        )
-        scored = [(candidate, jaccard(candidate.claim, draft.claim)) for candidate in candidates]
-        if not scored:
-            return None, 0.0
-        best, similarity = max(scored, key=lambda pair: pair[1])
-        return (best, similarity) if similarity >= threshold else (None, similarity)
-
-    @staticmethod
-    def _add_evidence(
-        session: Session,
-        *,
-        hypothesis: Hypothesis,
-        signal: Signal | None,
-        document_id: int | None,
-        chunk_id: int | None,
-        draft: HypothesisDraft,
-    ) -> bool:
-        summary = draft.evidence_signal_summary or (
-            signal.summary if signal else "Hypothesis candidate without a linked signal."
-        )
-        stance = draft.stance
-        evidence_hash = stable_hash(
-            hypothesis.id,
-            signal.id if signal else None,
-            chunk_id,
-            stance,
-            normalise_text(summary).casefold(),
-        )
-        existing = session.scalar(
-            select(EvidenceEdge).where(
-                EvidenceEdge.hypothesis_id == hypothesis.id,
-                EvidenceEdge.evidence_hash == evidence_hash,
-            )
-        )
-        if existing:
-            return False
-        strength = min(
-            max(
-                ((signal.confidence if signal else draft.confidence) + draft.confidence) / 2,
-                0.25,
-            ),
-            0.95,
-        )
-        session.add(
-            EvidenceEdge(
-                hypothesis_id=hypothesis.id,
-                signal_id=signal.id if signal else None,
-                document_id=document_id,
-                chunk_id=chunk_id,
-                evidence_hash=evidence_hash,
-                stance=stance,
-                strength=strength,
-                summary=summary,
-                provenance="extraction",
-                metadata_json={"candidate_metadata": draft.metadata_json},
-            )
-        )
-        session.flush()
-        return True
+        self.provider = provider or provider_from_settings(self.settings)
 
     @staticmethod
     def _features(hypothesis: Hypothesis, policy: dict, signal: Signal | None) -> dict[str, float | int]:
@@ -242,7 +163,7 @@ class HypothesisLoop(BaseLoop):
         )
         result = LoopResult(loop_name=self.name, consumed_events=len(batch.events))
         policy_record = get_active_policy(session)
-        merge_threshold = float(policy_record.policy_json["hypothesis"]["merge_similarity_threshold"])
+        merge_candidate_top_k = int(policy_record.policy_json["hypothesis"].get("merge_candidate_top_k", 5))
 
         for event in batch.events:
             signal: Signal | None = None
@@ -252,13 +173,22 @@ class HypothesisLoop(BaseLoop):
                     result.notes.append(f"event {event.id}: missing hypothesis payload")
                     continue
                 draft = HypothesisDraft.model_validate(raw)
-                hypothesis, similarity = self._match_hypothesis(
+                merge_decision = match_hypothesis(
                     session,
                     draft,
-                    merge_threshold,
+                    merge_candidate_top_k,
+                    self.provider,
                 )
+                hypothesis = merge_decision.hypothesis
                 created = hypothesis is None
                 if created:
+                    metadata: dict[str, Any] = {
+                        "origin": "extraction",
+                        "merge_relation": merge_decision.relation,
+                        "merge_candidate_ids": merge_decision.candidate_ids,
+                    }
+                    if merge_decision.judge_unavailable:
+                        metadata["merge_judge_unavailable"] = True
                     hypothesis = Hypothesis(
                         claim=draft.claim,
                         claim_hash=stable_hash(normalise_text(draft.claim).casefold()),
@@ -266,18 +196,22 @@ class HypothesisLoop(BaseLoop):
                         confidence=draft.confidence,
                         status="active",
                         revision=1,
-                        metadata_json={
-                            "origin": "extraction",
-                            "initial_similarity": similarity,
-                        },
+                        metadata_json=metadata,
                     )
                     session.add(hypothesis)
                     session.flush()
                     result.inc("hypotheses")
                 assert hypothesis is not None
+                record_merge_decision(
+                    session,
+                    decision=merge_decision,
+                    subject_id=hypothesis.id,
+                    policy_version=policy_record.version,
+                    event_id=event.id,
+                )
                 signal_id = event.payload_json.get("signal_id")
                 signal = session.get(Signal, signal_id) if signal_id else None
-                evidence_created = self._add_evidence(
+                evidence_created = add_evidence(
                     session,
                     hypothesis=hypothesis,
                     signal=signal,

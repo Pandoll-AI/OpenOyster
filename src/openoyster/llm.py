@@ -14,9 +14,11 @@ import httpx
 from .config import Settings, get_settings
 from .llm_contracts import ExtractionUnavailable
 from .schemas import TextAnalysis
+from .services.llm_judges import stub_query_json
 from .services.llm_runtime import (
     JsonAttempt,
     JsonResponseError,
+    codex_subprocess_env,
     extract_json_payload,
     is_usage_dict,
     load_json_object,
@@ -26,6 +28,7 @@ from .services.llm_runtime import (
 )
 from .services.llm_stub import stub_analysis
 from .services.prompts import T1_CONSTRAINT_BLOCK, build_extract_user_prompt
+from .utils import sha256_text
 
 
 class LLMProvider(ABC):
@@ -33,6 +36,10 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[TextAnalysis]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
         raise NotImplementedError
 
     def analyse(self, text: str, policy: dict[str, Any] | None = None) -> TextAnalysis:
@@ -99,13 +106,14 @@ class CodexProvider(LLMProvider):
                         'approval_policy="never"',
                         "--model",
                         model,
-                        prepared_prompt,
+                        "-",
                     ],
                     capture_output=True,
+                    input=prepared_prompt,
                     text=True,
                     timeout=self.settings.codex_timeout_seconds,
                     check=False,
-                    env=_codex_subprocess_env(),
+                    env=codex_subprocess_env(),
                 )
             exit_code = completed.returncode
             if completed.returncode != 0:
@@ -140,7 +148,7 @@ class CodexProvider(LLMProvider):
                     "stage": stage,
                     "model": model,
                     "prompt_length": len(prepared_prompt),
-                    "prompt_preview": prepared_prompt[:2000],
+                    "prompt_sha256": sha256_text(prepared_prompt),
                     "duration_seconds": time.perf_counter() - started,
                     "exit_code": exit_code,
                     "parsing_success": parsing_success,
@@ -236,14 +244,24 @@ class OpenAICompatibleProvider(LLMProvider):
                 repair_call=self._attempt,
             )
 
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        del stage
+        try:
+            return self._attempt(prompt).payload
+        except JsonResponseError as exc:
+            raise ExtractionUnavailable(exc.reason) from exc
+
 
 class StubProvider(LLMProvider):
-    """Test double, NOT an analyzer."""
+    """Deterministic test double for extraction plus merge_judge and stance_judge JSON calls."""
 
     name = "stub"
 
     def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[TextAnalysis]:
         return [stub_analysis(text, index) for index, text in enumerate(texts)]
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        return stub_query_json(prompt, stage)
 
 
 def provider_from_settings(settings: Settings | None = None) -> LLMProvider:
@@ -257,21 +275,3 @@ def provider_from_settings(settings: Settings | None = None) -> LLMProvider:
             return StubProvider()
         case other:
             raise ExtractionUnavailable(f"unknown LLM provider: {other}")
-
-
-def _codex_subprocess_env() -> dict[str, str]:
-    allowed = {
-        "CODEX_HOME",
-        "HOME",
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-        "LOGNAME",
-        "PATH",
-        "TERM",
-        "TMPDIR",
-        "USER",
-    }
-    import os
-
-    return {key: value for key, value in os.environ.items() if key in allowed}

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..config import Settings, get_settings
 from ..events import EventBatch, bus
+from ..llm import LLMProvider, provider_from_settings
 from ..models import Artifact, EvidenceEdge, Hypothesis, Run, Task
 from ..policies import get_active_policy
 from ..services.artifacts import next_artifact_version
@@ -21,8 +22,9 @@ class ExecutionLoop(BaseLoop):
     name = "execution"
     consumes = ("task.created", "task.retry_requested")
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(self, settings: Settings | None = None, provider: LLMProvider | None = None):
         self.settings = settings or get_settings()
+        self.provider = provider or provider_from_settings(self.settings)
 
     @staticmethod
     def _daily_cost(session: Session) -> float:
@@ -77,6 +79,7 @@ class ExecutionLoop(BaseLoop):
                 task_type=task.task_type,
                 hypothesis=hypothesis,
                 policy=policy_record.policy_json,
+                provider=self.provider,
             )
             version = next_artifact_version(
                 session,

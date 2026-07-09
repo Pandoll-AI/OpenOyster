@@ -13,22 +13,12 @@ from .models import MissionCharter, Policy
 
 DEFAULT_POLICY: dict[str, Any] = {
     "retrieval": {
-        "mode": "lexical",
+        "mode": "auto",
         "top_k": 12,
         "max_scan_chunks": 5000,
         "recency_weight": 0.15,
         "minimum_similarity": 0.08,
         "source_diversity_cap": 0,
-        "counter_evidence_terms": [
-            "not",
-            "no",
-            "failed",
-            "contrary",
-            "disputed",
-            "unsupported",
-            "반대",
-            "아니다",
-        ],
     },
     "extraction": {
         "chunk_size": 1800,
@@ -47,7 +37,7 @@ DEFAULT_POLICY: dict[str, Any] = {
         "high_alert_threshold": 0.86,
     },
     "hypothesis": {
-        "merge_similarity_threshold": 0.62,
+        "merge_candidate_top_k": 5,
         "minimum_evidence_strength": 0.25,
         "stale_days": 21,
         "minimum_support_for_maturity": 2,
@@ -196,8 +186,9 @@ def validate_policy(policy_json: dict[str, Any]) -> None:
         raise ValueError("retrieval.max_scan_chunks must be at least 1")
     if int(retrieval.get("source_diversity_cap", 0)) < 0:
         raise ValueError("retrieval.source_diversity_cap cannot be negative")
-    if not isinstance(retrieval.get("counter_evidence_terms"), list):
-        raise ValueError("retrieval.counter_evidence_terms must be a list")
+
+    if int(get_nested(policy_json, "hypothesis.merge_candidate_top_k", 0)) < 1:
+        raise ValueError("hypothesis.merge_candidate_top_k must be at least 1")
 
     trigger = policy_json["trigger"]
     weights = [

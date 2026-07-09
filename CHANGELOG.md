@@ -6,7 +6,7 @@ All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility 
 
 ### Retrieval and evidence
 
-- Added retrieval result metadata, matched terms, counter-evidence query mode, source-diversity caps, and optional PostgreSQL full-text retrieval with lexical fallback.
+- Added retrieval result metadata, matched terms, SQLite FTS5/PostgreSQL full-text auto retrieval, source-diversity caps, and stance-judge evidence filtering.
 - Added evidence/provenance inspection helpers, CLI commands, and read API endpoints.
 - Dashboard now shows evidence counts, source diversity, and provenance availability.
 

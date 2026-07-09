@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from openoyster.config import Settings
+from openoyster.llm import CodexProvider, ExtractionUnavailable
+
+
+def _write_codex_config(path: Path) -> None:
+    path.mkdir(parents=True)
+    (path / "models.json").write_text(
+        json.dumps(
+            {
+                "chat": "gpt-5.4-mini",
+                "fast_complex": "gpt-5.3-codex-spark",
+                "code": "gpt-5.5",
+                "reasoning": "gpt-5.5",
+                "secondary": "gpt-5.4",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (path / "pipeline.json").write_text(
+        json.dumps(
+            {
+                "stages": [
+                    {"name": "extract", "tier": "T1", "model_type": "reasoning"},
+                    {"name": "stance_judge", "tier": "T1", "model_type": "reasoning"},
+                    {"name": "merge_judge", "tier": "T1", "model_type": "chat"},
+                ],
+                "prod_connector": "openai-compatible",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _payload(*indexes: int) -> str:
+    return json.dumps(
+        {
+            "results": [
+                {
+                    "chunk_index": index,
+                    "entities": [{"name": f"Acme {index}", "kind": "organisation"}],
+                    "claims": [{"text": f"Acme {index} shipped a governed platform.", "confidence": 0.8}],
+                    "signals": [
+                        {
+                            "entity": f"Acme {index}",
+                            "signal_type": "strategy",
+                            "summary": f"Acme {index} shipped a governed platform.",
+                            "novelty_score": 0.7,
+                            "impact_score": 0.8,
+                            "confidence": 0.75,
+                            "stance": "support",
+                        }
+                    ],
+                    "hypotheses": [
+                        {
+                            "claim": f"Acme {index} may be operationalising governance.",
+                            "scope": f"Acme {index}",
+                            "confidence": 0.55,
+                            "evidence_signal_summary": f"Acme {index} shipped a governed platform.",
+                            "stance": "support",
+                            "quoted_evidence": f"Acme {index} shipped a governed platform.",
+                        }
+                    ],
+                }
+                for index in indexes
+            ]
+        }
+    )
+
+
+def _settings(tmp_path: Path) -> Settings:
+    config_dir = tmp_path / "codex-config"
+    _write_codex_config(config_dir)
+    return Settings(
+        workspace=tmp_path / "workspace",
+        llm_provider="codex",
+        codex_config_dir=config_dir,
+        codex_binary="codex-test",
+        codex_timeout_seconds=30,
+    )
+
+
+def test_codex_provider_parses_batch_json_and_preserves_order(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+    envs: list[dict[str, str]] = []
+    inputs: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        envs.append(kwargs["env"])
+        inputs.append(kwargs["input"])
+        return subprocess.CompletedProcess(cmd, 0, stdout=_payload(1, 0), stderr="")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+    analyses = CodexProvider(_settings(tmp_path)).analyse_batch(
+        ["Acme 0 shipped a governed platform.", "Acme 1 shipped a governed platform."],
+        policy={"extraction": {"max_claims_per_chunk": 3}},
+    )
+
+    assert [analysis.entities[0].name for analysis in analyses] == ["Acme 0", "Acme 1"]
+    assert calls[0][:2] == ["codex-test", "exec"]
+    assert "--ephemeral" in calls[0]
+    assert "--ignore-user-config" in calls[0]
+    assert "--ignore-rules" in calls[0]
+    assert "--skip-git-repo-check" in calls[0]
+    assert calls[0][calls[0].index("--sandbox") + 1] == "read-only"
+    assert calls[0][calls[0].index("--model") + 1] == "gpt-5.5"
+    assert calls[0][calls[0].index("-c") + 1] == 'approval_policy="never"'
+    assert calls[0][-1] == "-"
+    assert "OPENOYSTER_API_KEY" not in envs[0]
+    assert not any("[CHUNK 0]" in part for part in calls[0])
+    assert "[CHUNK 0]" in inputs[0]
+    assert "[/CHUNK 1]" in inputs[0]
+
+
+def test_codex_provider_repairs_malformed_json_once(monkeypatch, tmp_path):
+    responses = ["```json\nnot-json\n```", _payload(0)]
+    prompts: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        prompts.append(kwargs["input"])
+        return subprocess.CompletedProcess(cmd, 0, stdout=responses.pop(0), stderr="")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+    analyses = CodexProvider(_settings(tmp_path)).analyse_batch(["Acme 0 shipped a governed platform."])
+
+    assert analyses[0].claims[0].text == "Acme 0 shipped a governed platform."
+    assert len(prompts) == 2
+    assert "[INVALID RESPONSE]" in prompts[1]
+
+
+def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="not-json", stderr="")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    with pytest.raises(ExtractionUnavailable, match="schema repair"):
+        CodexProvider(_settings(tmp_path)).analyse_batch(["Acme shipped a platform."])
+
+
+def test_codex_provider_raises_unavailable_on_nonzero_exit(monkeypatch, tmp_path):
+    secret_prompt_marker = "retrieved chunk secret marker"
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        del kwargs
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 2, stdout="secret stdout", stderr="secret stderr")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    with pytest.raises(ExtractionUnavailable, match="codex exited with 2"):
+        CodexProvider(_settings(tmp_path)).analyse_batch([secret_prompt_marker])
+
+    log_file = next((tmp_path / "codex-config" / "logs" / "extract").glob("*.json"))
+    log_text = log_file.read_text(encoding="utf-8")
+    assert not any(secret_prompt_marker in part for part in calls[0])
+    assert "secret stdout" not in log_text
+    assert "secret stderr" not in log_text
+    assert secret_prompt_marker not in log_text
+    assert "prompt_preview" not in log_text
+    assert "prompt_sha256" in log_text
+
+
+def test_codex_provider_query_json_logs_hash_not_raw_prompt(monkeypatch, tmp_path):
+    secret_prompt_marker = "stance judge chunk secret marker"
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        del kwargs
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"ok": true}', stderr="")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    payload = CodexProvider(_settings(tmp_path)).query_json(secret_prompt_marker, "stance_judge")
+
+    assert payload == {"ok": True}
+    log_file = next((tmp_path / "codex-config" / "logs" / "stance_judge").glob("*.json"))
+    log_text = log_file.read_text(encoding="utf-8")
+    assert not any(secret_prompt_marker in part for part in calls[0])
+    assert secret_prompt_marker not in log_text
+    assert "prompt_preview" not in log_text
+    assert "prompt_sha256" in log_text
+
+
+def test_codex_provider_raises_unavailable_on_timeout(monkeypatch, tmp_path):
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=30, output="partial")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    with pytest.raises(ExtractionUnavailable, match="timed out"):
+        CodexProvider(_settings(tmp_path)).analyse_batch(["Acme shipped a platform."])

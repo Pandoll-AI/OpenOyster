@@ -12,13 +12,12 @@ Policy is not code self-modification. It is a bounded, inspectable control surfa
 
 | Key | Purpose |
 |---|---|
-| `mode` | `lexical`, `postgres_full_text`, or `auto`. Non-PostgreSQL deployments fall back to lexical. |
+| `mode` | `auto`, `lexical`, or `postgres_full_text`. `auto` uses SQLite FTS5 on SQLite, PostgreSQL full text on PostgreSQL, and lexical fallback only when the indexed path is unavailable. |
 | `top_k` | Maximum returned chunk hits. |
-| `max_scan_chunks` | Bounded lexical search scan. |
+| `max_scan_chunks` | Bounded retrieval scan. |
 | `recency_weight` | Preference for newer documents. |
-| `minimum_similarity` | Reject weak lexical hits. |
+| `minimum_similarity` | Reject weak retrieval hits after scoring. |
 | `source_diversity_cap` | Optional per-source cap before filling remaining result slots. `0` disables the cap. |
-| `counter_evidence_terms` | Extra terms appended for counter-evidence retrieval mode. |
 
 ### Extraction
 
@@ -34,11 +33,11 @@ score = weighted(novelty, impact, contradiction, evidence_gap, staleness)
 
 ### Hypothesis
 
-Controls merge similarity, evidence thresholds, staleness, maturity requirements, source diversity, and confidence priors.
+Controls LLM merge-candidate count, evidence thresholds, staleness, maturity requirements, source diversity, and confidence priors.
 
 ### Planning/execution
 
-Controls task depth/count, exploration, retries, daily cost limit, tool-call bounds, and candidate evidence count. The default implementation uses internal zero-cost tools; cost fields are already persisted for remote tools.
+Controls task depth/count, exploration, retries, daily cost limit, tool-call bounds, and candidate evidence count. Evidence scans retrieve by the hypothesis claim, then use the stance judge to separate support, opposition, and unrelated chunks. The default implementation uses internal zero-cost tools; cost fields are already persisted for remote tools.
 
 ### Utilisation/evaluation
 

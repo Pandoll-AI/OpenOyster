@@ -96,7 +96,7 @@ openoyster eval fixtures examples/eval
 - **수집 경로**: filesystem, guarded HTTP, RSS, GitHub releases/issues.
 - **LLM provider**: codex CLI batch extractor, OpenAI-compatible structured JSON provider, test-only stub provider, deferred-on-failure recording.
 - **근거 도구**: hypothesis brief, support scan, counter-evidence scan, corpus baseline.
-- **검색/근거 품질**: matched terms, source-diversity cap, counter-evidence query mode, optional PostgreSQL full-text retrieval.
+- **검색/근거 품질**: SQLite FTS5/PostgreSQL full-text auto retrieval, matched terms, source-diversity cap, stance-judge evidence filtering.
 - **운영 표면**: FastAPI, read-only dashboard, API-key protected writes, Typer CLI, Alembic migration, Docker Compose.
 - **검증 표면**: pytest, ruff, mypy, CI, fixture evaluation, release checklist, threat model.
 

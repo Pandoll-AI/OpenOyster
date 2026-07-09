@@ -21,6 +21,10 @@ class UnavailableProvider(LLMProvider):
     def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[TextAnalysis]:
         raise ExtractionUnavailable("codex unavailable for test")
 
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        del prompt, stage
+        raise ExtractionUnavailable("codex unavailable for test")
+
 
 class MissingChunkProvider(LLMProvider):
     name = "missing-chunk-test"
@@ -38,6 +42,10 @@ class MissingChunkProvider(LLMProvider):
                 metadata={"missing_chunk_index": True},
             )
         ]
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        del prompt, stage
+        raise ExtractionUnavailable("missing chunk provider does not implement JSON stages")
 
 
 def test_extraction_unavailable_defers_chunks_without_document_failure(temp_settings, session_factory):

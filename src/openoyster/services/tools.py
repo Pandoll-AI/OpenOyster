@@ -7,25 +7,11 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..llm import LLMProvider, provider_from_settings
 from ..models import Chunk, Document, EvidenceEdge, Hypothesis, Signal
-from ..scoring import clamp, tokenize
 from .artifacts import render_hypothesis_brief
 from .retrieval import RetrievalHit, search_chunks
-
-_NEGATION = {
-    "not",
-    "no",
-    "never",
-    "failed",
-    "contrary",
-    "disputed",
-    "denied",
-    "unsupported",
-    "반대",
-    "아니다",
-    "부인",
-    "확인되지",
-}
+from .stance_judge import StanceJudgement, judge_stance
 
 
 @dataclass(frozen=True)
@@ -51,11 +37,17 @@ class ToolResult:
     output_tokens: int = 0
 
 
-Tool = Callable[[Session, Hypothesis, dict], ToolResult]
+@dataclass(frozen=True)
+class ToolContext:
+    policy: dict[str, Any]
+    provider: LLMProvider
 
 
-def hypothesis_brief(session: Session, hypothesis: Hypothesis, policy: dict) -> ToolResult:
-    del policy
+Tool = Callable[[Session, Hypothesis, ToolContext], ToolResult]
+
+
+def hypothesis_brief(session: Session, hypothesis: Hypothesis, context: ToolContext) -> ToolResult:
+    del context
     edges = list(
         session.scalars(
             select(EvidenceEdge)
@@ -86,53 +78,28 @@ def _existing_chunk_ids(session: Session, hypothesis_id: int) -> set[int]:
     }
 
 
-def _is_counter_hit(hit: RetrievalHit) -> bool:
-    tokens = tokenize(hit.text)
-    return bool(tokens & _NEGATION)
-
-
 def _scan(
     session: Session,
     hypothesis: Hypothesis,
-    policy: dict,
+    context: ToolContext,
     *,
     stance: str,
 ) -> ToolResult:
+    policy = context.policy
     hits = search_chunks(
         session,
         hypothesis.claim,
         policy=policy,
         exclude_chunk_ids=_existing_chunk_ids(session, hypothesis.id),
-        mode="counter" if stance == "oppose" else "support",
     )
-    selected: list[RetrievalHit] = []
-    for hit in hits:
-        is_counter = _is_counter_hit(hit)
-        if (stance == "oppose" and is_counter) or (stance == "support" and not is_counter):
-            selected.append(hit)
     limit = int(policy.get("execution", {}).get("max_candidate_evidence", 8))
-    selected = selected[:limit]
-    candidates = [
-        EvidenceCandidate(
-            chunk_id=hit.chunk_id,
-            document_id=hit.document_id,
-            stance=stance,
-            strength=clamp(0.30 + 0.50 * hit.score, 0.25, 0.80),
-            summary=hit.text[:600],
-            metadata={
-                "retrieval_score": hit.score,
-                "retrieval_mode": hit.retrieval_mode,
-                "matched_terms": hit.matched_terms,
-                "document_title": hit.document_title,
-                "source": hit.source,
-            },
-        )
-        for hit in selected
-    ]
+    selected = hits[:limit]
+    judgements, quote_misses = judge_stance(context.provider, hypothesis.claim, selected)
+    candidates = _evidence_candidates(selected, judgements, requested=stance)
     heading = "Counter-evidence" if stance == "oppose" else "Supporting evidence"
     lines = [f"# {heading} scan", "", f"Hypothesis: {hypothesis.claim}", ""]
     if not candidates:
-        lines.append("No new candidate evidence passed the conservative lexical filter.")
+        lines.append("No new candidate evidence passed stance and quote verification.")
     else:
         for candidate in candidates:
             lines.append(
@@ -147,22 +114,56 @@ def _scan(
         evidence_candidates=candidates,
         metadata={
             "retrieval_hits": len(hits),
+            "judged": len(selected),
             "selected": len(candidates),
+            "quote_not_verbatim": quote_misses,
             "retrieval_mode": hits[0].retrieval_mode if hits else policy.get("retrieval", {}).get("mode", "lexical"),
         },
     )
 
 
-def support_evidence_scan(session: Session, hypothesis: Hypothesis, policy: dict) -> ToolResult:
-    return _scan(session, hypothesis, policy, stance="support")
+def _evidence_candidates(
+    hits: list[RetrievalHit],
+    judgements: dict[int, StanceJudgement],
+    *,
+    requested: str,
+) -> list[EvidenceCandidate]:
+    candidates: list[EvidenceCandidate] = []
+    for index, hit in enumerate(hits):
+        judgement = judgements.get(index)
+        if judgement is None or judgement.stance != requested:
+            continue
+        candidates.append(
+            EvidenceCandidate(
+                chunk_id=hit.chunk_id,
+                document_id=hit.document_id,
+                stance=requested,
+                strength=judgement.strength,
+                summary=judgement.quoted_evidence,
+                metadata={
+                    "retrieval_score": hit.score,
+                    "retrieval_mode": hit.retrieval_mode,
+                    "matched_terms": hit.matched_terms,
+                    "document_title": hit.document_title,
+                    "source": hit.source,
+                    "reasoning": judgement.reasoning,
+                    "quoted_evidence": judgement.quoted_evidence,
+                },
+            )
+        )
+    return candidates
 
 
-def counter_evidence_scan(session: Session, hypothesis: Hypothesis, policy: dict) -> ToolResult:
-    return _scan(session, hypothesis, policy, stance="oppose")
+def support_evidence_scan(session: Session, hypothesis: Hypothesis, context: ToolContext) -> ToolResult:
+    return _scan(session, hypothesis, context, stance="support")
 
 
-def baseline_compare(session: Session, hypothesis: Hypothesis, policy: dict) -> ToolResult:
-    del policy
+def counter_evidence_scan(session: Session, hypothesis: Hypothesis, context: ToolContext) -> ToolResult:
+    return _scan(session, hypothesis, context, stance="oppose")
+
+
+def baseline_compare(session: Session, hypothesis: Hypothesis, context: ToolContext) -> ToolResult:
+    del context
     signal_counts: dict[str, int] = {
         str(signal_type): int(count)
         for signal_type, count in session.execute(
@@ -216,8 +217,16 @@ def run_tool(
     task_type: str,
     hypothesis: Hypothesis,
     policy: dict,
+    provider: LLMProvider | None = None,
 ) -> ToolResult:
     tool = TOOL_REGISTRY.get(task_type)
     if tool is None:
         raise ValueError(f"Unknown task tool: {task_type}")
-    return tool(session, hypothesis, policy)
+    return tool(
+        session,
+        hypothesis,
+        ToolContext(
+            policy=policy,
+            provider=provider or provider_from_settings(),
+        ),
+    )

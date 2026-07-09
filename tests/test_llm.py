@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
-from pathlib import Path
 from typing import ClassVar
 
 import pytest
 
 from openoyster.config import Settings
-from openoyster.llm import CodexProvider, ExtractionUnavailable, OpenAICompatibleProvider
+from openoyster.llm import ExtractionUnavailable, OpenAICompatibleProvider, StubProvider
 
 
 class FakeResponse:
@@ -45,34 +43,6 @@ class FakeClient:
         return FakeResponse(payload)
 
 
-def _write_codex_config(path: Path) -> None:
-    path.mkdir(parents=True)
-    (path / "models.json").write_text(
-        json.dumps(
-            {
-                "chat": "gpt-5.4-mini",
-                "fast_complex": "gpt-5.3-codex-spark",
-                "code": "gpt-5.5",
-                "reasoning": "gpt-5.5",
-                "secondary": "gpt-5.4",
-            }
-        ),
-        encoding="utf-8",
-    )
-    (path / "pipeline.json").write_text(
-        json.dumps(
-            {
-                "stages": [
-                    {"name": "extract", "tier": "T1", "model_type": "reasoning"},
-                    {"name": "merge_judge", "tier": "T1", "model_type": "chat"},
-                ],
-                "prod_connector": "openai-compatible",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
 def _payload(*indexes: int) -> str:
     return json.dumps(
         {
@@ -107,103 +77,6 @@ def _payload(*indexes: int) -> str:
             ]
         }
     )
-
-
-def _settings(tmp_path: Path) -> Settings:
-    config_dir = tmp_path / "codex-config"
-    _write_codex_config(config_dir)
-    return Settings(
-        workspace=tmp_path / "workspace",
-        llm_provider="codex",
-        codex_config_dir=config_dir,
-        codex_binary="codex-test",
-        codex_timeout_seconds=30,
-    )
-
-
-def test_codex_provider_parses_batch_json_and_preserves_order(monkeypatch, tmp_path):
-    calls: list[list[str]] = []
-    envs: list[dict[str, str]] = []
-
-    def fake_run(cmd, **kwargs):
-        calls.append(cmd)
-        envs.append(kwargs["env"])
-        return subprocess.CompletedProcess(cmd, 0, stdout=_payload(1, 0), stderr="")
-
-    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
-    analyses = CodexProvider(_settings(tmp_path)).analyse_batch(
-        ["Acme 0 shipped a governed platform.", "Acme 1 shipped a governed platform."],
-        policy={"extraction": {"max_claims_per_chunk": 3}},
-    )
-
-    assert [analysis.entities[0].name for analysis in analyses] == ["Acme 0", "Acme 1"]
-    assert calls[0][:2] == [
-        "codex-test",
-        "exec",
-    ]
-    assert "--ephemeral" in calls[0]
-    assert "--ignore-user-config" in calls[0]
-    assert "--ignore-rules" in calls[0]
-    assert "--skip-git-repo-check" in calls[0]
-    assert calls[0][calls[0].index("--sandbox") + 1] == "read-only"
-    assert calls[0][calls[0].index("--model") + 1] == "gpt-5.5"
-    assert calls[0][calls[0].index("-c") + 1] == 'approval_policy="never"'
-    assert "OPENOYSTER_API_KEY" not in envs[0]
-    prompt = calls[0][-1]
-    assert "[CHUNK 0]" in prompt
-    assert "[/CHUNK 1]" in prompt
-    assert "Do not create, modify, or delete files." in prompt
-
-
-def test_codex_provider_repairs_malformed_json_once(monkeypatch, tmp_path):
-    responses = ["```json\nnot-json\n```", _payload(0)]
-    prompts: list[str] = []
-
-    def fake_run(cmd, **kwargs):
-        prompts.append(cmd[-1])
-        return subprocess.CompletedProcess(cmd, 0, stdout=responses.pop(0), stderr="")
-
-    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
-    analyses = CodexProvider(_settings(tmp_path)).analyse_batch(["Acme 0 shipped a governed platform."])
-
-    assert analyses[0].claims[0].text == "Acme 0 shipped a governed platform."
-    assert len(prompts) == 2
-    assert "[INVALID RESPONSE]" in prompts[1]
-
-
-def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):
-    def fake_run(cmd, **kwargs):
-        return subprocess.CompletedProcess(cmd, 0, stdout="not-json", stderr="")
-
-    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
-
-    with pytest.raises(ExtractionUnavailable, match="schema repair"):
-        CodexProvider(_settings(tmp_path)).analyse_batch(["Acme shipped a platform."])
-
-
-def test_codex_provider_raises_unavailable_on_nonzero_exit(monkeypatch, tmp_path):
-    def fake_run(cmd, **kwargs):
-        return subprocess.CompletedProcess(cmd, 2, stdout="secret stdout", stderr="secret stderr")
-
-    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
-
-    with pytest.raises(ExtractionUnavailable, match="codex exited with 2"):
-        CodexProvider(_settings(tmp_path)).analyse_batch(["Acme shipped a platform."])
-
-    log_file = next((tmp_path / "codex-config" / "logs" / "extract").glob("*.json"))
-    log_text = log_file.read_text(encoding="utf-8")
-    assert "secret stdout" not in log_text
-    assert "secret stderr" not in log_text
-
-
-def test_codex_provider_raises_unavailable_on_timeout(monkeypatch, tmp_path):
-    def fake_run(cmd, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=cmd, timeout=30, output="partial")
-
-    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
-
-    with pytest.raises(ExtractionUnavailable, match="timed out"):
-        CodexProvider(_settings(tmp_path)).analyse_batch(["Acme shipped a platform."])
 
 
 def test_openai_compatible_provider_parses_batch_json(monkeypatch, tmp_path):
@@ -267,3 +140,35 @@ def test_openai_compatible_provider_failure_is_unavailable_without_fallback(monk
 
     with pytest.raises(ExtractionUnavailable, match="openai-compatible request failed"):
         OpenAICompatibleProvider(settings).analyse_batch(["Acme shipped a platform."])
+
+
+def test_stub_provider_merge_judge_matches_only_normalized_equal_claims():
+    prompt = (
+        "[NEW CLAIM]\n"
+        "scope: Acme\n"
+        "claim: Acme governance improves adoption.\n"
+        "[/NEW CLAIM]\n\n"
+        "[CANDIDATE 0]\n"
+        "id: 1\n"
+        "scope: Acme\n"
+        "claim: Acme governance improves adoption.\n"
+        "[/CANDIDATE 0]"
+    )
+
+    payload = StubProvider().query_json(prompt, "merge_judge")
+
+    assert payload["relation"] == "same"
+    assert payload["match_index"] == 0
+
+
+def test_stub_provider_stance_judge_uses_chunk_text_markers():
+    prompt = (
+        "[CHUNK 0]\n"
+        "Acme has no evidence that model quality is the blocker. Governance remains under review.\n"
+        "[/CHUNK 0]"
+    )
+
+    payload = StubProvider().query_json(prompt, "stance_judge")
+
+    assert payload["judgements"][0]["stance"] == "oppose"
+    assert payload["judgements"][0]["quoted_evidence"].startswith("Acme has no evidence")

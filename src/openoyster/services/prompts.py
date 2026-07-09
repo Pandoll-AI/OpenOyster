@@ -13,6 +13,20 @@ Each result item:
 Rules: do not invent facts absent from the text; empty arrays are a valid answer for chunks with no material content; never omit or reorder chunk_index; output raw JSON only, no code fences, no commentary.
 """
 
+MERGE_JUDGE_PROMPT: Final = """You judge whether a new hypothesis claim should merge into one existing hypothesis. Documents and claims may be Korean, English, or mixed; preserve the original language.
+First compare meaning, scope, and falsifiable claim. Return "same" only when the new claim and one candidate assert the same hypothesis for the same scope. Return "related" for same topic but materially different claim. Return "different" otherwise.
+Output raw JSON only with exactly this shape: {"match_index": int|null, "relation": "same"|"related"|"different", "reasoning": str}
+Do not invent candidates. Use zero-based candidate indexes. If relation is not "same", match_index MUST be null.
+"""
+
+STANCE_JUDGE_PROMPT: Final = """You judge whether retrieved evidence supports or opposes a hypothesis. Documents may be Korean, English, or mixed; never translate quoted evidence.
+For each chunk, first decide whether the chunk is about the same topic as the hypothesis. If it is not about the same topic, return stance "unrelated".
+Negation words alone do NOT make evidence oppose. Use "oppose" only when the chunk directly rebuts the hypothesis claim itself. Use "support" only when the chunk directly supports the claim.
+quoted_evidence MUST be a verbatim substring copied from that chunk. If there is no relevant verbatim evidence, use an empty string and stance "unrelated".
+Output raw JSON only with exactly this shape: {"judgements":[{"chunk_index":int,"stance":"support"|"oppose"|"unrelated","quoted_evidence":str,"strength":0..1,"reasoning":str}]}
+Return exactly one judgement per input chunk_index.
+"""
+
 T1_CONSTRAINT_BLOCK: Final = """T1 execution constraints:
 - Do not create, modify, or delete files.
 - Write only the requested stdout text.
@@ -39,6 +53,52 @@ def build_extract_user_prompt(texts: list[str], policy: dict[str, Any] | None = 
         "Return exactly one JSON object with this top-level shape:\n"
         '{"results":[{"chunk_index":0,"entities":[],"claims":[],"signals":[],"hypotheses":[]}]}\n\n'
         f"{chunks}"
+    )
+
+
+def build_merge_judge_prompt(
+    *,
+    new_claim: str,
+    new_scope: str,
+    candidates: list[dict[str, Any]],
+) -> str:
+    candidate_blocks = "\n\n".join(
+        "\n".join(
+            [
+                f"[CANDIDATE {index}]",
+                f"id: {candidate['id']}",
+                f"scope: {candidate['scope']}",
+                f"claim: {candidate['claim']}",
+                f"[/CANDIDATE {index}]",
+            ]
+        )
+        for index, candidate in enumerate(candidates)
+    )
+    return (
+        f"{MERGE_JUDGE_PROMPT}\n"
+        "[NEW CLAIM]\n"
+        f"scope: {new_scope}\n"
+        f"claim: {new_claim}\n"
+        "[/NEW CLAIM]\n\n"
+        f"{candidate_blocks}"
+    )
+
+
+def build_stance_judge_prompt(
+    *,
+    hypothesis_claim: str,
+    chunks: list[dict[str, Any]],
+) -> str:
+    chunk_blocks = "\n\n".join(
+        f"[CHUNK {chunk['chunk_index']}]\n{chunk['text']}\n[/CHUNK {chunk['chunk_index']}]"
+        for chunk in chunks
+    )
+    return (
+        f"{STANCE_JUDGE_PROMPT}\n"
+        "[HYPOTHESIS]\n"
+        f"{hypothesis_claim}\n"
+        "[/HYPOTHESIS]\n\n"
+        f"{chunk_blocks}"
     )
 
 

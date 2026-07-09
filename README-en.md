@@ -96,7 +96,7 @@ openoyster eval fixtures examples/eval
 - **Ingestion paths**: filesystem, guarded HTTP, RSS, GitHub releases/issues.
 - **LLM providers**: codex CLI batch extractor, OpenAI-compatible structured JSON provider, test-only stub provider, deferred-on-failure recording.
 - **Evidence tools**: hypothesis brief, support scan, counter-evidence scan, corpus baseline.
-- **Retrieval quality controls**: matched terms, source-diversity cap, counter-evidence query mode, optional PostgreSQL full-text retrieval.
+- **Retrieval quality controls**: SQLite FTS5/PostgreSQL full-text auto retrieval, matched terms, source-diversity cap, stance-judge evidence filtering.
 - **Operational surfaces**: FastAPI, read-only dashboard, API-key protected writes, Typer CLI, Alembic migrations, Docker Compose.
 - **Verification surfaces**: pytest, ruff, mypy, CI, fixture evaluation, release checklist, threat model.
 
