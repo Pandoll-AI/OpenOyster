@@ -1,0 +1,10 @@
+{
+  "id": "fixture_ko",
+  "title": "오픈오이스터 골드셋 평가",
+  "url": "https://example.test/ko",
+  "source": "fixture",
+  "language": "ko",
+  "kind": "article",
+  "collected_at": "2026-07-10T00:00:00Z",
+  "text": "오픈오이스터는 골드셋 평가 기능을 도입했다. 새 평가 기능은 한국어 핵심 엔티티 재현율을 추적한다. 내부 검수 절차는 아직 사람 검토 전이다."
+}

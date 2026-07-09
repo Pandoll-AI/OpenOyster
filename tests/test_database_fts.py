@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import cast
+
+from sqlalchemy.engine import Connection
+
 from openoyster.database import drop_sqlite_chunks_fts, ensure_sqlite_chunks_fts
 
 
@@ -16,7 +20,7 @@ class FakePostgresConnection:
 
 
 def test_chunks_fts_helpers_are_noop_for_postgresql_dialect():
-    connection = FakePostgresConnection()
+    connection = cast(Connection, FakePostgresConnection())
 
     ensure_sqlite_chunks_fts(connection)
     drop_sqlite_chunks_fts(connection)

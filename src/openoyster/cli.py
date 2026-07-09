@@ -19,6 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+from .cli_eval import eval_app, gold_app
 from .config import Settings, get_settings
 from .connectors.filesystem import SUPPORTED_SUFFIXES
 from .connectors.github import fetch_github_items
@@ -67,6 +68,8 @@ app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(artifact_app, name="artifact")
+app.add_typer(eval_app, name="eval")
+app.add_typer(gold_app, name="gold")
 console = Console()
 
 

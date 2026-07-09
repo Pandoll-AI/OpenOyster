@@ -13,6 +13,7 @@ _CANDIDATE_RE = re.compile(
     re.S,
 )
 _CHUNK_RE = re.compile(r"\[CHUNK (?P<index>\d+)\]\n(?P<text>.*?)\n\[/CHUNK (?P=index)\]", re.S)
+_EVIDENCE_QUOTE_RE = re.compile(r"\[EVIDENCE QUOTE\]\n(?P<quote>.*?)\n\[/EVIDENCE QUOTE\]", re.S)
 
 
 def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
@@ -21,6 +22,8 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_merge_judge(prompt)
         case "stance_judge":
             return _stub_stance_judge(prompt)
+        case "gold_label":
+            return _stub_gold_label(prompt)
         case _:
             raise ExtractionUnavailable(f"stub does not implement JSON stage: {stage}")
 
@@ -67,3 +70,15 @@ def _stub_stance_judge(prompt: str) -> dict[str, Any]:
             }
         )
     return {"judgements": judgements}
+
+
+def _stub_gold_label(prompt: str) -> dict[str, Any]:
+    match = _EVIDENCE_QUOTE_RE.search(prompt)
+    quote = match.group("quote") if match else prompt
+    folded = quote.casefold()
+    contradicts = "no evidence" in folded or "반대" in quote
+    return {
+        "contradicts": contradicts,
+        "reasoning": "deterministic stub counter audit from evidence quote marker",
+        "model": "test-double",
+    }

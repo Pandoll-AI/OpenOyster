@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ def temp_settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture()
-def engine(temp_settings: Settings) -> Engine:
+def engine(temp_settings: Settings) -> Generator[Engine]:
     runtime_engine = make_engine(temp_settings)
     init_db(runtime_engine)
     yield runtime_engine

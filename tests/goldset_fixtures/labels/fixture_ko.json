@@ -1,0 +1,27 @@
+{
+  "doc_id": "fixture_ko",
+  "language": "ko",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {"name": "오픈오이스터", "kind": "organisation", "salience": "core"},
+    {"name": "골드셋 평가 기능", "kind": "product", "salience": "core"},
+    {"name": "한국어 핵심 엔티티 재현율", "kind": "other", "salience": "peripheral"}
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "strategy",
+      "summary": "오픈오이스터는 골드셋 평가 기능을 도입했다.",
+      "anchor_quote": "골드셋 평가 기능을 도입했다",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "governance",
+      "summary": "내부 검수 절차는 아직 사람 검토 전이다.",
+      "anchor_quote": "아직 사람 검토 전이다",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "synthetic fixture"
+}

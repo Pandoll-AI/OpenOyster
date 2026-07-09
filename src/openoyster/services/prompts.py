@@ -27,6 +27,12 @@ Output raw JSON only with exactly this shape: {"judgements":[{"chunk_index":int,
 Return exactly one judgement per input chunk_index.
 """
 
+COUNTER_AUDIT_PROMPT: Final = """You audit counter-evidence quality for an extraction system. Documents may be Korean, English, or mixed; never translate quoted evidence.
+Decide whether the quoted evidence actually contradicts the hypothesis claim, not merely whether it mentions the same topic or is negative in tone.
+Return true only when the quote directly rebuts the hypothesis claim. Return false for unrelated, ambiguous, weak, or merely cautionary quotes.
+Output raw JSON only with exactly this shape: {"contradicts": bool, "reasoning": str}
+"""
+
 T1_CONSTRAINT_BLOCK: Final = """T1 execution constraints:
 - Do not create, modify, or delete files.
 - Write only the requested stdout text.
@@ -99,6 +105,30 @@ def build_stance_judge_prompt(
         f"{hypothesis_claim}\n"
         "[/HYPOTHESIS]\n\n"
         f"{chunk_blocks}"
+    )
+
+
+def build_counter_audit_prompt(
+    *,
+    hypothesis_claim: str,
+    evidence_quote: str,
+    evidence_summary: str,
+    source_text: str,
+) -> str:
+    return (
+        f"{COUNTER_AUDIT_PROMPT}\n"
+        "[HYPOTHESIS]\n"
+        f"{hypothesis_claim}\n"
+        "[/HYPOTHESIS]\n\n"
+        "[EVIDENCE QUOTE]\n"
+        f"{evidence_quote}\n"
+        "[/EVIDENCE QUOTE]\n\n"
+        "[EVIDENCE SUMMARY]\n"
+        f"{evidence_summary}\n"
+        "[/EVIDENCE SUMMARY]\n\n"
+        "[SOURCE CHUNK]\n"
+        f"{source_text}\n"
+        "[/SOURCE CHUNK]"
     )
 
 

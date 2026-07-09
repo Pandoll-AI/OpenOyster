@@ -1,0 +1,10 @@
+{
+  "id": "fixture_en",
+  "title": "Acme releases Atlas AI",
+  "url": "https://example.test/en",
+  "source": "fixture",
+  "language": "en",
+  "kind": "article",
+  "collected_at": "2026-07-10T00:00:00Z",
+  "text": "Acme released Atlas AI for enterprise teams. Atlas AI reduces compliance risk. No evidence supports immediate hiring."
+}

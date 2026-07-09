@@ -54,7 +54,10 @@ def add_evidence(
             strength=strength,
             summary=summary,
             provenance="extraction",
-            metadata_json={"candidate_metadata": draft.metadata_json},
+            metadata_json={
+                "candidate_metadata": draft.metadata_json,
+                "quoted_evidence": draft.quoted_evidence,
+            },
         )
     )
     session.flush()

@@ -1,0 +1,27 @@
+{
+  "doc_id": "fixture_en",
+  "language": "en",
+  "labeler_model": "gpt-5.4",
+  "labeled_at": "2026-07-10",
+  "review_status": "unreviewed",
+  "expected_entities": [
+    {"name": "Acme", "kind": "organisation", "salience": "core"},
+    {"name": "Atlas AI", "kind": "product", "salience": "core"},
+    {"name": "enterprise teams", "kind": "other", "salience": "peripheral"}
+  ],
+  "expected_signals": [
+    {
+      "signal_type": "product_release",
+      "summary": "Acme released Atlas AI for enterprise teams.",
+      "anchor_quote": "Acme released Atlas AI",
+      "anchor_verified": true
+    },
+    {
+      "signal_type": "risk",
+      "summary": "Atlas AI reduces compliance risk.",
+      "anchor_quote": "Atlas AI reduces compliance risk",
+      "anchor_verified": true
+    }
+  ],
+  "notes": "synthetic fixture"
+}
