@@ -12,8 +12,10 @@ from ..config import Settings, get_settings
 from ..database import init_db, make_engine, make_session_factory
 from ..events import bus
 from ..llm import LLMProvider
+from ..loops.execution import ExecutionLoop
 from ..loops.extraction import ExtractionLoop
 from ..loops.hypothesis import HypothesisLoop
+from ..loops.planning import PlanningLoop
 from ..loops.supervisor import Supervisor
 from ..models import Chunk, Document, EvidenceEdge, Hypothesis
 from ..policies import ensure_default_policy
@@ -49,7 +51,12 @@ def evaluate_counter_evidence(
             supervisor = Supervisor(
                 session_factory=factory,
                 settings=settings,
-                loops=[ExtractionLoop(settings, provider), HypothesisLoop(settings, provider)],
+                loops=[
+                    ExtractionLoop(settings, provider),
+                    HypothesisLoop(settings, provider),
+                    PlanningLoop(settings),
+                    ExecutionLoop(settings, provider),
+                ],
             )
             try:
                 supervisor.run_cycles(cycles=cycles, sleep_seconds=0.0)
