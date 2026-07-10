@@ -19,7 +19,7 @@ from ..scoring import (
     staleness_score,
     weighted_trigger_score,
 )
-from ..services.hypothesis_evidence import add_evidence
+from ..services.hypothesis_evidence import ExtractionEvidenceRequest, add_evidence
 from ..services.hypothesis_merge import match_hypothesis, record_merge_decision
 from ..utils import normalise_text, stable_hash
 from .base import BaseLoop, LoopResult
@@ -213,11 +213,14 @@ class HypothesisLoop(BaseLoop):
                 signal = session.get(Signal, signal_id) if signal_id else None
                 evidence_created = add_evidence(
                     session,
-                    hypothesis=hypothesis,
-                    signal=signal,
-                    document_id=event.payload_json.get("document_id"),
-                    chunk_id=event.payload_json.get("chunk_id"),
-                    draft=draft,
+                    self.provider,
+                    ExtractionEvidenceRequest(
+                        hypothesis=hypothesis,
+                        signal=signal,
+                        document_id=event.payload_json.get("document_id"),
+                        chunk_id=event.payload_json.get("chunk_id"),
+                        draft=draft,
+                    ),
                 )
                 if evidence_created:
                     result.inc("evidence")
