@@ -44,7 +44,7 @@ def _render_markdown(
         "",
         f"## Eval Iteration {generated_at} `{git_rev}`",
         "",
-        "라벨은 LLM-judge(gpt-5.4) 초벌, 사람 미검수",
+        gold_report.label_notice if gold_report is not None else "라벨은 LLM-judge 초벌, 사람 미검수",
         "",
         f"Raw result: `{raw_path}`",
         "",

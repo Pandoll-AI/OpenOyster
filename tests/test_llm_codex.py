@@ -15,11 +15,11 @@ def _write_codex_config(path: Path) -> None:
     (path / "models.json").write_text(
         json.dumps(
             {
-                "chat": "gpt-5.4-mini",
-                "fast_complex": "gpt-5.3-codex-spark",
-                "code": "gpt-5.5",
-                "reasoning": "gpt-5.5",
-                "secondary": "gpt-5.4",
+                "chat": "gpt-5.6-sol",
+                "fast_complex": "gpt-5.6-sol",
+                "code": "gpt-5.6-sol",
+                "reasoning": "gpt-5.6-sol",
+                "secondary": "gpt-5.6-sol",
             }
         ),
         encoding="utf-8",
@@ -28,9 +28,11 @@ def _write_codex_config(path: Path) -> None:
         json.dumps(
             {
                 "stages": [
-                    {"name": "extract", "tier": "T1", "model_type": "reasoning"},
-                    {"name": "stance_judge", "tier": "T1", "model_type": "reasoning"},
-                    {"name": "merge_judge", "tier": "T1", "model_type": "chat"},
+                    {"name": "extract", "tier": "T1", "model_type": "reasoning", "effort": "medium"},
+                    {"name": "stance_judge", "tier": "T1", "model_type": "reasoning", "effort": "xhigh"},
+                    {"name": "oppose_verify", "tier": "T1", "model_type": "chat", "effort": "max"},
+                    {"name": "merge_judge", "tier": "T1", "model_type": "chat", "effort": "medium"},
+                    {"name": "gold_label", "tier": "T1", "model_type": "secondary", "effort": "xhigh"},
                 ],
                 "prod_connector": "openai-compatible",
             }
@@ -111,20 +113,25 @@ def test_codex_provider_parses_batch_json_and_preserves_order(monkeypatch, tmp_p
     assert "--ignore-rules" in calls[0]
     assert "--skip-git-repo-check" in calls[0]
     assert calls[0][calls[0].index("--sandbox") + 1] == "read-only"
-    assert calls[0][calls[0].index("--model") + 1] == "gpt-5.5"
+    assert calls[0][calls[0].index("--model") + 1] == "gpt-5.6-sol"
     assert calls[0][calls[0].index("-c") + 1] == 'approval_policy="never"'
+    assert 'model_reasoning_effort="medium"' in calls[0]
     assert calls[0][-1] == "-"
     assert "OPENOYSTER_API_KEY" not in envs[0]
     assert not any("[CHUNK 0]" in part for part in calls[0])
     assert "[CHUNK 0]" in inputs[0]
     assert "[/CHUNK 1]" in inputs[0]
+    log_file = next((tmp_path / "codex-config" / "logs" / "extract").glob("*.json"))
+    assert json.loads(log_file.read_text(encoding="utf-8"))["effort"] == "medium"
 
 
 def test_codex_provider_repairs_malformed_json_once(monkeypatch, tmp_path):
     responses = ["```json\nnot-json\n```", _payload(0)]
+    calls: list[list[str]] = []
     prompts: list[str] = []
 
     def fake_run(cmd, **kwargs):
+        calls.append(cmd)
         prompts.append(kwargs["input"])
         return subprocess.CompletedProcess(cmd, 0, stdout=responses.pop(0), stderr="")
 
@@ -134,6 +141,62 @@ def test_codex_provider_repairs_malformed_json_once(monkeypatch, tmp_path):
     assert analyses[0].claims[0].text == "Acme 0 shipped a governed platform."
     assert len(prompts) == 2
     assert "[INVALID RESPONSE]" in prompts[1]
+    assert all('model_reasoning_effort="medium"' in call for call in calls)
+
+
+def test_codex_provider_omits_reasoning_effort_when_stage_has_no_effort(monkeypatch, tmp_path):
+    settings = _settings(tmp_path)
+    pipeline_path = Path(settings.codex_config_dir) / "pipeline.json"
+    pipeline = json.loads(pipeline_path.read_text(encoding="utf-8"))
+    next(stage for stage in pipeline["stages"] if stage["name"] == "stance_judge").pop("effort")
+    pipeline_path.write_text(json.dumps(pipeline), encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        del kwargs
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"ok": true}', stderr="")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    CodexProvider(settings).query_json("judge this", "stance_judge")
+
+    assert not any(arg.startswith("model_reasoning_effort=") for arg in calls[0])
+
+
+def test_codex_provider_rejects_invalid_reasoning_effort_before_subprocess(monkeypatch, tmp_path):
+    settings = _settings(tmp_path)
+    pipeline_path = Path(settings.codex_config_dir) / "pipeline.json"
+    pipeline = json.loads(pipeline_path.read_text(encoding="utf-8"))
+    next(stage for stage in pipeline["stages"] if stage["name"] == "extract")["effort"] = "ultra"
+    pipeline_path.write_text(json.dumps(pipeline), encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):
+        del cmd, kwargs
+        pytest.fail("subprocess must not run for an invalid effort")
+
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    with pytest.raises(ExtractionUnavailable, match=r"invalid reasoning effort.*ultra"):
+        CodexProvider(settings).analyse_batch(["Acme shipped a platform."])
+
+
+def test_repository_codex_config_uses_single_model_with_graded_effort():
+    root = Path(__file__).parents[1]
+    models = json.loads((root / ".codex-llm" / "models.json").read_text(encoding="utf-8"))
+    pipeline = json.loads((root / ".codex-llm" / "pipeline.json").read_text(encoding="utf-8"))
+
+    assert {value for key, value in models.items() if not key.startswith("_")} == {"gpt-5.6-sol"}
+    assert models["_policy"] == (
+        "single-model policy: gpt-5.6-sol, graded by reasoning effort (user HARD rule 2026-07)"
+    )
+    assert {stage["name"]: stage["effort"] for stage in pipeline["stages"]} == {
+        "extract": "medium",
+        "stance_judge": "xhigh",
+        "oppose_verify": "max",
+        "merge_judge": "medium",
+        "gold_label": "xhigh",
+    }
 
 
 def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):

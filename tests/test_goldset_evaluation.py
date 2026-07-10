@@ -130,7 +130,7 @@ def test_eval_report_writes_markdown_and_raw_json(tmp_path: Path) -> None:
     raw_path = write_eval_outputs(gold_report=report, report_path=report_path, results_dir=results_dir)
 
     assert report_path.exists()
-    assert "라벨은 LLM-judge(gpt-5.4) 초벌, 사람 미검수" in report_path.read_text(encoding="utf-8")
+    assert "라벨은 LLM-judge 초벌, 사람 미검수" in report_path.read_text(encoding="utf-8")
     assert raw_path.parent == results_dir
     payload = json.loads(raw_path.read_text(encoding="utf-8"))
     assert payload["gold"]["docs_evaluated"] == 2
@@ -160,7 +160,11 @@ def test_evaluate_counter_evidence_audits_oppose_edges(tmp_path: Path) -> None:
     assert report.oppose_edges == 1
     assert report.measurable is True
     assert report.precision == pytest.approx(1.0)
-    assert report.audit_model_note
+    assert report.audit_model_note == (
+        "Single-model policy (gpt-5.6-sol): judge, verifier, and auditor share one model and are separated "
+        "only by role prompts and reasoning effort — treat precision as self-consistency, not independent "
+        "confirmation."
+    )
 
 
 def test_counter_audit_requires_json_boolean(tmp_path: Path) -> None:
@@ -186,4 +190,3 @@ def test_counter_audit_requires_json_boolean(tmp_path: Path) -> None:
 
     assert report.oppose_edges == 1
     assert report.precision == pytest.approx(0.0)
-

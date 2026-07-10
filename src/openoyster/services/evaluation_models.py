@@ -90,7 +90,7 @@ class GoldEvalReport(BaseModel):
     per_doc: list[GoldDocDetail] = Field(default_factory=list)
     review_status_counts: dict[str, int] = Field(default_factory=dict)
     labeler_model_counts: dict[str, int] = Field(default_factory=dict)
-    label_notice: str = "라벨은 LLM-judge(gpt-5.4) 초벌, 사람 미검수"
+    label_notice: str = "라벨은 LLM-judge 초벌, 사람 미검수"
 
 
 class CounterAuditDetail(BaseModel):

@@ -159,17 +159,16 @@ def _audit_counter_edges(
                 CounterAuditDetail(
                     evidence_edge_id=edge.id,
                     hypothesis_id=hypothesis.id,
-                    contradicts=_strict_bool(response.get("contradicts", False)),
+                    contradicts=response.get("contradicts") is True,
                     reasoning=str(response.get("reasoning", "")),
                     quoted_evidence=quote,
                 )
             )
     return audits, models
 
-
-def _strict_bool(value: object) -> bool:
-    return value if isinstance(value, bool) else False
-
-
 def _audit_note() -> str:
-    return "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent."
+    return (
+        "Single-model policy (gpt-5.6-sol): judge, verifier, and auditor share one model and are separated "
+        "only by role prompts and reasoning effort — treat precision as self-consistency, not independent "
+        "confirmation."
+    )

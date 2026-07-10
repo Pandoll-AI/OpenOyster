@@ -6,7 +6,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 from uuid import uuid4
 
 import httpx
@@ -14,6 +14,7 @@ import httpx
 from .config import Settings, get_settings
 from .llm_contracts import ExtractionUnavailable
 from .schemas import TextAnalysis
+from .services.codex_config import load_codex_stage_config
 from .services.llm_judges import stub_query_json
 from .services.llm_runtime import (
     JsonAttempt,
@@ -21,7 +22,6 @@ from .services.llm_runtime import (
     codex_subprocess_env,
     extract_json_payload,
     is_usage_dict,
-    load_json_object,
     repair_validation_error,
     timeout_output,
     validate_batch_attempt,
@@ -52,25 +52,6 @@ class CodexProvider(LLMProvider):
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
 
-    def _model_for_stage(self, stage: str) -> str:
-        config_dir = Path(self.settings.codex_config_dir)
-        pipeline = load_json_object(config_dir / "pipeline.json")
-        models = load_json_object(config_dir / "models.json")
-        stages = pipeline.get("stages")
-        if not isinstance(stages, list):
-            raise ExtractionUnavailable("pipeline.json stages must be a list")
-        model_type = None
-        for item in stages:
-            if isinstance(item, dict) and item.get("name") == stage:
-                model_type = item.get("model_type")
-                break
-        if not isinstance(model_type, str):
-            raise ExtractionUnavailable(f"pipeline stage is not configured: {stage}")
-        model = models.get(model_type)
-        if not isinstance(model, str):
-            raise ExtractionUnavailable(f"model type is not configured: {model_type}")
-        return model
-
     def _write_log(self, *, stage: str, record: dict[str, Any]) -> None:
         log_dir = Path(self.settings.codex_config_dir) / "logs" / stage
         try:
@@ -81,7 +62,8 @@ class CodexProvider(LLMProvider):
             return
 
     def _attempt(self, prompt: str, stage: str) -> JsonAttempt:
-        model = self._model_for_stage(stage)
+        stage_config = load_codex_stage_config(Path(self.settings.codex_config_dir), stage)
+        model = stage_config.model
         prepared_prompt = f"{T1_CONSTRAINT_BLOCK}\n\n{prompt}"
         run_id = uuid4().hex
         started = time.perf_counter()
@@ -90,24 +72,25 @@ class CodexProvider(LLMProvider):
         error: str | None = None
         try:
             with tempfile.TemporaryDirectory(prefix="openoyster-codex-") as sandbox_root:
+                command = [
+                    self.settings.codex_binary,
+                    "exec",
+                    "--ephemeral",
+                    "--ignore-user-config",
+                    "--ignore-rules",
+                    "--skip-git-repo-check",
+                    "--sandbox",
+                    "read-only",
+                    "--cd",
+                    sandbox_root,
+                    "-c",
+                    'approval_policy="never"',
+                ]
+                if stage_config.effort is not None:
+                    command.extend(["-c", f'model_reasoning_effort="{stage_config.effort}"'])
+                command.extend(["--model", model, "-"])
                 completed = subprocess.run(
-                    [
-                        self.settings.codex_binary,
-                        "exec",
-                        "--ephemeral",
-                        "--ignore-user-config",
-                        "--ignore-rules",
-                        "--skip-git-repo-check",
-                        "--sandbox",
-                        "read-only",
-                        "--cd",
-                        sandbox_root,
-                        "-c",
-                        'approval_policy="never"',
-                        "--model",
-                        model,
-                        "-",
-                    ],
+                    command,
                     capture_output=True,
                     input=prepared_prompt,
                     text=True,
@@ -147,6 +130,7 @@ class CodexProvider(LLMProvider):
                     "run_id": run_id,
                     "stage": stage,
                     "model": model,
+                    "effort": stage_config.effort,
                     "prompt_length": len(prepared_prompt),
                     "prompt_sha256": sha256_text(prepared_prompt),
                     "duration_seconds": time.perf_counter() - started,
@@ -274,4 +258,4 @@ def provider_from_settings(settings: Settings | None = None) -> LLMProvider:
         case "stub":
             return StubProvider()
         case other:
-            raise ExtractionUnavailable(f"unknown LLM provider: {other}")
+            assert_never(other)
