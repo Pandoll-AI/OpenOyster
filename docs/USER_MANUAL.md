@@ -207,7 +207,7 @@ openoyster eval counter --cycles 1
 openoyster gold review
 ```
 
-The gold-set harness measures core entity recall, signal type F1, and quote existence. The counter-evidence harness checks directional opposition quality. Current gold labels are still marked unreviewed, and the counter judge is only quasi-independent because it is another LLM judge in the same runtime family.
+The gold-set harness measures core entity recall, signal type F1, and quote existence. The counter-evidence harness checks directional opposition quality. Current gold labels are still marked unreviewed. The judge, verifier, and auditor all use `gpt-5.6-sol`, separated only by role prompts and reasoning effort, so counter precision is a self-consistency measure rather than independent confirmation.
 
 ## 10. API and dashboard
 

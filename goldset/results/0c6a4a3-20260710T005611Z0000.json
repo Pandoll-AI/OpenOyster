@@ -1,0 +1,83 @@
+{
+  "generated_at": "2026-07-10T00:56:11+00:00",
+  "git_rev": "0c6a4a3",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 6,
+    "docs_ingested": 34,
+    "oppose_edges": 9,
+    "audited_edges": 9,
+    "precision": 0.0,
+    "measurable": true,
+    "status": "measured",
+    "audit_model_note": "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent.",
+    "audits": [
+      {
+        "evidence_edge_id": 27,
+        "hypothesis_id": 27,
+        "contradicts": false,
+        "reasoning": "The quote says the benchmarks were 'just short of best-in-class,' which supports the hypothesis that the benchmark results may not fully support a best-in-class claim.",
+        "quoted_evidence": "although just short of best-in-class"
+      },
+      {
+        "evidence_edge_id": 39,
+        "hypothesis_id": 39,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis by explicitly distinguishing \"value created\" from \"strictly liquid cash,\" which is the same caveat the hypothesis raises about overstating liquidity.",
+        "quoted_evidence": "measuring \"value created\" as opposed to strictly liquid cash"
+      },
+      {
+        "evidence_edge_id": 62,
+        "hypothesis_id": 62,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebuts it. It directly reinforces the concern that Meta's products rely on collecting personal data, which aligns with the claim that distrust may persist because of data collection and covert recording concerns.",
+        "quoted_evidence": "Meta's vision of the future seems to always depend on collecting more of your personal data"
+      },
+      {
+        "evidence_edge_id": 63,
+        "hypothesis_id": 63,
+        "contradicts": false,
+        "reasoning": "The quote does not rebut the hypothesis. It supports the idea that some users want to hide recording and capture people without consent, which is consistent with higher privacy risk when visible indicators can be defeated.",
+        "quoted_evidence": "a desire to record situations or people without their consent"
+      },
+      {
+        "evidence_edge_id": 64,
+        "hypothesis_id": 64,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebutting it. It describes continuous audio collection and periodic photo capture, which aligns with expanded passive capture beyond visible user-initiated recording.",
+        "quoted_evidence": "continuously collect audio while taking photos every few seconds"
+      },
+      {
+        "evidence_edge_id": 65,
+        "hypothesis_id": 65,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebuts it: saying that images shared with Meta AI can be used for AI training is exactly the kind of policy that could weaken privacy messaging about glasses media.",
+        "quoted_evidence": "any image you share with Meta AI can be used to train its AI"
+      },
+      {
+        "evidence_edge_id": 66,
+        "hypothesis_id": 66,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebuts it: investigations and lawsuits over privacy violations are direct evidence of legal exposure, and they align with reputational risk concerns.",
+        "quoted_evidence": "facing multiple investigations and lawsuits over Meta AI glasses privacy violations"
+      },
+      {
+        "evidence_edge_id": 67,
+        "hypothesis_id": 67,
+        "contradicts": false,
+        "reasoning": "The quote \"unless you opt out\" does not rebut the hypothesis. It aligns with the claim by indicating an opt-out AI data use practice that could sustain privacy concerns despite Meta's stated investments.",
+        "quoted_evidence": "unless you opt out"
+      },
+      {
+        "evidence_edge_id": 69,
+        "hypothesis_id": 69,
+        "contradicts": false,
+        "reasoning": "The quote supports, rather than rebuts, the hypothesis. It says consumers have many reasons to remain distrustful, which aligns with the claim that trust risk is broader than just the AI glasses LED issue.",
+        "quoted_evidence": "consumers clearly still have many reasons to remain distrustful"
+      }
+    ]
+  }
+}

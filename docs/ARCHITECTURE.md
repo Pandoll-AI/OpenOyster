@@ -154,7 +154,7 @@ Scores evidence posture and verified completion, aggregates explicit human feedb
 
 SQLite deployments use FTS5 over chunks. PostgreSQL deployments use database full-text search. Retrieval records matched terms and source provenance so evidence can be inspected from the CLI or API.
 
-Directional counter-evidence requires opposition rather than merely topical relevance. Accepted opposing evidence must include a verbatim quote. This is tested through the counter-evidence evaluation harness, but the current judge is still an LLM judge and should be treated as quasi-independent.
+Directional counter-evidence requires opposition rather than merely topical relevance. Accepted opposing evidence must include a verbatim quote. The judge, verifier, and auditor all use `gpt-5.6-sol`, separated only by role prompts and reasoning effort, so the counter-evidence harness measures self-consistency rather than independent confirmation.
 
 ## 9. Scoring boundaries
 
@@ -180,7 +180,7 @@ Stable extension points are providers, connectors, tools, evaluators, and loops.
 ## 12. Known architectural limits
 
 - Gold-set labels are currently marked as unreviewed.
-- Counter-evidence precision depends on a quasi-independent LLM judge.
+- Counter-evidence precision is a single-model self-consistency measure, not independent confirmation.
 - SQLite mode is local or single-host oriented; it is not a cluster coordination layer.
 - SQL polling is intentionally simple and will not match a dedicated broker at high throughput.
 - Lexical retrieval scans a bounded chunk set and is not large-corpus semantic search.

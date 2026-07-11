@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-07-11T09:11:46+00:00",
+  "git_rev": "0ea0eb6",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 6,
+    "docs_ingested": 34,
+    "oppose_edges": 0,
+    "audited_edges": 0,
+    "precision": null,
+    "measurable": false,
+    "status": "0건 — 측정 불가",
+    "audit_model_note": "Single-model policy (gpt-5.6-sol): judge, verifier, and auditor share one model and are separated only by role prompts and reasoning effort — treat precision as self-consistency, not independent confirmation.",
+    "audits": []
+  }
+}

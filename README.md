@@ -84,16 +84,19 @@ openoyster ingest-rss examples/feeds.yaml
 
 ## 평가 상태
 
-1차 gold set 실행 수치입니다. 라벨은 아직 사람이 검수하지 않았습니다.
+gold set 34건(한/영 실문서, 저자 미작성)에 대한 최신 품질 루프 수치입니다 (`gpt-5.6-sol`, 이터레이션 5). 라벨은 아직 사람이 검수하지 않았습니다.
 
-| Metric | Value | Note |
-|---|---:|---|
-| Korean core entity recall | 1.000 | unreviewed labels |
-| Signal type F1 | 0.806 | unreviewed labels |
-| Quote existence | 0.996 | unreviewed labels |
-| Counter-evidence precision | see `docs/EVAL_REPORT.md` | judge independence and label limits apply |
+| Metric | Value | Gate | Note |
+|---|---:|---|---|
+| Korean core entity recall | 0.912 | ≥ 0.80 PASS | unreviewed labels |
+| Entity precision | 0.525 | (no gate) | 0.367에서 개선 |
+| Signal type F1 | 0.804 | ≥ 0.75 PASS | unreviewed labels |
+| Quote existence | 0.996 | ≥ 0.95 PASS | 날조 인용 감지 지표 |
+| Counter-evidence precision | 측정 불가 (oppose 0건) | ≥ 0.70 | 아래 설명 참조 |
 
-이 평가는 “모델이 스스로 만든 라벨로 자기 점수를 매기는” 순환 평가를 피하려는 하네스입니다. 다만 현재 counter-evidence judge는 완전히 독립된 외부 심사자가 아니라 같은 런타임 계열의 LLM 판정자입니다. 수치는 운영 품질의 증거이지, 제품 안정성 보증은 아닙니다.
+Counter-evidence는 6회 이터레이션의 결과가 그대로 기록돼 있습니다 (`docs/EVAL_REPORT.md`): 검증 게이트 도입 전에는 시스템이 "부정 톤이지만 실제로는 가설을 지지하는" 인용을 반증으로 날조했고(정밀도 0.000), 모든 oppose 저장 경로에 max-effort 검증자를 강제한 뒤에는 날조가 0건이 됐습니다. 현재 코퍼스에는 진짜 상호 모순 문서쌍이 부족해 양성 정밀도는 미측정 상태입니다.
+
+현재 judge, verifier, auditor는 모두 `gpt-5.6-sol`을 사용하며 역할 프롬프트와 reasoning effort만 다릅니다. 따라서 counter precision은 독립 확인이 아니라 동일 모델의 self-consistency 측정치입니다. 수치는 운영 품질의 증거이지, 제품 안정성 보증은 아닙니다.
 
 ## CLI 지도
 
@@ -141,7 +144,7 @@ examples/       Demo documents, policy override, mission example, RSS feeds
 ## 현재 한계
 
 - Gold labels are marked as unreviewed.
-- Counter-evidence quality still depends on a quasi-independent LLM judge.
+- Counter-evidence precision measures role-separated self-consistency within `gpt-5.6-sol`, not independent confirmation.
 - SQLite mode is best treated as local or single-host.
 - No default vector index.
 - No RBAC, multi-tenancy, or secret-manager integration.

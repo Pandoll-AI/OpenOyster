@@ -126,7 +126,7 @@ openoyster eval counter --cycles 1
 openoyster gold review
 ```
 
-Gold set 하네스는 core entity recall, signal type F1, quote existence를 측정합니다. Counter 하네스는 방향성 반증 판정 품질을 봅니다. 현재 gold labels는 아직 사람 검수 전이며, counter 판정자는 완전히 독립된 외부 심사자가 아닙니다.
+Gold set 하네스는 core entity recall, signal type F1, quote existence를 측정합니다. Counter 하네스는 방향성 반증 판정 품질을 봅니다. 현재 gold labels는 아직 사람 검수 전입니다. Judge, verifier, auditor는 모두 `gpt-5.6-sol`을 사용하고 역할 프롬프트와 reasoning effort만 다르므로, counter precision은 독립 확인이 아니라 self-consistency 측정치입니다.
 
 ## Docker Compose
 
@@ -144,7 +144,7 @@ Compose는 PostgreSQL, migration, API, worker를 분리합니다. 호스트의 `
 
 - 기본 검색은 lexical/FTS 검색이며 대규모 벡터 인덱스가 아닙니다.
 - Gold labels는 아직 검수 전입니다.
-- Counter-evidence 품질은 준-독립 LLM 판정자에 의존합니다.
+- Counter-evidence precision은 `gpt-5.6-sol` 내부의 역할 분리 self-consistency이며 독립 확인이 아닙니다.
 - RBAC, 다중 테넌트, 필드 단위 암호화, 비밀관리자 연동이 없습니다.
 - 브라우저·검색엔진·Gmail·Slack 같은 실제 운영 커넥터는 기본 제공하지 않습니다. GitHub는 releases/issues 읽기 전용만 지원합니다.
 - 외부 시스템을 변경하는 action connector SDK와 승인 UI가 없습니다.

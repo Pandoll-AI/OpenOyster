@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-07-09T23:23:01+00:00",
+  "git_rev": "00f4b23",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 6,
+    "docs_ingested": 34,
+    "oppose_edges": 3,
+    "audited_edges": 3,
+    "precision": 0.0,
+    "measurable": true,
+    "status": "measured",
+    "audit_model_note": "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent.",
+    "audits": [
+      {
+        "evidence_edge_id": 41,
+        "hypothesis_id": 41,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebuts it: it explicitly says the comparison measures \"value created\" instead of strictly liquid cash, which aligns with the claim that liquid market impact may be overstated.",
+        "quoted_evidence": "measuring \"value created\" as opposed to strictly liquid cash"
+      },
+      {
+        "evidence_edge_id": 52,
+        "hypothesis_id": 52,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis rather than rebuts it: saying SynthID can only be used when an image-generation tool participates directly indicates provider participation is a key constraint on its effectiveness.",
+        "quoted_evidence": "it can only be used when an image-generation tool actively participates in the program"
+      },
+      {
+        "evidence_edge_id": 55,
+        "hypothesis_id": 55,
+        "contradicts": false,
+        "reasoning": "The quote states that Anthropic does not participate. That does not directly rebut the claim that verification coverage may remain incomplete without Anthropic participation; it is consistent with that possibility rather than contradicting it.",
+        "quoted_evidence": "Anthropic does not participate in the program"
+      }
+    ]
+  }
+}

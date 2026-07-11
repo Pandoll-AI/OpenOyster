@@ -1,0 +1,791 @@
+{
+  "generated_at": "2026-07-10T00:14:38+00:00",
+  "git_rev": "0c6a4a3",
+  "gold": {
+    "kind": "goldset",
+    "provider": "codex",
+    "model": "gpt-5.5",
+    "docs_seen": 34,
+    "docs_evaluated": 34,
+    "skipped_documents": [],
+    "metrics": {
+      "overall": {
+        "docs": 34,
+        "entity_recall_core": 0.9836065573770492,
+        "entity_precision": 0.448207171314741,
+        "signal_type_f1": 0.7838827838827838,
+        "quote_existence_rate": 0.9959183673469387,
+        "core_entities_matched": 60,
+        "core_entities_total": 61,
+        "predicted_entities_matched": 225,
+        "predicted_entities_total": 502,
+        "signal_type_tp": 107,
+        "signal_type_fp": 32,
+        "signal_type_fn": 27,
+        "quotes_verified": 244,
+        "quotes_total": 245
+      },
+      "ko": {
+        "docs": 16,
+        "entity_recall_core": 0.9705882352941176,
+        "entity_precision": 0.5236051502145923,
+        "signal_type_f1": 0.7651006711409396,
+        "quote_existence_rate": 1.0,
+        "core_entities_matched": 33,
+        "core_entities_total": 34,
+        "predicted_entities_matched": 122,
+        "predicted_entities_total": 233,
+        "signal_type_tp": 57,
+        "signal_type_fp": 15,
+        "signal_type_fn": 20,
+        "quotes_verified": 110,
+        "quotes_total": 110
+      },
+      "en": {
+        "docs": 18,
+        "entity_recall_core": 1.0,
+        "entity_precision": 0.3828996282527881,
+        "signal_type_f1": 0.8064516129032258,
+        "quote_existence_rate": 0.9925925925925926,
+        "core_entities_matched": 27,
+        "core_entities_total": 27,
+        "predicted_entities_matched": 103,
+        "predicted_entities_total": 269,
+        "signal_type_tp": 50,
+        "signal_type_fp": 17,
+        "signal_type_fn": 7,
+        "quotes_verified": 134,
+        "quotes_total": 135
+      }
+    },
+    "per_doc": [
+      {
+        "doc_id": "en-arxiv-001",
+        "language": "en",
+        "title": "Accurate, Interdisciplinary and Transparent Structure-property Understanding with Deep Native Structural Reasoning",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "strategy"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 2,
+        "predicted_entities_total": 3,
+        "signal_type_tp": 1,
+        "signal_type_fp": 1,
+        "signal_type_fn": 0,
+        "quotes_verified": 6,
+        "quotes_total": 6
+      },
+      {
+        "doc_id": "en-arxiv-002",
+        "language": "en",
+        "title": "Co-LMLM: Continuous-Query Limited Memory Language Models",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 4,
+        "predicted_entities_total": 9,
+        "signal_type_tp": 1,
+        "signal_type_fp": 0,
+        "signal_type_fn": 0,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "en-arxiv-003",
+        "language": "en",
+        "title": "Breaking Database Lock-in: Agentic Regeneration of High Performance Storage Readers for Database Bypass",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "risk"
+        ],
+        "extra_signal_types": [
+          "demand"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 5,
+        "predicted_entities_total": 14,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 8,
+        "quotes_total": 8
+      },
+      {
+        "doc_id": "en-news-001",
+        "language": "en",
+        "title": "Popular open source AI developer tool Ollama raises $65M, grows to nearly 9M users",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "governance",
+          "hiring"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 23,
+        "signal_type_tp": 4,
+        "signal_type_fp": 2,
+        "signal_type_fn": 0,
+        "quotes_verified": 11,
+        "quotes_total": 11
+      },
+      {
+        "doc_id": "en-news-002",
+        "language": "en",
+        "title": "SpaceXAI releases Grok 4.5, which Elon describes as an 'Opus-class model'",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 10,
+        "predicted_entities_total": 13,
+        "signal_type_tp": 5,
+        "signal_type_fp": 0,
+        "signal_type_fn": 0,
+        "quotes_verified": 8,
+        "quotes_total": 8
+      },
+      {
+        "doc_id": "en-news-003",
+        "language": "en",
+        "title": "Anthropic's new Claude feature is quietly selling you on AI",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "other"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 4,
+        "predicted_entities_total": 7,
+        "signal_type_tp": 4,
+        "signal_type_fp": 1,
+        "signal_type_fn": 0,
+        "quotes_verified": 7,
+        "quotes_total": 7
+      },
+      {
+        "doc_id": "en-news-004",
+        "language": "en",
+        "title": "Anthropic, OpenAI, and SpaceX are bigger than the last 25 years of tech exits",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "research"
+        ],
+        "extra_signal_types": [
+          "strategy"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 4,
+        "predicted_entities_total": 14,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 8,
+        "quotes_total": 8
+      },
+      {
+        "doc_id": "en-news-005",
+        "language": "en",
+        "title": "Character.AI enters the microdrama arena with its own productions, but there's a twist",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 6,
+        "predicted_entities_total": 17,
+        "signal_type_tp": 3,
+        "signal_type_fp": 0,
+        "signal_type_fn": 0,
+        "quotes_verified": 6,
+        "quotes_total": 6
+      },
+      {
+        "doc_id": "en-news-006",
+        "language": "en",
+        "title": "Google's deepfake detector system used to debunk McConnell hoax pic",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "product_release"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 6,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 6,
+        "quotes_total": 6
+      },
+      {
+        "doc_id": "en-news-007",
+        "language": "en",
+        "title": "This startup thinks robotics is about to have its ChatGPT moment",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "demand",
+          "risk"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 3,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 3,
+        "signal_type_fp": 2,
+        "signal_type_fn": 0,
+        "quotes_verified": 7,
+        "quotes_total": 7
+      },
+      {
+        "doc_id": "en-news-008",
+        "language": "en",
+        "title": "Meta wants its AI glasses to seem less creepy. Its AI strategy says otherwise.",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "product_release",
+          "research"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 3,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 4,
+        "signal_type_fp": 2,
+        "signal_type_fn": 0,
+        "quotes_verified": 12,
+        "quotes_total": 12
+      },
+      {
+        "doc_id": "en-news-009",
+        "language": "en",
+        "title": "Lovable reportedly in talks to double its valuation to $13.2B",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "other",
+          "strategy"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 5,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 2,
+        "signal_type_fp": 2,
+        "signal_type_fn": 0,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "en-news-010",
+        "language": "en",
+        "title": "Google Photos adds a new AI 'Video Remix' tool",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 7,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 2,
+        "signal_type_fp": 0,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "en-release-001",
+        "language": "en",
+        "title": "vLLM v0.24.0 release notes",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 2,
+        "predicted_entities_total": 17,
+        "signal_type_tp": 3,
+        "signal_type_fp": 0,
+        "signal_type_fn": 0,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "en-release-002",
+        "language": "en",
+        "title": "vLLM v0.23.0 release notes",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "risk"
+        ],
+        "extra_signal_types": [
+          "demand",
+          "security"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 3,
+        "predicted_entities_total": 29,
+        "signal_type_tp": 2,
+        "signal_type_fp": 2,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "en-release-003",
+        "language": "en",
+        "title": "vLLM v0.22.1 release notes",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "governance",
+          "strategy"
+        ],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 12,
+        "signal_type_tp": 3,
+        "signal_type_fp": 0,
+        "signal_type_fn": 2,
+        "quotes_verified": 4,
+        "quotes_total": 4
+      },
+      {
+        "doc_id": "en-release-004",
+        "language": "en",
+        "title": "Release v5.13.0 (truncated to 12k chars for labeling tractability)",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "demand",
+          "technology"
+        ],
+        "fabricated_quotes": [
+          "compresses the key/value cache into a low-rank latent representation"
+        ],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 20,
+        "predicted_entities_total": 58,
+        "signal_type_tp": 4,
+        "signal_type_fp": 2,
+        "signal_type_fn": 0,
+        "quotes_verified": 23,
+        "quotes_total": 24
+      },
+      {
+        "doc_id": "en-release-005",
+        "language": "en",
+        "title": "langchain==1.3.12",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 3,
+        "predicted_entities_total": 3,
+        "signal_type_tp": 2,
+        "signal_type_fp": 0,
+        "signal_type_fn": 0,
+        "quotes_verified": 3,
+        "quotes_total": 3
+      },
+      {
+        "doc_id": "ko-news-001",
+        "language": "ko",
+        "title": "미니맥스, 2.7조 매개변수 차세대 LLM 개발…중국 역대 최대 규모",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "demand",
+          "governance",
+          "risk"
+        ],
+        "extra_signal_types": [
+          "technology"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 12,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 3,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-002",
+        "language": "ko",
+        "title": "퍼플렉시티, AI 코딩 시장 노린다...'프로젝트 전담' AI 도구 구축 중",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "risk"
+        ],
+        "extra_signal_types": [
+          "technology"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 6,
+        "predicted_entities_total": 8,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-003",
+        "language": "ko",
+        "title": "구글 이어 오픈AI도 '하네스 무용론'...\"차세대 모델이 기능 흡수할 것\"",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "governance",
+          "incident"
+        ],
+        "extra_signal_types": [
+          "product_release"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 2,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-004",
+        "language": "ko",
+        "title": "SKT, 소프트뱅크와 AI 사회적 가치 '정량 지표' 만든다",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "research"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 5,
+        "predicted_entities_total": 9,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 4,
+        "quotes_total": 4
+      },
+      {
+        "doc_id": "ko-news-005",
+        "language": "ko",
+        "title": "AI 에이전트 확산에 레드팀도 바뀐다…\"행동 전체 검증해야\"",
+        "missing_core_entities": [
+          "AI 레드팀"
+        ],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "demand",
+          "product_release"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 9,
+        "predicted_entities_total": 21,
+        "signal_type_tp": 4,
+        "signal_type_fp": 2,
+        "signal_type_fn": 1,
+        "quotes_verified": 15,
+        "quotes_total": 15
+      },
+      {
+        "doc_id": "ko-news-006",
+        "language": "ko",
+        "title": "깃허브 전 CEO 토마스 돔케, 경쟁작 '분산형 깃 네트워크' 출시",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "demand",
+          "governance"
+        ],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 9,
+        "predicted_entities_total": 17,
+        "signal_type_tp": 5,
+        "signal_type_fp": 0,
+        "signal_type_fn": 2,
+        "quotes_verified": 9,
+        "quotes_total": 9
+      },
+      {
+        "doc_id": "ko-news-007",
+        "language": "ko",
+        "title": "메타, 촬영 시 LED 꺼지는 '슈퍼 센싱' AI 안경 테스트 중…사생활 침해 논란",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "research"
+        ],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 4,
+        "predicted_entities_total": 7,
+        "signal_type_tp": 6,
+        "signal_type_fp": 0,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-008",
+        "language": "ko",
+        "title": "메타 '뮤즈 이미지', 인스타 사진 무단 도용 논란",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "regulation",
+          "strategy"
+        ],
+        "extra_signal_types": [
+          "research"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 9,
+        "predicted_entities_total": 14,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 2,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-009",
+        "language": "ko",
+        "title": "펄스나인, '딥리얼 스튜디오' 출시…AI가 시나리오부터 영상 생성까지",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "demand"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 4,
+        "predicted_entities_total": 8,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 4,
+        "quotes_total": 4
+      },
+      {
+        "doc_id": "ko-news-010",
+        "language": "ko",
+        "title": "애플, '블랙리스트' 중국 CXMT D램 테스트 착수",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "governance",
+          "regulation"
+        ],
+        "extra_signal_types": [
+          "research"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 7,
+        "predicted_entities_total": 17,
+        "signal_type_tp": 4,
+        "signal_type_fp": 1,
+        "signal_type_fn": 2,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-011",
+        "language": "ko",
+        "title": "바이브컴퍼니 \"수개월짜리 온톨로지 설계, 자연어로 2주 만에 끝낸다\"",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "research"
+        ],
+        "extra_signal_types": [
+          "demand"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 5,
+        "predicted_entities_total": 9,
+        "signal_type_tp": 2,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 8,
+        "quotes_total": 8
+      },
+      {
+        "doc_id": "ko-news-012",
+        "language": "ko",
+        "title": "\"돈 두 번 내지 마세요\"...센드버드, '에이전트 스튜어드'로 CX 혁신 주도",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "risk"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 10,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-013",
+        "language": "ko",
+        "title": "세일포인트, ISMS-P 대응해 계정 생애주기 자동화…AI 에이전트까지 통합 관리",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "product_release"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 3,
+        "core_entities_total": 3,
+        "predicted_entities_matched": 8,
+        "predicted_entities_total": 31,
+        "signal_type_tp": 5,
+        "signal_type_fp": 1,
+        "signal_type_fn": 0,
+        "quotes_verified": 16,
+        "quotes_total": 16
+      },
+      {
+        "doc_id": "ko-news-014",
+        "language": "ko",
+        "title": "AI 안쓰는 사람, 자신도 모르게 AI 쓴다…'AI 빌트인' 시대",
+        "missing_core_entities": [],
+        "missing_signal_types": [],
+        "extra_signal_types": [
+          "product_release"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 1,
+        "core_entities_total": 1,
+        "predicted_entities_matched": 16,
+        "predicted_entities_total": 21,
+        "signal_type_tp": 3,
+        "signal_type_fp": 1,
+        "signal_type_fn": 0,
+        "quotes_verified": 9,
+        "quotes_total": 9
+      },
+      {
+        "doc_id": "ko-news-015",
+        "language": "ko",
+        "title": "뮤직카우 \"문화 IP 금융화, 문체부-금융위 정합성 맞춰야\"",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 6,
+        "predicted_entities_total": 9,
+        "signal_type_tp": 5,
+        "signal_type_fp": 0,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      },
+      {
+        "doc_id": "ko-news-016",
+        "language": "ko",
+        "title": "스페이스XAI, '그록 4.5' 출시…\"오푸스급이고 더 싸다\"",
+        "missing_core_entities": [],
+        "missing_signal_types": [
+          "other"
+        ],
+        "extra_signal_types": [
+          "demand",
+          "incident"
+        ],
+        "fabricated_quotes": [],
+        "core_entities_matched": 2,
+        "core_entities_total": 2,
+        "predicted_entities_matched": 10,
+        "predicted_entities_total": 30,
+        "signal_type_tp": 5,
+        "signal_type_fp": 2,
+        "signal_type_fn": 1,
+        "quotes_verified": 5,
+        "quotes_total": 5
+      }
+    ],
+    "review_status_counts": {
+      "unreviewed": 34
+    },
+    "labeler_model_counts": {
+      "gpt-5.4": 34
+    },
+    "label_notice": "라벨은 LLM-judge(gpt-5.4) 초벌, 사람 미검수"
+  },
+  "counter": null
+}

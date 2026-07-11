@@ -1,0 +1,34 @@
+{
+  "generated_at": "2026-07-09T22:40:24+00:00",
+  "git_rev": "9b1578b",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 6,
+    "docs_ingested": 34,
+    "oppose_edges": 2,
+    "audited_edges": 2,
+    "precision": 0.0,
+    "measurable": true,
+    "status": "measured",
+    "audit_model_note": "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent.",
+    "audits": [
+      {
+        "evidence_edge_id": 213,
+        "hypothesis_id": 212,
+        "contradicts": false,
+        "reasoning": "인용문은 EU에서 현재 이용 불가하다고 말할 뿐이며, 이는 글로벌 확산에 제약이 있을 수 있다는 가설과 충돌하지 않는다. 오히려 단기적 지역 제한을 시사해 가설과 대체로 부합한다.",
+        "quoted_evidence": "EU의 경우 현재 이용 불가능하고 이달 중순경 출시될 것이라고 회사측은 밝혔다"
+      },
+      {
+        "evidence_edge_id": 215,
+        "hypothesis_id": 214,
+        "contradicts": false,
+        "reasoning": "인용문은 그록 4.5가 일부 경쟁 모델보다 뒤처진다고 말하므로, 독립 벤치마크 기준에서 성능 우위 주장이 제한적일 수 있다는 가설을 반박하지 않고 오히려 뒷받침한다.",
+        "quoted_evidence": "그록 4.5는 앤트로픽 클로드 페이블5보다 떨어지고"
+      }
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-07-09T22:01:00+00:00",
+  "git_rev": "6bed374",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 6,
+    "docs_ingested": 34,
+    "oppose_edges": 3,
+    "audited_edges": 3,
+    "precision": 0.0,
+    "measurable": true,
+    "status": "measured",
+    "audit_model_note": "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent.",
+    "audits": [
+      {
+        "evidence_edge_id": 46,
+        "hypothesis_id": 46,
+        "contradicts": false,
+        "reasoning": "The quote supports rather than rebuts the hypothesis: it explicitly says the comparison measures \"value created\" instead of strictly liquid cash, which is the basis for the concern about overstating liquid investor returns.",
+        "quoted_evidence": "measuring \"value created\" as opposed to strictly liquid cash"
+      },
+      {
+        "evidence_edge_id": 57,
+        "hypothesis_id": 57,
+        "contradicts": false,
+        "reasoning": "The quote supports, rather than rebuts, the hypothesis. Saying SynthID only works when image-generation tools participate directly aligns with the claim that ecosystem impact may be constrained by uneven participation among AI companies.",
+        "quoted_evidence": "it can only be used when an image-generation tool actively participates in the program"
+      },
+      {
+        "evidence_edge_id": 61,
+        "hypothesis_id": 61,
+        "contradicts": false,
+        "reasoning": "The quote supports the hypothesis by giving a direct example of provider non-participation (Anthropic), which is consistent with non-participation remaining a limitation.",
+        "quoted_evidence": "Anthropic does not participate in the program"
+      }
+    ]
+  }
+}

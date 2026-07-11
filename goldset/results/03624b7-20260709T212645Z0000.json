@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-07-09T21:26:45+00:00",
+  "git_rev": "03624b7",
+  "gold": null,
+  "counter": {
+    "kind": "counter_evidence",
+    "provider": "codex",
+    "model": null,
+    "cycles": 4,
+    "docs_ingested": 34,
+    "oppose_edges": 0,
+    "audited_edges": 0,
+    "precision": null,
+    "measurable": false,
+    "status": "0건 — 측정 불가",
+    "audit_model_note": "Counter audit uses the configured gold_label stage; auditor and extractor are only quasi-independent.",
+    "audits": []
+  }
+}
