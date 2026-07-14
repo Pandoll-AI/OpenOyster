@@ -103,6 +103,15 @@ Cognitive Impact + Decision Dossier + Audit Replay
 근거가 없으면 모델을 부르지 않고 기권합니다. critic이 통과하지 못하거나 실행 가능한
 대안이 부족해도 억지로 선택하지 않습니다.
 
+완료된 기권 run에 저장된 Knowledge Request를 OpenCrab 또는 사용자가 충족했다고
+주장하면, 명시한 새 Pack ID로 `deliberate continue`를 실행할 수 있습니다. 새로 인용된
+Evidence가 확인돼야 verified fulfilled로 승격됩니다. 자식 run은 부모 Mission을 동결하고
+`parent_run_id`로 연결되며, `cognitive_transition_v2`가
+belief·option·critic·decision·citation scope의 변화를 보여 줍니다. Pack 내용 자체의
+diff를 계산하거나 외부 사실을 발견하지는 않습니다. 자세한 계약은
+[Decision Continuity D2 요구사항](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)을
+참조하세요.
+
 # 근거를 믿는 방법
 
 OpenOyster는 단순한 citation ID만으로 사실을 인정하지 않습니다.
@@ -179,6 +188,16 @@ openoyster deliberate dossier RUN_ID --format markdown
 openoyster deliberate impact RUN_ID
 openoyster deliberate knowledge-requests RUN_ID
 openoyster deliberate replay RUN_ID
+```
+
+기권 후 새 Pack으로 이어서 실행하는 예시는 다음과 같습니다.
+
+```bash
+openoyster deliberate continue PARENT_RUN_ID \
+  --packs new-pack-id \
+  --fulfills kr_no_evidence \
+  --idempotency-key demo-d2-001
+openoyster deliberate transition CHILD_RUN_ID
 ```
 
 기본 provider는 `codex`입니다. 실제 로컬 생성에는 Codex CLI와
@@ -328,6 +347,7 @@ tests/
 # 문서
 
 - [Autonomous Deliberation D1 요구사항](docs/AUTONOMOUS_DELIBERATION_D1_REQUIREMENTS.md)
+- [Decision Continuity D2 요구사항](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)
 - [한국어 사용자 매뉴얼](docs/USER_MANUAL_KO.md)
 - [English User Manual](docs/USER_MANUAL.md)
 - [API Reference](docs/API_REFERENCE.md)

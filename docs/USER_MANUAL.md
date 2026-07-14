@@ -329,3 +329,22 @@ The normal path makes exactly five bounded stage calls. With no retrieved Pack e
 CLI exit codes are `0` for completed selection or abstention, `1` for database/indeterminate/unrecoverable execution failure, and `2` for Mission, Pack-scope/profile, or argument errors. Output is sanitized: it does not include raw Pack records, full prompts, server paths, storage URIs, runtime configuration, or secrets.
 
 For API usage, see the Autonomous Deliberation D1 section in `docs/API_REFERENCE.md`. Every D1 API endpoint, including reads, needs a configured API key. Knowledge Requests are records for a human or external workflow to act on; OpenOyster does not execute them or update Packs.
+
+## 16. Decision Continuity D2
+
+D2 continues a completed abstaining parent run after its persisted Knowledge Requests have been fulfilled. The user or OpenCrab installs the new Pack; OpenOyster does not discover external facts or update Packs. The continuation request explicitly names the installed Pack IDs and the fulfilled parent Knowledge Request `local_key` values.
+
+```bash
+openoyster deliberate continue PARENT_RUN_ID \
+  --packs new-pack-id \
+  --fulfills kr_no_evidence \
+  --idempotency-key manual-d2-001
+
+openoyster deliberate transition CHILD_RUN_ID
+```
+
+The child reuses the frozen parent Mission snapshot and records `parent_run_id`. Its immutable `cognitive_transition_v2` artifact separates claimed, verified fulfilled, and unverified claimed requests. `evidence:no_evidence` is verified only when the child cites newly added evidence. Critic gap findings are promoted to new Knowledge Requests.
+
+Concrete flow: the first run abstains because evidence for “field recovery time” is missing and records `kr_no_evidence`. OpenCrab supplies a new Pack, and the user continues with `--fulfills kr_no_evidence`. The transition then makes the exact changes in beliefs, viable options, critic verdict, decision (`abstain` to `select`, when the gates allow it), and cited global evidence visible. Unfulfilled requests remain listed.
+
+The parent is immutable. Reusing an idempotency key for the same parent returns the existing child state without another execution; using it for a different parent returns `idempotency_key_conflict`. Continuation input errors are returned as CLI exit `2` and API `422`: `parent_run_not_found`, `parent_run_not_completed_abstain`, `parent_knowledge_requests_missing`, `fulfilled_knowledge_request_keys_empty`, and `fulfilled_knowledge_request_keys_unknown` are also stable codes. Provider/runtime failures are `failed_execution`, not epistemic abstention: CLI exit `1`, API `502`. A failed child still consumes its idempotency key, so use a new key to retry execution after restoring the provider/runtime. See the D2 section in `docs/API_REFERENCE.md` for the complete request and response contract.

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from typer.testing import CliRunner
 
 from openoyster.api.app import create_app
 from openoyster.cli import app
-from openoyster.config import Settings, clear_settings_cache
+from openoyster.config import Settings, clear_settings_cache, get_settings
+from openoyster.database import make_engine, make_session_factory
+from openoyster.models import PackEvidence, PackInstall
 from openoyster.services import opencrab_packs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +46,27 @@ def _install_fixture(session_factory, settings: Settings, tmp_path: Path) -> str
         )
         session.commit()
     return result.pack_id
+
+
+def _copy_fixture_with_id(tmp_path: Path, pack_id: str) -> Path:
+    destination = tmp_path / pack_id
+    shutil.copytree(MINIMAL_FIXTURE, destination)
+    manifest = destination / "manifest.json"
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["pack_id"] = pack_id
+    manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return destination
+
+
+def _remove_pack_evidence(session_factory, pack_id: str) -> None:
+    with session_factory() as session:
+        install = session.scalar(select(PackInstall).where(PackInstall.pack_id == pack_id))
+        assert install is not None
+        for row in session.scalars(
+            select(PackEvidence).where(PackEvidence.pack_install_id == install.id)
+        ).all():
+            session.delete(row)
+        session.commit()
 
 
 def test_deliberation_cli_run_and_read_commands(monkeypatch, tmp_path: Path) -> None:
@@ -184,3 +209,164 @@ def test_deliberation_api_requires_key_idempotency_and_sanitizes(
             assert "/private/openoyster/secret-path" not in response.text
             assert "raw_record_json" not in response.text
             assert "prompt_visible_payload_json" not in response.text
+
+
+def test_cli_continues_an_abstention_and_exposes_transition(monkeypatch, tmp_path: Path) -> None:
+    _set_cli_env(monkeypatch, tmp_path)
+    runner = CliRunner()
+    mission_file = tmp_path / "continuity-mission.json"
+    mission_file.write_text(json.dumps(_mission_payload()), encoding="utf-8")
+    parent_pack = _copy_fixture_with_id(tmp_path, "cli-continuity-parent")
+    child_pack = _copy_fixture_with_id(tmp_path, "cli-continuity-child")
+    try:
+        for pack_path in (parent_pack, child_pack):
+            installed = runner.invoke(app, ["pack", "install", str(pack_path)])
+            assert installed.exit_code == 0, installed.output
+
+        settings = get_settings()
+        engine = make_engine(settings)
+        try:
+            _remove_pack_evidence(make_session_factory(engine), "cli-continuity-parent")
+        finally:
+            engine.dispose()
+
+        parent_result = runner.invoke(
+            app,
+            [
+                "deliberate",
+                "run",
+                str(mission_file),
+                "--packs",
+                "cli-continuity-parent",
+                "--allow-compatible-packs",
+                "--idempotency-key",
+                "cli-continuity-parent-run",
+            ],
+        )
+        assert parent_result.exit_code == 0, parent_result.output
+        parent = json.loads(parent_result.output)
+        assert parent["outcome"] == "abstain"
+
+        parent_transition = runner.invoke(app, ["deliberate", "transition", str(parent["id"])])
+        assert parent_transition.exit_code == 1, parent_transition.output
+        assert json.loads(parent_transition.output)["error"]["code"] == (
+            "cognitive_transition_not_found"
+        )
+
+        continued = runner.invoke(
+            app,
+            [
+                "deliberate",
+                "continue",
+                str(parent["id"]),
+                "--packs",
+                "cli-continuity-child",
+                "--fulfills",
+                "kr_no_evidence",
+                "--allow-compatible-packs",
+                "--idempotency-key",
+                "cli-continuity-child-run",
+            ],
+        )
+        assert continued.exit_code == 0, continued.output
+        child = json.loads(continued.output)
+        assert child["parent_run_id"] == parent["id"]
+
+        transition = runner.invoke(app, ["deliberate", "transition", str(child["id"])])
+        assert transition.exit_code == 0, transition.output
+        transition_payload = json.loads(transition.output)
+        assert transition_payload["method"] == "cognitive_transition_v2"
+        assert transition_payload["fulfilled_knowledge_requests"][0]["local_key"] == (
+            "kr_no_evidence"
+        )
+    finally:
+        clear_settings_cache()
+
+
+def test_api_continues_an_abstention_and_exposes_transition(
+    temp_settings: Settings, session_factory, tmp_path: Path
+) -> None:
+    parent_path = _copy_fixture_with_id(tmp_path, "api-continuity-parent")
+    child_path = _copy_fixture_with_id(tmp_path, "api-continuity-child")
+    with session_factory() as session:
+        for pack_path in (parent_path, child_path):
+            opencrab_packs.install_pack(
+                session,
+                pack_path,
+                workspace=temp_settings.workspace,
+                profile="compatible",
+            )
+        session.commit()
+    _remove_pack_evidence(session_factory, "api-continuity-parent")
+
+    application = create_app(settings=temp_settings, session_factory=session_factory)
+    auth = {temp_settings.api_key_header: str(temp_settings.api_key)}
+    with TestClient(application) as client:
+        parent_response = client.post(
+            "/v1/deliberations",
+            json={
+                "mission": _mission_payload(),
+                "packs": ["api-continuity-parent"],
+                "allow_compatible_packs": True,
+            },
+            headers={**auth, "Idempotency-Key": "api-continuity-parent-run"},
+        )
+        assert parent_response.status_code == 200, parent_response.text
+        parent = parent_response.json()
+        assert parent["outcome"] == "abstain"
+
+        parent_transition = client.get(
+            f"/v1/deliberations/{parent['id']}/transition",
+            headers=auth,
+        )
+        assert parent_transition.status_code == 409, parent_transition.text
+        assert parent_transition.json()["detail"]["code"] == "cognitive_transition_not_ready"
+
+        request_payload = {
+            "packs": ["api-continuity-child"],
+            "fulfilled_knowledge_request_keys": ["kr_no_evidence"],
+            "allow_compatible_packs": True,
+        }
+        unauthorized = client.post(
+            f"/v1/deliberations/{parent['id']}/continue",
+            json=request_payload,
+            headers={"Idempotency-Key": "api-continuity-unauthorized"},
+        )
+        assert unauthorized.status_code == 401
+
+        unknown_fulfilled_key = client.post(
+            f"/v1/deliberations/{parent['id']}/continue",
+            json={
+                **request_payload,
+                "fulfilled_knowledge_request_keys": ["kr_unknown"],
+            },
+            headers={**auth, "Idempotency-Key": "api-continuity-unknown-key"},
+        )
+        assert unknown_fulfilled_key.status_code == 422, unknown_fulfilled_key.text
+        assert unknown_fulfilled_key.json()["detail"]["code"] == (
+            "fulfilled_knowledge_request_keys_unknown"
+        )
+
+        continued = client.post(
+            f"/v1/deliberations/{parent['id']}/continue",
+            json=request_payload,
+            headers={**auth, "Idempotency-Key": "api-continuity-child-run"},
+        )
+        assert continued.status_code == 200, continued.text
+        child = continued.json()
+        assert child["parent_run_id"] == parent["id"]
+
+        repeated = client.post(
+            f"/v1/deliberations/{parent['id']}/continue",
+            json=request_payload,
+            headers={**auth, "Idempotency-Key": "api-continuity-child-run"},
+        )
+        assert repeated.status_code == 200, repeated.text
+        assert repeated.json()["id"] == child["id"]
+
+        transition = client.get(
+            f"/v1/deliberations/{child['id']}/transition",
+            headers=auth,
+        )
+        assert transition.status_code == 200, transition.text
+        assert transition.json()["method"] == "cognitive_transition_v2"

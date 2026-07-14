@@ -239,3 +239,43 @@ The response is safe run metadata: run ID, status/outcome, frozen-input digests,
 - `GET /v1/deliberations/{id}/knowledge-requests` — inert persisted requests. This endpoint never executes retrieval or Pack updates.
 
 All D1 responses sanitize raw Pack bodies, full prompts, filesystem paths, storage URIs, runtime/secret fields, and raw model responses. Citation anchors, Pack identities/digests, assertions, decision data, and replay digest results remain available for audit.
+
+## 16. Decision Continuity D2
+
+D2 continues only a `completed` parent run whose outcome is `abstain` and whose persisted `knowledge_requests` artifact contains the requested local keys. The request supplies already-installed Pack IDs; OpenOyster does not create or update Packs, discover external facts, or compute Pack-content diffs.
+
+### `POST /v1/deliberations/{id}/continue`
+
+Requires the configured D1 API key and a non-empty `Idempotency-Key` header.
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/deliberations/PARENT_RUN_ID/continue \
+  -H 'Content-Type: application/json' \
+  -H 'X-OpenOyster-Key: YOUR_KEY' \
+  -H 'Idempotency-Key: review-d2-001' \
+  -d '{
+    "packs": ["new-pack-id"],
+    "fulfilled_knowledge_request_keys": ["kr_no_evidence"],
+    "impact_baseline_packs": ["new-pack-id"],
+    "allow_compatible_packs": false
+  }'
+```
+
+Request fields are `packs` (at least one installed Pack ID), `fulfilled_knowledge_request_keys` (claimed fulfilled keys persisted on the parent), optional `impact_baseline_packs`, and optional `allow_compatible_packs` (default `false`). A claim is verified only by the transition verifier; `evidence:no_evidence` currently requires newly cited evidence. The child keeps the parent Mission snapshot and records `parent_run_id`.
+
+The continuation-specific stable error codes are:
+
+- `idempotency_key_conflict` — key belongs to a different parent.
+- `parent_run_not_found` — parent ID does not exist.
+- `parent_run_not_completed_abstain` — parent is not a completed abstention.
+- `parent_knowledge_requests_missing` — parent has no persisted Knowledge Request artifact.
+- `fulfilled_knowledge_request_keys_empty` — no fulfilled key was supplied.
+- `fulfilled_knowledge_request_keys_unknown` — a supplied key is not on the parent.
+
+These input/continuation errors return HTTP `422` with `{"detail":{"code":"..."}}`. A child that completes with `failed_execution` because of a provider/runtime failure returns HTTP `502`; this is an execution failure, not an epistemic abstention. An unexpected continuation exception returns HTTP `500` with code `deliberation_execution_failed`. Pack-scope/profile failures are surfaced as the normal failed-input response and code.
+
+### `GET /v1/deliberations/{id}/transition`
+
+Returns the sanitized persisted transition artifact for a child run. Its method is `cognitive_transition_v2`. It separates `claimed_knowledge_requests`, `verified_fulfilled_knowledge_requests`, and `unverified_claimed_knowledge_requests`; `fulfilled_knowledge_requests` is a compatibility alias for the verified subset. Unverified claims and critic-promoted gaps remain in `remaining_knowledge_requests`.
+
+The parent and transition artifact are immutable. Repeating the same continuation with the same idempotency key and parent returns the existing run state; it does not create another child execution. This also applies to a `failed_execution` child, so retrying after provider/runtime recovery requires a new `Idempotency-Key`. Replay remains an LLM-free audit of stored child artifacts and does not compare Pack contents.

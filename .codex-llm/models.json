@@ -5,6 +5,7 @@
   "chat": "gpt-5.6-sol",
   "fast_complex": "gpt-5.6-sol",
   "code": "gpt-5.6-sol",
+  "deliberation": "gpt-5.6-terra",
   "reasoning": "gpt-5.6-sol",
   "secondary": "gpt-5.6-sol"
 }

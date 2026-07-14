@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from openoyster.utils import sha256_text
 
 CONTRACT_VERSION: Final = "deliberation-d1-v1"
-PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v1"
+PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v7"
 
 MAX_BELIEFS: Final = 20
 MAX_OPTIONS: Final = 5
@@ -43,6 +43,7 @@ ARTIFACT_KINDS: Final[frozenset[str]] = frozenset(
         "decision",
         "flip_conditions",
         "knowledge_requests",
+        "cognitive_transition",
     }
 )
 
@@ -65,6 +66,7 @@ RunStatus = Literal[
     "impact_ready",
     "completed",
     "failed_input",
+    "failed_execution",
     "failed_database",
     "indeterminate",
 ]
@@ -83,7 +85,7 @@ NORMAL_STATUSES: Final[tuple[str, ...]] = (
 )
 
 TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
-    {"failed_input", "failed_database", "indeterminate"}
+    {"failed_input", "failed_execution", "failed_database", "indeterminate"}
 )
 
 ABSTENTION_REASON_CODES: Final[frozenset[str]] = frozenset(

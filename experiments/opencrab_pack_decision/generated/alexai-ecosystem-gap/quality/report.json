@@ -1,0 +1,40 @@
+{
+  "checks": {
+    "broken_edges": "pass",
+    "duplicates": "pass",
+    "evidence_refs": "pass",
+    "grammar": "pass",
+    "human_review": "pass",
+    "layout": "pass",
+    "neo4j_import": "skip",
+    "schema": "pass"
+  },
+  "counts": {
+    "broken_edges": 0,
+    "duplicate_edge_ids": 0,
+    "duplicate_node_ids": 0,
+    "edge_space_mismatches": 0,
+    "edges": 0,
+    "evidence": 0,
+    "human_review_items": 0,
+    "invalid_edges": 0,
+    "invalid_node_properties": 0,
+    "invalid_nodes": 0,
+    "missing_edge_evidence_refs": 0,
+    "missing_edge_ids": 0,
+    "missing_evidence_refs": 0,
+    "missing_node_evidence_refs": 0,
+    "nodes": 0,
+    "promoted_edges_without_evidence": 0,
+    "promoted_nodes_without_evidence": 0
+  },
+  "generated_at": "2026-07-14T04:08:51.898943+00:00",
+  "issues": [],
+  "pack_id": "alexai-ecosystem-gap",
+  "status": "pass",
+  "summary": {
+    "edge_evidence_integrity": 1.0,
+    "graph_reference_integrity": 1.0,
+    "node_evidence_integrity": 1.0
+  }
+}

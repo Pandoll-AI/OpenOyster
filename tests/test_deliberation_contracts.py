@@ -47,7 +47,7 @@ def _grounded_assertion(text: str = "The claim is supported.") -> dict[str, Any]
 
 def test_contract_version_constants_are_frozen() -> None:
     assert CONTRACT_VERSION == "deliberation-d1-v1"
-    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v1"
+    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v7"
     assert MAX_BELIEFS == 20
     assert MAX_OPTIONS == 5
     assert MAX_SCENARIOS_PER_OPTION == 3

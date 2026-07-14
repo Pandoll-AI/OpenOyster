@@ -102,6 +102,7 @@ def build_dossier_payload(session: Session, run: DeliberationRun) -> dict[str, A
         "contract_version": run.contract_version or CONTRACT_VERSION,
         "prompt_template_version": run.prompt_template_version or PROMPT_TEMPLATE_VERSION,
         "run_id": run.id,
+        "parent_run_id": run.parent_run_id,
         "idempotency_key": run.idempotency_key,
         "status": run.status,
         "outcome": run.outcome,
@@ -119,6 +120,7 @@ def build_dossier_payload(session: Session, run: DeliberationRun) -> dict[str, A
         "decision": artifacts.get("decision"),
         "flip_conditions": artifacts.get("flip_conditions"),
         "knowledge_requests": artifacts.get("knowledge_requests"),
+        "cognitive_transition": artifacts.get("cognitive_transition"),
         "cognitive_impact": impact.impact_json if impact is not None else None,
         "evidence_snapshots": _citations_summary(session, run.id),
         "stage_calls": _stage_call_summaries(session, run.id),
@@ -138,6 +140,7 @@ def render_dossier_markdown(payload: dict[str, Any]) -> str:
         f"- Contract: `{payload.get('contract_version')}`",
         f"- Prompt template: `{payload.get('prompt_template_version')}`",
         f"- Mission digest: `{payload.get('mission_digest')}`",
+        f"- Parent run: `{payload.get('parent_run_id')}`" if payload.get("parent_run_id") is not None else "- Parent run: (none)",
         "",
         "## Mission",
     ]
@@ -192,6 +195,17 @@ def render_dossier_markdown(payload: dict[str, Any]) -> str:
                 )
     else:
         lines.append("- (none)")
+    transition = payload.get("cognitive_transition")
+    if isinstance(transition, dict):
+        lines.extend(["", "## Cognitive transition"])
+        lines.append(f"- Method: `{transition.get('method')}`")
+        lines.append(f"- Parent run: `{transition.get('parent_run_id')}`")
+        claimed = transition.get("claimed_knowledge_requests") or []
+        verified = transition.get("verified_fulfilled_knowledge_requests") or []
+        unverified = transition.get("unverified_claimed_knowledge_requests") or []
+        lines.append(f"- Claimed knowledge requests: {len(claimed)}")
+        lines.append(f"- Verified fulfilled knowledge requests: {len(verified)}")
+        lines.append(f"- Unverified claimed knowledge requests: {len(unverified)}")
     lines.extend(["", "## Cognitive Impact"])
     impact = payload.get("cognitive_impact") or {}
     if isinstance(impact, dict):

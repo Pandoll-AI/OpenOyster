@@ -203,3 +203,24 @@ openoyster deliberate replay RUN_ID
 CLI 종료 코드는 완료된 선택/기권이면 `0`, database·indeterminate·복구 불가능 실행 오류면 `1`, Mission·Pack scope/profile·인자 오류면 `2`입니다. 출력에는 raw Pack record, 전체 prompt, 서버 파일 경로, storage URI, runtime 설정, secret을 넣지 않습니다.
 
 API는 `POST /v1/deliberations`, `GET /v1/deliberations/{id}`, dossier, replay, cognitive-impact, knowledge-requests endpoint를 제공합니다. **D1 API는 조회를 포함한 모든 endpoint에 설정된 API key가 필요합니다.** 생성 요청에는 `Idempotency-Key` header도 반드시 넣어야 합니다. Knowledge Request는 기록·내보내기만 하며 Pack 갱신, 검색, 외부 작업을 자동 실행하지 않습니다. 요청/응답 형식은 `docs/API_REFERENCE.md`의 Autonomous Deliberation D1 절을 따르세요.
+
+## Decision Continuity D2
+
+D2는 완료된 기권(abstention) 부모 run을, 그 run에 저장된 Knowledge Request가 충족된 뒤 이어서 실행하는 기능입니다. OpenOyster가 사실을 찾거나 Pack을 갱신하는 기능은 아닙니다. OpenCrab 또는 사용자가 새 Pack을 설치한 뒤, 사용자가 새 Pack ID와 충족한 부모 Knowledge Request의 `local_key`를 명시합니다.
+
+```bash
+openoyster deliberate continue PARENT_RUN_ID \
+  --packs new-pack-id \
+  --fulfills kr_no_evidence \
+  --idempotency-key manual-d2-001
+
+openoyster deliberate transition CHILD_RUN_ID
+```
+
+선택적으로 `--impact-baseline-packs`와 `--allow-compatible-packs`를 지정할 수 있습니다. `--fulfills`는 충족 주장입니다. `evidence:no_evidence` 요청은 새로 인용된 Evidence가 있어야 검증 완료됩니다. 자식에는 `cognitive_transition_v2` artifact가 저장되며 claimed, verified fulfilled, unverified claimed 요청을 분리합니다. critic의 gap finding도 새 Knowledge Request로 승격됩니다.
+
+예를 들어 첫 실행이 “현장 복구 시간” 근거가 없어 `kr_no_evidence`를 남기고 기권했다고 합시다. 사용자가 OpenCrab에서 해당 근거를 담은 새 Pack을 설치하고 `--fulfills kr_no_evidence`로 계속 실행하면, 전환 결과에서 새 belief의 상태 변화, 기존 option의 viable 변화, critic verdict, 최종 decision의 `abstain`→`select` 변화, 추가된 global evidence ID를 한 번에 확인할 수 있습니다. 여전히 부족한 요청은 `remaining_knowledge_requests`에 남습니다.
+
+부모 run은 변경되지 않으며 전환 artifact도 불변·재사용됩니다. 같은 idempotency key로 같은 부모를 다시 요청하면 새 실행 없이 기존 child 상태를 반환합니다. 다른 부모에 같은 key를 쓰면 `idempotency_key_conflict`입니다. 부모가 없거나 완료된 기권이 아니면 각각 `parent_run_not_found`, `parent_run_not_completed_abstain`입니다. Knowledge Request artifact가 없으면 `parent_knowledge_requests_missing`, fulfills가 비어 있으면 `fulfilled_knowledge_request_keys_empty`, 부모에 없는 key면 `fulfilled_knowledge_request_keys_unknown`입니다. 이 입력 오류는 CLI 종료 코드 `2`, API `422`입니다. provider/runtime 오류는 epistemic abstention이 아니라 `failed_execution`이며 CLI `1`, API `502`입니다. 실패한 child도 idempotency key를 사용하므로 provider/runtime 복구 후 실제로 재시도할 때는 새 key를 지정하세요.
+
+API 계약과 응답 예시는 [API Reference](API_REFERENCE.md)의 D2 절을 참조하세요. D2의 범위 밖에는 Pack 생성·갱신·내용 diff, multimodal ingestion, Neo4j, 자율 외부 실행이 있습니다.

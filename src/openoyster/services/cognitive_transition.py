@@ -1,0 +1,212 @@
+"""Persisted parent-to-child cognitive transition for Deliberation D1."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from openoyster.deliberation_contracts import payload_digest
+from openoyster.models import (
+    DeliberationArtifact,
+    DeliberationAssertion,
+    DeliberationCitation,
+    DeliberationEvidenceSnapshot,
+    DeliberationRun,
+)
+
+METHOD = "cognitive_transition_v2"
+
+
+def _artifact_payloads(session: Session, run_id: int) -> dict[str, dict[str, Any]]:
+    rows = session.scalars(
+        select(DeliberationArtifact)
+        .where(DeliberationArtifact.run_id == run_id)
+        .order_by(DeliberationArtifact.id)
+    ).all()
+    return {row.kind: dict(row.payload_json or {}) for row in rows}
+
+
+def _keyed_values(
+    payload: dict[str, Any] | None, collection: str, value: str
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    items = payload.get(collection)
+    if not isinstance(items, list):
+        return {}
+    return {
+        item["local_key"]: item.get(value)
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("local_key"), str)
+    }
+
+
+def _changes(parent: dict[str, Any], child: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        key: {"from": parent.get(key), "to": child.get(key)}
+        for key in sorted(set(parent) | set(child))
+        if parent.get(key) != child.get(key)
+    }
+
+
+def _decision(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    return {
+        "outcome": payload.get("outcome"),
+        "selected_option_key": payload.get("selected_option_key"),
+        "abstention_reasons": list(payload.get("abstention_reasons") or []),
+    }
+
+
+def _used_global_evidence_ids(session: Session, run_id: int) -> list[str]:
+    rows = session.scalars(
+        select(DeliberationEvidenceSnapshot.global_evidence_id)
+        .select_from(DeliberationCitation)
+        .join(DeliberationAssertion, DeliberationCitation.assertion_id == DeliberationAssertion.id)
+        .join(DeliberationArtifact, DeliberationAssertion.artifact_id == DeliberationArtifact.id)
+        .join(
+            DeliberationEvidenceSnapshot,
+            DeliberationCitation.evidence_snapshot_id == DeliberationEvidenceSnapshot.id,
+        )
+        .where(DeliberationArtifact.run_id == run_id)
+        .order_by(DeliberationEvidenceSnapshot.global_evidence_id)
+    ).all()
+    return sorted(set(rows))
+
+
+def _knowledge_requests(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    items = payload.get("knowledge_requests")
+    return [dict(item) for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def _merge_knowledge_requests(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for group in groups:
+        for request in group:
+            key = request.get("local_key")
+            if isinstance(key, str) and key not in merged:
+                merged[key] = dict(request)
+    return list(merged.values())
+
+
+def _verify_claimed_requests(
+    requests: list[dict[str, Any]],
+    *,
+    claimed_keys: set[str],
+    added_evidence_ids: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    claimed: list[dict[str, Any]] = []
+    verified: list[dict[str, Any]] = []
+    unverified: list[dict[str, Any]] = []
+    for request in requests:
+        if request.get("local_key") not in claimed_keys:
+            continue
+        claimed_item = {**request, "status": "claimed_fulfilled"}
+        claimed.append(claimed_item)
+        if request.get("gap_ref") == "evidence:no_evidence" and added_evidence_ids:
+            verified.append(
+                {
+                    **request,
+                    "status": "verified_fulfilled",
+                    "verification_method": "added_cited_evidence_v1",
+                    "verification_evidence_ids": added_evidence_ids,
+                }
+            )
+        else:
+            unverified.append(
+                {
+                    **request,
+                    "status": "claimed_unverified",
+                    "verification_method": "added_cited_evidence_v1",
+                    "verification_evidence_ids": [],
+                }
+            )
+    return claimed, verified, unverified
+
+
+def persist_cognitive_transition(
+    session: Session,
+    *,
+    parent_run: DeliberationRun,
+    child_run: DeliberationRun,
+    fulfilled_knowledge_request_keys: set[str],
+) -> DeliberationArtifact:
+    """Store the immutable artifact that explains a linked re-deliberation.
+
+    The comparison is artifact- and citation-based. It intentionally does not
+    inspect or compare Pack content.
+    """
+    existing = session.scalar(
+        select(DeliberationArtifact).where(
+            DeliberationArtifact.run_id == child_run.id,
+            DeliberationArtifact.kind == "cognitive_transition",
+            DeliberationArtifact.local_key == "cognitive_transition",
+        )
+    )
+    if existing is not None:
+        return existing
+
+    parent = _artifact_payloads(session, parent_run.id)
+    child = _artifact_payloads(session, child_run.id)
+    parent_knowledge_requests = _knowledge_requests(parent.get("knowledge_requests"))
+    parent_beliefs = _keyed_values(parent.get("beliefs"), "beliefs", "status")
+    child_beliefs = _keyed_values(child.get("beliefs"), "beliefs", "status")
+    parent_options = _keyed_values(parent.get("options"), "options", "viable")
+    child_options = _keyed_values(child.get("options"), "options", "viable")
+    parent_critic = parent.get("critic_result") or {}
+    child_critic = child.get("critic_result") or {}
+    parent_evidence = _used_global_evidence_ids(session, parent_run.id)
+    child_evidence = _used_global_evidence_ids(session, child_run.id)
+    added_evidence = sorted(set(child_evidence) - set(parent_evidence))
+    claimed, verified, unverified = _verify_claimed_requests(
+        parent_knowledge_requests,
+        claimed_keys=fulfilled_knowledge_request_keys,
+        added_evidence_ids=added_evidence,
+    )
+    remaining = _merge_knowledge_requests(
+        unverified,
+        _knowledge_requests(child.get("knowledge_requests")),
+    )
+
+    payload: dict[str, Any] = {
+        "method": METHOD,
+        "parent_run_id": parent_run.id,
+        "child_run_id": child_run.id,
+        "claimed_knowledge_requests": claimed,
+        "verified_fulfilled_knowledge_requests": verified,
+        "unverified_claimed_knowledge_requests": unverified,
+        "fulfilled_knowledge_requests": verified,
+        "belief_changes": _changes(parent_beliefs, child_beliefs),
+        "option_changes": _changes(parent_options, child_options),
+        "critic_verdict_change": {
+            "from": parent_critic.get("verdict"),
+            "to": child_critic.get("verdict"),
+        },
+        "decision_change": {
+            "from": _decision(parent.get("decision")),
+            "to": _decision(child.get("decision")),
+        },
+        "citation_scope_changes": {
+            "parent_global_evidence_ids": parent_evidence,
+            "child_global_evidence_ids": child_evidence,
+            "added_global_evidence_ids": added_evidence,
+            "removed_global_evidence_ids": sorted(set(parent_evidence) - set(child_evidence)),
+        },
+        "remaining_knowledge_requests": remaining,
+    }
+    artifact = DeliberationArtifact(
+        run_id=child_run.id,
+        stage_call_id=None,
+        kind="cognitive_transition",
+        local_key="cognitive_transition",
+        payload_json=payload,
+        payload_digest=payload_digest(payload),
+    )
+    session.add(artifact)
+    session.flush()
+    return artifact

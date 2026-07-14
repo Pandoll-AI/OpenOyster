@@ -43,6 +43,7 @@ from openoyster.models import (
     PackEvidence,
 )
 from openoyster.services.cognitive_impact import compute_cognitive_impact
+from openoyster.services.cognitive_transition import persist_cognitive_transition
 from openoyster.services.deliberation_dossier import persist_dossier
 from openoyster.services.deliberation_gates import (
     EvidenceSnapshotView,
@@ -71,6 +72,15 @@ STAGE_ARTIFACT_KIND: dict[str, str] = {
     STAGE_CRITIC: "critic_result",
     STAGE_DECISION: "decision",
 }
+
+
+class DeliberationContinuationError(ValueError):
+    """Stable input error raised when a linked re-deliberation is invalid."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 
 def _policy_snapshot(*, allow_compatible_packs: bool) -> dict[str, Any]:
@@ -310,6 +320,7 @@ def _forced_abstention(
     reasons: list[str],
     *,
     detail: str | None = None,
+    knowledge_requests: list[dict[str, Any]] | None = None,
 ) -> DecisionStagePayload:
     text = detail or f"Deliberation abstained: {', '.join(reasons)}"
     # Map abstention reasons that are not critic issue codes to structural other.
@@ -335,9 +346,37 @@ def _forced_abstention(
                     },
                 }
             ],
-            "knowledge_requests": [],
+            "knowledge_requests": knowledge_requests or [],
         }
     )
+
+
+def _critic_knowledge_requests(critic: CriticStagePayload | None) -> list[dict[str, Any]]:
+    if critic is None:
+        return []
+    requests: list[dict[str, Any]] = []
+    for index, finding in enumerate(critic.findings, start=1):
+        if finding.classification.value != "gap" or not finding.unresolved_question:
+            continue
+        requests.append(
+            {
+                "local_key": f"kr_critic_{index}",
+                "question": finding.unresolved_question,
+                "gap_ref": finding.artifact_ref or f"critic:finding:{index}",
+                "priority": "critical" if critic.verdict == "abstain" else "important",
+            }
+        )
+    return requests
+
+
+def _merge_knowledge_request_payloads(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for group in groups:
+        for request in group:
+            key = request.get("local_key")
+            if isinstance(key, str) and key not in merged:
+                merged[key] = request
+    return list(merged.values())
 
 
 def _persist_decision_bundle(
@@ -393,8 +432,23 @@ def _persist_decision_bundle(
     run.status = "decision_ready"
 
 
-def _complete_run(session: Session, run: DeliberationRun) -> DeliberationRun:
+def _complete_run(
+    session: Session,
+    run: DeliberationRun,
+    *,
+    fulfilled_knowledge_request_keys: set[str] | None = None,
+) -> DeliberationRun:
     compute_cognitive_impact(session, run)
+    if run.parent_run_id is not None:
+        parent_run = session.get(DeliberationRun, run.parent_run_id)
+        if parent_run is None:
+            raise RuntimeError(f"parent deliberation run not found: {run.parent_run_id}")
+        persist_cognitive_transition(
+            session,
+            parent_run=parent_run,
+            child_run=run,
+            fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys or set(),
+        )
     run.status = "impact_ready"
     session.flush()
     # Finalize terminal fields before dossier so audit replay digests match
@@ -450,6 +504,7 @@ def _freeze_and_create_run(
     provider: LLMProvider,
     settings: Settings,
     allow_compatible_packs: bool,
+    parent_run_id: int | None = None,
 ) -> DeliberationRun:
     scope = freeze_pack_scope(
         session,
@@ -461,6 +516,7 @@ def _freeze_and_create_run(
     runtime = _runtime_config(provider, settings)
     run = DeliberationRun(
         idempotency_key=idempotency_key,
+        parent_run_id=parent_run_id,
         mission_snapshot_json=mission.model_dump(mode="json"),
         mission_digest=mission_digest(mission),
         policy_snapshot_json=policy,
@@ -682,6 +738,8 @@ def run_deliberation(
     provider: LLMProvider,
     settings: Settings | None = None,
     allow_compatible_packs: bool = False,
+    parent_run_id: int | None = None,
+    fulfilled_knowledge_request_keys: set[str] | None = None,
 ) -> DeliberationRun:
     """Execute one Autonomous Deliberation D1 run.
 
@@ -707,6 +765,7 @@ def run_deliberation(
             provider=provider,
             settings=settings,
             allow_compatible_packs=allow_compatible_packs,
+            parent_run_id=parent_run_id,
         )
     except DeliberationScopeError as exc:
         # Persist a failed_input run when possible; still raise-free for tests
@@ -715,6 +774,7 @@ def run_deliberation(
         # caller visibility while avoiding partial runs without keys.
         run = DeliberationRun(
             idempotency_key=idempotency_key,
+            parent_run_id=parent_run_id,
             mission_snapshot_json=mission.model_dump(mode="json"),
             mission_digest=mission_digest(mission),
             policy_snapshot_json=_policy_snapshot(allow_compatible_packs=allow_compatible_packs),
@@ -756,11 +816,21 @@ def run_deliberation(
         decision = _forced_abstention(
             ["no_evidence"],
             detail="No Pack evidence retrieved for frozen install scope",
+            knowledge_requests=[
+                {
+                    "local_key": "kr_no_evidence",
+                    "question": mission.decision_question,
+                    "gap_ref": "evidence:no_evidence",
+                    "priority": "critical",
+                }
+            ],
         )
         _persist_decision_bundle(
             session, run=run, stage_call=None, decision=decision, snap_ids=snap_ids
         )
-        return _complete_run(session, run)
+        return _complete_run(
+            session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+        )
 
     prior: dict[str, Any] = {}
     stages = [STAGE_BELIEFS, STAGE_OPTIONS, STAGE_SCENARIOS, STAGE_CRITIC, STAGE_DECISION]
@@ -779,6 +849,17 @@ def run_deliberation(
             ctx=ctx,
         )
         if error is not None or model is None:
+            if error is not None and error.code == "provider_error":
+                run.status = "failed_execution"
+                run.outcome = None
+                run.failure_code = error.code
+                run.failure_detail = error.message
+                run.lease_owner = None
+                run.lease_until = None
+                run.completed_at = utcnow()
+                run.updated_at = utcnow()
+                session.commit()
+                return run
             reasons = [error.code if error is not None else "invalid_stage_payload"]
             # Normalize unknown gate codes into closed abstention set.
             from openoyster.deliberation_contracts import ABSTENTION_REASON_CODES
@@ -813,11 +894,19 @@ def run_deliberation(
                 closed = ["unknown_citation"]
             elif error is not None and error.code in {"quote_mismatch", "pointer_mismatch"}:
                 closed = ["invalid_stage_payload"]
-            decision = _forced_abstention(closed or ["invalid_stage_payload"])
+            promoted_requests = (
+                _critic_knowledge_requests(critic_model) if stage == STAGE_DECISION else []
+            )
+            decision = _forced_abstention(
+                closed or ["invalid_stage_payload"],
+                knowledge_requests=promoted_requests,
+            )
             _persist_decision_bundle(
                 session, run=run, stage_call=call, decision=decision, snap_ids=snap_ids
             )
-            return _complete_run(session, run)
+            return _complete_run(
+                session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+            )
 
         kind = STAGE_ARTIFACT_KIND[stage]
         payload = model.model_dump(mode="json")
@@ -847,9 +936,14 @@ def run_deliberation(
         if isinstance(model, DecisionStagePayload):
             # Extra critic guard even if model said select.
             if critic_model is not None and critic_model.verdict != "pass":
+                promoted_requests = _merge_knowledge_request_payloads(
+                    [item.model_dump(mode="json") for item in model.knowledge_requests],
+                    _critic_knowledge_requests(critic_model),
+                )
                 decision = _forced_abstention(
                     ["critic_non_pass"],
                     detail=f"Critic verdict was {critic_model.verdict}",
+                    knowledge_requests=promoted_requests,
                 )
                 # Replace decision artifact: delete the select one we just stored.
                 session.delete(art)
@@ -891,4 +985,84 @@ def run_deliberation(
         # Persist one validated stage atomically with all of its derived rows.
         session.commit()
 
-    return _complete_run(session, run)
+    return _complete_run(
+        session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+    )
+
+
+def continue_deliberation(
+    session: Session,
+    parent_run_id: int,
+    pack_ids: list[str],
+    impact_baseline_pack_ids: list[str] | None,
+    fulfilled_knowledge_request_keys: list[str],
+    idempotency_key: str,
+    provider: LLMProvider,
+    settings: Settings | None = None,
+    allow_compatible_packs: bool = False,
+) -> DeliberationRun:
+    """Re-deliberate from a completed abstention after fulfilling parent gaps."""
+    existing = session.scalar(
+        select(DeliberationRun).where(DeliberationRun.idempotency_key == idempotency_key)
+    )
+    if existing is not None:
+        if existing.parent_run_id != parent_run_id:
+            raise DeliberationContinuationError(
+                "idempotency_key_conflict",
+                "idempotency key is already associated with a different parent deliberation run",
+            )
+        return _existing_run_state(session, existing)
+
+    parent = session.get(DeliberationRun, parent_run_id)
+    if parent is None:
+        raise DeliberationContinuationError(
+            "parent_run_not_found", "parent deliberation run was not found"
+        )
+    if parent.status != "completed" or parent.outcome != "abstain":
+        raise DeliberationContinuationError(
+            "parent_run_not_completed_abstain",
+            "parent deliberation run must be a completed abstention",
+        )
+
+    parent_knowledge = session.scalar(
+        select(DeliberationArtifact).where(
+            DeliberationArtifact.run_id == parent.id,
+            DeliberationArtifact.kind == "knowledge_requests",
+            DeliberationArtifact.local_key == "knowledge_requests",
+        )
+    )
+    if parent_knowledge is None:
+        raise DeliberationContinuationError(
+            "parent_knowledge_requests_missing",
+            "parent deliberation run has no persisted knowledge requests",
+        )
+    requested_keys = set(fulfilled_knowledge_request_keys)
+    if not requested_keys:
+        raise DeliberationContinuationError(
+            "fulfilled_knowledge_request_keys_empty",
+            "fulfilled knowledge request keys must be nonempty",
+        )
+    parent_items = (parent_knowledge.payload_json or {}).get("knowledge_requests") or []
+    available_keys = {
+        item.get("local_key") for item in parent_items if isinstance(item, dict) and item.get("local_key")
+    }
+    unknown_keys = requested_keys - available_keys
+    if unknown_keys:
+        raise DeliberationContinuationError(
+            "fulfilled_knowledge_request_keys_unknown",
+            "fulfilled knowledge request keys must exist on the parent run",
+        )
+
+    mission = Mission.model_validate(parent.mission_snapshot_json)
+    return run_deliberation(
+        session,
+        mission,
+        pack_ids=pack_ids,
+        impact_baseline_pack_ids=impact_baseline_pack_ids,
+        idempotency_key=idempotency_key,
+        provider=provider,
+        settings=settings,
+        allow_compatible_packs=allow_compatible_packs,
+        parent_run_id=parent.id,
+        fulfilled_knowledge_request_keys=requested_keys,
+    )

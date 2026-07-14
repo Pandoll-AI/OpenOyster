@@ -106,3 +106,41 @@ def test_d1_models_round_trip_create_all(
         # PostgreSQL-portable: no SQLite-only types in alembic version table usage.
         row = session.execute(text("SELECT 1")).scalar()
         assert row == 1
+
+
+def test_d2_continuity_migration_adds_and_removes_parent_run_link(
+    temp_settings: Settings,
+) -> None:
+    """0005 adds the nullable self-reference used by linked re-deliberation."""
+    engine = make_engine(temp_settings)
+    try:
+        upgrade_database(temp_settings, revision="0004_autonomous_deliberation_d1")
+        inspector = inspect(engine)
+        assert "parent_run_id" not in {
+            column["name"] for column in inspector.get_columns("deliberation_runs")
+        }
+
+        upgrade_database(temp_settings, revision="head")
+        inspector = inspect(engine)
+        assert "parent_run_id" in {
+            column["name"] for column in inspector.get_columns("deliberation_runs")
+        }
+        assert any(
+            foreign_key.get("constrained_columns") == ["parent_run_id"]
+            and foreign_key.get("referred_table") == "deliberation_runs"
+            and foreign_key.get("referred_columns") == ["id"]
+            for foreign_key in inspector.get_foreign_keys("deliberation_runs")
+        )
+        assert any(
+            index.get("column_names") == ["parent_run_id"]
+            for index in inspector.get_indexes("deliberation_runs")
+        )
+
+        config = _alembic_config(temp_settings.db_url)
+        command.downgrade(config, "0004_autonomous_deliberation_d1")
+        inspector = inspect(engine)
+        assert "parent_run_id" not in {
+            column["name"] for column in inspector.get_columns("deliberation_runs")
+        }
+    finally:
+        engine.dispose()

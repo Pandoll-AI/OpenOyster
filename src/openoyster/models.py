@@ -610,6 +610,9 @@ class DeliberationRun(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     idempotency_key: Mapped[str] = mapped_column(String(250))
+    parent_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     mission_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     mission_digest: Mapped[str] = mapped_column(String(128))
     policy_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
