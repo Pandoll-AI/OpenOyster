@@ -4,7 +4,8 @@
     {"name": "stance_judge", "purpose": "청크가 가설을 지지/반박/무관한지 방향성 판정", "tier": "T1", "model_type": "reasoning", "effort": "xhigh"},
     {"name": "oppose_verify", "purpose": "oppose 판정 저장 전 반박 여부 재검증", "tier": "T1", "model_type": "chat", "effort": "max"},
     {"name": "merge_judge", "purpose": "신규 주장과 기존 가설의 동일성 판정", "tier": "T1", "model_type": "chat", "effort": "medium"},
-    {"name": "gold_label", "purpose": "gold set 초벌 라벨링 (동일 모델, 독립 역할 프롬프트)", "tier": "T1", "model_type": "secondary", "effort": "xhigh"}
+    {"name": "gold_label", "purpose": "gold set 초벌 라벨링 (동일 모델, 독립 역할 프롬프트)", "tier": "T1", "model_type": "secondary", "effort": "xhigh"},
+    {"name": "pack_answer", "purpose": "Pack retrieval context만으로 근거 citation이 검증된 답변 생성", "tier": "T1", "model_type": "reasoning", "effort": "medium"}
   ],
   "prod_connector": "openai-compatible"
 }

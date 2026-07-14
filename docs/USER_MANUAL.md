@@ -97,6 +97,25 @@ URL ingestion rejects non-HTTP schemes, embedded credentials, private/loopback/l
 
 Raw extracted text is stored in the database. Do not ingest sensitive material unless the database, backups, logs, operator access, and retention policy are appropriate for it.
 
+## Trusted OpenCrab Pack directories
+
+MVP-P1 accepts only trusted local OpenCrab Pack directories. Validation and installation never modify the source directory; installation copies validated bytes into the workspace and queries use active Pack evidence only.
+
+```bash
+openoyster pack validate /trusted/packs/example
+openoyster pack validate /trusted/packs/example --profile strict
+openoyster pack install /trusted/packs/example
+openoyster pack list
+openoyster pack show PACK_ID
+openoyster pack query "What does this Pack support?" --packs PACK_ID
+```
+
+The commands print JSON suitable for automation. `compatible` requires the four validator files; `strict` additionally requires the documented eleven-file layout. A supported answer always cites global evidence ids; missing retrieval evidence, an ambiguous/local citation, or an invented citation returns `unknown`.
+
+The API mirrors the surface at `POST /v1/packs/validate`, `POST /v1/packs/install`, `GET /v1/packs`, `GET /v1/packs/{pack_id}`, and `POST /v1/packs/query`. The normal write API key is required for validation, installation, and query because they inspect a server-local path, change state, or may invoke the configured LLM. API errors omit local paths and Pack content.
+
+This is not an archive or remote-ingestion interface. ZIP extraction/quarantine, automatic update/diff/rollback, and OCR/CLIP/audio/video analysis are deferred.
+
 ## 5. Running the system
 
 Bounded cycles:
@@ -277,3 +296,36 @@ Inspect `loop_leases` and `loop_runs`. Leases expire, but a transaction blocked 
 - Collect explicit downstream feedback.
 - Back up raw documents, database, and policy versions.
 - Never attach irreversible tools without an approval gate and audit trail.
+
+## 15. Autonomous Deliberation D1
+
+Autonomous Deliberation turns one Mission plus installed OpenCrab Packs into a stored Decision Dossier. Packs provide the only factual evidence. Mission fields are control input and are never upgraded to evidence. A run produces beliefs, options, expected/adverse scenarios, an independent critic result, a selection or abstention, flip conditions, inert Knowledge Requests, Cognitive Impact, and a deterministic replay record.
+
+Use the fixture Mission and Pack for a local stub-provider walkthrough:
+
+```bash
+openoyster pack install tests/fixtures/opencrab_pack_runtime/p0-f1-minimal
+
+openoyster deliberate run tests/fixtures/deliberation_d1/mission_happy.json \
+  --packs p0-f1-minimal \
+  --impact-baseline-packs p0-f1-minimal \
+  --allow-compatible-packs \
+  --idempotency-key manual-d1-001
+```
+
+The command prints JSON containing the run `id`. Use that ID for inspection:
+
+```bash
+openoyster deliberate show RUN_ID
+openoyster deliberate dossier RUN_ID --format json
+openoyster deliberate dossier RUN_ID --format markdown
+openoyster deliberate impact RUN_ID
+openoyster deliberate knowledge-requests RUN_ID
+openoyster deliberate replay RUN_ID
+```
+
+The normal path makes exactly five bounded stage calls. With no retrieved Pack evidence, it completes an abstention without a model call. Reusing an idempotency key returns the persisted run instead of creating another execution. `replay` never calls the LLM; it validates stored artifacts and compares reconstructed dossier digests.
+
+CLI exit codes are `0` for completed selection or abstention, `1` for database/indeterminate/unrecoverable execution failure, and `2` for Mission, Pack-scope/profile, or argument errors. Output is sanitized: it does not include raw Pack records, full prompts, server paths, storage URIs, runtime configuration, or secrets.
+
+For API usage, see the Autonomous Deliberation D1 section in `docs/API_REFERENCE.md`. Every D1 API endpoint, including reads, needs a configured API key. Knowledge Requests are records for a human or external workflow to act on; OpenOyster does not execute them or update Packs.

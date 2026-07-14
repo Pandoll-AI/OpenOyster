@@ -1,0 +1,26 @@
+{
+  "notes": {
+    "production_admission": false,
+    "unsafe_evidence_paths": "strict oracle rejects without resolving outside pack root"
+  },
+  "packs": {
+    "artifact-hash-mismatch": {
+      "actual_artifact_sha256": "0fc02a6ca3cf9183eed8d5c9a90c02146ad0624f8f043add727299e151624867",
+      "declared_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "notes": "Artifact exists; declared hash does not match actual SHA-256.",
+      "official_compatible_validator": "pass",
+      "strict_oracle_primary_issue": "artifact_hash_mismatch"
+    },
+    "missing-artifact": {
+      "notes": "Evidence source.path is relative and under pack root but file is absent.",
+      "official_compatible_validator": "pass",
+      "strict_oracle_primary_issue": "missing_artifact"
+    },
+    "missing-evidence-ref": {
+      "notes": "Graph evidence_refs point at an id absent from evidence/index.jsonl. Evidence row uses OpenCrab-legal URL-only source (url + path:null) so the official missing_evidence_ref failure is isolated from strict local artifact provenance.",
+      "official_compatible_validator": "fail",
+      "official_issue_code": "missing_evidence_ref",
+      "strict_oracle_primary_issue": null
+    }
+  }
+}

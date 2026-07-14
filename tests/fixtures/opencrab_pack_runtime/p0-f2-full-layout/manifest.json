@@ -1,0 +1,74 @@
+{
+  "artifacts": {
+    "edges": "graph/edges.jsonl",
+    "evidence_index": "evidence/index.jsonl",
+    "neo4j_cypher": "neo4j/import.cypher",
+    "neo4j_export_status": "neo4j/export_status.json",
+    "nodes": "graph/nodes.jsonl",
+    "opencrab_ingest": "neo4j/opencrab_ingest.jsonl",
+    "quality_report": "quality/report.json"
+  },
+  "counts": {
+    "bytes": 9392,
+    "chunks": 1,
+    "documents": 1,
+    "edges": 2,
+    "evidence": 1,
+    "files": 11,
+    "images": 0,
+    "nodes": 3
+  },
+  "created_at": "2026-07-13T00:00:00Z",
+  "created_by": "OpenOyster P0-F2 fixture",
+  "format_version": "opencrab-pack-v1",
+  "grammar_version": "1.0.0",
+  "hashes": {
+    "edges_sha256": "c147e139c50ea1f0f801f0b05b1d3bb5f55ef16114e049e9158abc5f050f9533",
+    "evidence_sha256": "fd1391ceb27a6b705b74ad779d1df4e0b837af34e90547521b7e0adae8249bd7",
+    "nodes_sha256": "9a147ad0dcbda678d756a45d64c4b0cbf94ab5b7827f82e55678ca76bcb84e44",
+    "pack_sha256": "a83b47bd599056ec90f0cfed5a361e8d30311d2035020c35e2905d4b4daf76e0",
+    "pack_sha256_algorithm": "sha256(path_nul_bytes_newline)"
+  },
+  "license": {
+    "name": "MIT",
+    "scope": "personal"
+  },
+  "limits": {
+    "reason": null,
+    "split_recommended": false,
+    "staged_ingest_recommended": false
+  },
+  "pack_id": "p0-f2-full-layout",
+  "quality": {
+    "chunk_coverage": 1.0,
+    "clip_coverage": null,
+    "edge_evidence_integrity": 1.0,
+    "evidence_coverage": 1.0,
+    "graph_reference_integrity": 1.0,
+    "multihop_path_coverage": 1.0,
+    "node_evidence_integrity": 1.0,
+    "ocr_completeness": null,
+    "parsing_completeness": 1.0,
+    "promotion_status": "validated",
+    "relationship_evidence_coverage": 1.0
+  },
+  "retrieval_hints": {
+    "benchmark_focus": [
+      "relationship_questions",
+      "multi_hop",
+      "hallucination_guard"
+    ],
+    "relation_cues": [
+      "contains",
+      "supports"
+    ]
+  },
+  "source": {
+    "description": "Small documented strict OpenCrab Pack v1 layout for OpenOyster runtime fixture tests.",
+    "label": "P0-F2 synthetic full-layout source",
+    "mode": "fixture",
+    "url": null
+  },
+  "title": "P0-F2 Full Layout Fixture",
+  "version": "1.0.0"
+}

@@ -13,10 +13,12 @@ from pathlib import Path
 from typing import Annotated, Literal, cast
 
 import typer
+import yaml
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from .cli_eval import eval_app, gold_app
@@ -31,11 +33,17 @@ from .database import (
     make_session_factory,
     upgrade_database,
 )
+from .deliberation_contracts import Mission
 from .events import bus
+from .llm import provider_from_settings
 from .loops.supervisor import Supervisor
 from .models import (
     Artifact,
     ArtifactFeedback,
+    DeliberationArtifact,
+    DeliberationCognitiveImpact,
+    DeliberationDossier,
+    DeliberationRun,
     Document,
     Evaluation,
     Event,
@@ -54,6 +62,8 @@ from .policies import (
     promote_policy,
     validate_policy,
 )
+from .services import deliberation, opencrab_packs, pack_answering
+from .services.deliberation_replay import replay_deliberation
 from .services.inspection import artifact_provenance, hypothesis_evidence
 
 app = typer.Typer(
@@ -64,13 +74,141 @@ policy_app = typer.Typer(help="Inspect and manage versioned policies.")
 db_app = typer.Typer(help="Database migration commands.")
 hypothesis_app = typer.Typer(help="Inspect hypotheses and evidence.")
 artifact_app = typer.Typer(help="Inspect artifacts and provenance.")
+pack_app = typer.Typer(help="Validate, install, inspect, and query trusted OpenCrab Pack directories.")
+deliberate_app = typer.Typer(help="Run and audit Autonomous Deliberation D1 decisions.")
 app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(artifact_app, name="artifact")
+app.add_typer(pack_app, name="pack")
+app.add_typer(deliberate_app, name="deliberate")
 app.add_typer(eval_app, name="eval")
 app.add_typer(gold_app, name="gold")
 console = Console()
+
+
+def _safe_pack_issues(issues: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Expose stable validation codes without echoing local paths or source content."""
+    return [
+        {key: issue[key] for key in ("code", "severity", "record_id") if key in issue} for issue in issues
+    ]
+
+
+def _pack_validation_payload(result: opencrab_packs.PackValidationResult) -> dict[str, object]:
+    return {
+        "status": result.status,
+        "profile": result.profile,
+        "pack_id": result.pack_id,
+        "declared_version": result.declared_version,
+        "format_version": result.format_version,
+        "grammar_version": result.grammar_version,
+        "source_digest": result.source_digest,
+        "digest_verified": result.digest_verified,
+        "issues": _safe_pack_issues(result.issues),
+    }
+
+
+def _pack_install_payload(result: opencrab_packs.PackInstallResult) -> dict[str, object]:
+    return {
+        "status": result.status,
+        "pack_id": result.pack_id,
+        "declared_version": result.declared_version,
+        "source_digest": result.source_digest,
+        "pack_install_id": result.pack_install_id,
+        "noop": result.noop,
+        "admission": {
+            key: result.admission_report[key]
+            for key in ("profile", "status", "node_count", "edge_count", "evidence_count", "file_count")
+            if key in result.admission_report
+        },
+    }
+
+
+def _print_pack_json(payload: object) -> None:
+    console.file.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+_DELIBERATION_HIDDEN_FIELDS = {
+    "failure_detail",
+    "idempotency_key",
+    "prompt_visible_payload_json",
+    "raw_record_json",
+    "raw_response",
+    "response_json",
+    "runtime_config_json",
+    "policy_snapshot_json",
+    "storage_uri",
+    "source_uri",
+    "asset_ref",
+}
+
+
+def _sanitize_deliberation_value(value: object, *, field_name: str = "") -> object:
+    """Remove internal response fields and redact filesystem/storage locations."""
+    lowered = field_name.casefold()
+    if (
+        field_name in _DELIBERATION_HIDDEN_FIELDS
+        or lowered.endswith("_path")
+        or "secret" in lowered
+        or "token" in lowered
+        or "api_key" in lowered
+        or "password" in lowered
+    ):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_deliberation_value(item, field_name=key)
+            for key, item in value.items()
+            if key not in _DELIBERATION_HIDDEN_FIELDS
+        }
+    if isinstance(value, list):
+        return [_sanitize_deliberation_value(item) for item in value]
+    if isinstance(value, str):
+        for marker in (
+            "/private/",
+            "/Users/",
+            "/var/",
+            "/tmp/",
+            "file://",
+            "storage://",
+            "s3://",
+            "gs://",
+            "az://",
+        ):
+            if marker in value:
+                return "[redacted]"
+    return value
+
+
+def _deliberation_run_payload(run: DeliberationRun) -> dict[str, object]:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "current_stage": run.current_stage,
+        "outcome": run.outcome,
+        "failure_code": run.failure_code,
+        "llm_attempt_count": run.llm_attempt_count,
+        "mission_digest": run.mission_digest,
+        "policy_digest": run.policy_digest,
+        "runtime_config_digest": run.runtime_config_digest,
+        "primary_scope_digest": run.primary_scope_digest,
+        "impact_baseline_scope_digest": run.impact_baseline_scope_digest,
+        "contract_version": run.contract_version,
+        "prompt_template_version": run.prompt_template_version,
+        "created_at": run.created_at.isoformat(),
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+def _load_deliberation_mission(path: Path) -> Mission:
+    if not path.is_file():
+        raise ValueError("mission_file_required")
+    try:
+        raw = path.read_text(encoding="utf-8")
+        payload = yaml.safe_load(raw) if path.suffix.casefold() in {".yaml", ".yml"} else json.loads(raw)
+        return Mission.model_validate(payload)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise ValueError("mission_invalid") from exc
 
 
 @contextmanager
@@ -417,9 +555,15 @@ def doctor() -> None:
             )
         )
         config_dir = settings.codex_config_dir
-        checks.append(("codex models config", (config_dir / "models.json").is_file(), str(config_dir / "models.json")))
         checks.append(
-            ("codex pipeline config", (config_dir / "pipeline.json").is_file(), str(config_dir / "pipeline.json"))
+            ("codex models config", (config_dir / "models.json").is_file(), str(config_dir / "models.json"))
+        )
+        checks.append(
+            (
+                "codex pipeline config",
+                (config_dir / "pipeline.json").is_file(),
+                str(config_dir / "pipeline.json"),
+            )
         )
     elif settings.llm_provider == "openai-compatible" and not settings.llm_api_key:
         checks.append(("remote LLM credentials", False, "provider selected but API key missing"))
@@ -454,10 +598,7 @@ def _redact_url(raw_url: str) -> str:
         url = make_url(raw_url)
     except ValueError:
         return "<invalid database URL>"
-    query = {
-        key: "***" if _query_key_is_secret(key) else value
-        for key, value in url.query.items()
-    }
+    query = {key: "***" if _query_key_is_secret(key) else value for key, value in url.query.items()}
     return url.set(query=query).render_as_string(hide_password=True)
 
 
@@ -600,7 +741,9 @@ def hypothesis_show(
 @artifact_app.command("show")
 def artifact_show(
     artifact_id: Annotated[int, typer.Argument(min=1)],
-    provenance: Annotated[bool, typer.Option(help="Include task, hypothesis, and evidence provenance.")] = False,
+    provenance: Annotated[
+        bool, typer.Option(help="Include task, hypothesis, and evidence provenance.")
+    ] = False,
 ) -> None:
     """Show one artifact, optionally with provenance."""
 
@@ -740,6 +883,271 @@ def db_upgrade(
     settings = get_settings()
     upgrade_database(settings, revision)
     console.print(f"[green]Database upgraded to {revision}.[/]")
+
+
+@pack_app.command("validate")
+def pack_validate(
+    path: Annotated[Path, typer.Argument(help="Trusted local OpenCrab Pack directory.")],
+    profile: Annotated[
+        Literal["compatible", "strict"], typer.Option(help="Admission profile.")
+    ] = "compatible",
+) -> None:
+    """Validate a trusted local Pack directory without modifying it."""
+    if not path.is_dir():
+        _print_pack_json({"status": "fail", "error": {"code": "pack_directory_required"}})
+        raise typer.Exit(code=2)
+    result = opencrab_packs.validate_pack_directory(path, profile=profile)
+    _print_pack_json(_pack_validation_payload(result))
+    if result.status != "pass":
+        raise typer.Exit(code=1)
+
+
+@pack_app.command("install")
+def pack_install(
+    path: Annotated[Path, typer.Argument(help="Trusted local OpenCrab Pack directory.")],
+    profile: Annotated[
+        Literal["compatible", "strict"], typer.Option(help="Admission profile.")
+    ] = "compatible",
+) -> None:
+    """Validate and install a trusted local Pack directory."""
+    if not path.is_dir():
+        _print_pack_json({"status": "fail", "error": {"code": "pack_directory_required"}})
+        raise typer.Exit(code=2)
+    with _runtime() as (settings, _, factory), factory() as session:
+        try:
+            result = opencrab_packs.install_pack(
+                session,
+                path,
+                workspace=settings.workspace,
+                profile=profile,
+            )
+            session.commit()
+        except opencrab_packs.PackValidationError as exc:
+            session.rollback()
+            _print_pack_json(
+                {
+                    "status": "fail",
+                    "error": {
+                        "code": "pack_validation_failed",
+                        "issues": _safe_pack_issues(exc.issues),
+                    },
+                }
+            )
+            raise typer.Exit(code=1) from exc
+        except opencrab_packs.PackConflictError as exc:
+            session.rollback()
+            _print_pack_json({"status": "fail", "error": {"code": "pack_revision_conflict"}})
+            raise typer.Exit(code=1) from exc
+    _print_pack_json(_pack_install_payload(result))
+
+
+@pack_app.command("list")
+def pack_list() -> None:
+    """List active Pack installations without exposing filesystem locations."""
+    with _runtime() as (_, _, factory), factory() as session:
+        installs = opencrab_packs.list_active_installs(session)
+        payload = [
+            {
+                "pack_id": install.pack_id,
+                "declared_version": install.declared_version,
+                "source_digest": install.source_digest,
+                "status": install.status,
+                "admission_profile": install.admission_profile,
+            }
+            for install in installs
+        ]
+    _print_pack_json(payload)
+
+
+@pack_app.command("show")
+def pack_show(
+    pack_id: Annotated[str, typer.Argument(help="Active Pack identifier.")],
+) -> None:
+    """Show one active Pack installation and its non-sensitive registry metadata."""
+    with _runtime() as (_, _, factory), factory() as session:
+        install = opencrab_packs.get_active_install(session, pack_id)
+        if install is None:
+            _print_pack_json({"error": {"code": "pack_not_found"}})
+            raise typer.Exit(code=1)
+        report = install.admission_report_json or {}
+        payload = {
+            "pack_id": install.pack_id,
+            "declared_version": install.declared_version,
+            "format_version": install.format_version,
+            "grammar_version": install.grammar_version,
+            "source_digest": install.source_digest,
+            "source_type": install.source_type,
+            "admission_profile": install.admission_profile,
+            "status": install.status,
+            "counts": {
+                key.removesuffix("_count"): report[key]
+                for key in ("node_count", "edge_count", "evidence_count", "file_count")
+                if key in report
+            },
+        }
+    _print_pack_json(payload)
+
+
+@pack_app.command("query")
+def pack_query(
+    question: Annotated[str, typer.Argument(help="Question answered only from active Pack evidence.")],
+    packs: Annotated[
+        str | None, typer.Option(help="Comma-separated active Pack ids to narrow the scope.")
+    ] = None,
+    top_k: Annotated[int, typer.Option(min=1, max=100, help="Maximum retrieval hits.")] = 20,
+) -> None:
+    """Return a grounded answer or fail closed as unknown."""
+    pack_ids = [item.strip() for item in (packs or "").split(",") if item.strip()] or None
+    with _runtime() as (settings, _, factory), factory() as session:
+        answer = pack_answering.answer_pack_query(
+            session,
+            question,
+            provider_from_settings(settings),
+            pack_ids=pack_ids,
+            top_k=top_k,
+        )
+    _print_pack_json(
+        {
+            "status": answer.status,
+            "answer": answer.answer,
+            "citations": answer.citations,
+            "pack_scope": answer.pack_scope,
+            "retrieval": answer.retrieval,
+            "reason": answer.reason,
+        }
+    )
+
+
+def _get_deliberation_run(session: Session, run_id: int) -> DeliberationRun:
+    run = session.get(DeliberationRun, run_id)
+    if run is None:
+        _print_pack_json({"error": {"code": "deliberation_not_found"}})
+        raise typer.Exit(code=2)
+    return run
+
+
+@deliberate_app.command("run")
+def deliberate_run(
+    mission_path: Annotated[Path, typer.Argument(help="Mission JSON or YAML file.")],
+    packs: Annotated[str, typer.Option(help="Comma-separated installed Pack IDs.")],
+    idempotency_key: Annotated[str, typer.Option(help="Unique key for this deliberation execution.")],
+    impact_baseline_packs: Annotated[
+        str | None, typer.Option(help="Comma-separated frozen baseline Pack IDs.")
+    ] = None,
+    allow_compatible_packs: Annotated[
+        bool, typer.Option(help="Allow explicitly installed compatible Packs.")
+    ] = False,
+) -> None:
+    """Run one bounded, Pack-grounded Autonomous Deliberation D1 execution."""
+    try:
+        mission = _load_deliberation_mission(mission_path)
+    except ValueError as exc:
+        _print_pack_json({"status": "failed_input", "error": {"code": str(exc)}})
+        raise typer.Exit(code=2) from exc
+    pack_ids = [item.strip() for item in packs.split(",") if item.strip()]
+    baseline_ids = [item.strip() for item in (impact_baseline_packs or "").split(",") if item.strip()]
+    if not pack_ids or not idempotency_key.strip():
+        _print_pack_json({"status": "failed_input", "error": {"code": "scope_or_key_required"}})
+        raise typer.Exit(code=2)
+
+    try:
+        with _runtime() as (settings, _, factory), factory() as session:
+            run = deliberation.run_deliberation(
+                session,
+                mission,
+                pack_ids=pack_ids,
+                impact_baseline_pack_ids=baseline_ids,
+                idempotency_key=idempotency_key,
+                provider=provider_from_settings(settings),
+                settings=settings,
+                allow_compatible_packs=allow_compatible_packs,
+            )
+            session.commit()
+            payload = _deliberation_run_payload(run)
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        _print_pack_json({"status": "indeterminate", "error": {"code": "deliberation_failed"}})
+        raise typer.Exit(code=1) from exc
+
+    _print_pack_json(payload)
+    if run.status == "failed_input":
+        raise typer.Exit(code=2)
+    if run.status in {"failed_database", "indeterminate"}:
+        raise typer.Exit(code=1)
+
+
+@deliberate_app.command("show")
+def deliberate_show(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show safe execution metadata for one deliberation run."""
+    with _runtime() as (_, _, factory), factory() as session:
+        _print_pack_json(_deliberation_run_payload(_get_deliberation_run(session, run_id)))
+
+
+@deliberate_app.command("dossier")
+def deliberate_dossier(
+    run_id: Annotated[int, typer.Argument(min=1)],
+    format: Annotated[Literal["json", "markdown"], typer.Option()] = "json",
+) -> None:
+    """Return the persisted decision dossier without internal Pack or prompt data."""
+    with _runtime() as (_, _, factory), factory() as session:
+        _get_deliberation_run(session, run_id)
+        dossier = session.scalar(select(DeliberationDossier).where(DeliberationDossier.run_id == run_id))
+        if dossier is None:
+            _print_pack_json({"error": {"code": "dossier_not_found"}})
+            raise typer.Exit(code=1)
+        payload: object = dossier.dossier_markdown if format == "markdown" else dossier.dossier_json
+    _print_pack_json({"format": format, "dossier": _sanitize_deliberation_value(payload)})
+
+
+@deliberate_app.command("replay")
+def deliberate_replay(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Run deterministic audit replay; this never calls the LLM."""
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            _get_deliberation_run(session, run_id)
+            replay = replay_deliberation(session, run_id)
+            session.commit()
+            payload = {
+                "run_id": run_id,
+                "matched": replay.matched,
+                "result": _sanitize_deliberation_value(replay.result_json),
+            }
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_app.command("impact")
+def deliberate_impact(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show the persisted citation-scope Cognitive Impact projection."""
+    with _runtime() as (_, _, factory), factory() as session:
+        _get_deliberation_run(session, run_id)
+        impact = session.scalar(
+            select(DeliberationCognitiveImpact).where(DeliberationCognitiveImpact.run_id == run_id)
+        )
+        if impact is None:
+            _print_pack_json({"error": {"code": "cognitive_impact_not_found"}})
+            raise typer.Exit(code=1)
+        payload = _sanitize_deliberation_value(impact.impact_json)
+    _print_pack_json(payload)
+
+
+@deliberate_app.command("knowledge-requests")
+def deliberate_knowledge_requests(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Export inert Knowledge Requests; this command never executes them."""
+    with _runtime() as (_, _, factory), factory() as session:
+        _get_deliberation_run(session, run_id)
+        artifact = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run_id,
+                DeliberationArtifact.kind == "knowledge_requests",
+            )
+        )
+        payload = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+    _print_pack_json(_sanitize_deliberation_value(payload))
 
 
 def _print_results(results) -> None:

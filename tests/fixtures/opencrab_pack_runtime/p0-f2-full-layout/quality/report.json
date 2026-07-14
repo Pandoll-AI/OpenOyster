@@ -1,0 +1,36 @@
+{
+  "checks": {
+    "broken_edges": "pass",
+    "evidence_refs": "pass",
+    "grammar": "pass",
+    "neo4j_import": "skip",
+    "orphan_nodes": "pass",
+    "schema": "pass"
+  },
+  "counts": {
+    "broken_edges": 0,
+    "edges": 2,
+    "evidence": 1,
+    "missing_evidence_refs": 0,
+    "nodes": 3,
+    "ocr_low_confidence_spans": 0,
+    "orphan_nodes": 0,
+    "parser_failures": 0
+  },
+  "generated_at": "2026-07-13T00:00:00Z",
+  "issues": [],
+  "pack_id": "p0-f2-full-layout",
+  "status": "pass",
+  "summary": {
+    "chunk_coverage": 1.0,
+    "clip_coverage": null,
+    "edge_evidence_integrity": 1.0,
+    "evidence_coverage": 1.0,
+    "graph_reference_integrity": 1.0,
+    "multihop_path_coverage": 1.0,
+    "node_evidence_integrity": 1.0,
+    "ocr_completeness": null,
+    "parsing_completeness": 1.0,
+    "relationship_evidence_coverage": 1.0
+  }
+}

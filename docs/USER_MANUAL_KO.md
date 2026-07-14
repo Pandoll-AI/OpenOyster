@@ -58,6 +58,25 @@ openoyster ingest-github owner/repo --kind issues
 
 원문에서 추출한 텍스트가 데이터베이스에 저장되므로, 민감정보를 넣기 전 데이터베이스 암호화, 접근 통제, 백업, 보존기간을 별도로 설계해야 합니다.
 
+## 신뢰된 OpenCrab Pack 디렉터리
+
+MVP-P1은 서비스 프로세스가 이미 접근할 수 있는 신뢰된 로컬 OpenCrab Pack **디렉터리만** 받습니다. validate/install/query는 source Pack을 수정하지 않으며, install은 검증한 바이트를 workspace에 복사하고 활성 Pack 근거만 질의합니다.
+
+```bash
+openoyster pack validate /trusted/packs/example
+openoyster pack validate /trusted/packs/example --profile strict
+openoyster pack install /trusted/packs/example
+openoyster pack list
+openoyster pack show PACK_ID
+openoyster pack query "이 Pack이 뒷받침하는 내용은?" --packs PACK_ID
+```
+
+명령은 자동화 가능한 JSON을 출력합니다. `compatible`은 네 개 validator 파일을, `strict`는 문서화된 열한 개 layout 파일을 요구합니다. supported answer는 항상 global evidence id를 인용합니다. 검색 근거가 없거나 local/모호한 citation 또는 존재하지 않는 citation이 나오면 `unknown`을 반환합니다.
+
+API도 `POST /v1/packs/validate`, `POST /v1/packs/install`, `GET /v1/packs`, `GET /v1/packs/{pack_id}`, `POST /v1/packs/query`로 같은 기능을 제공합니다. 로컬 경로를 읽는 validate, 상태를 바꾸는 install, LLM을 호출할 수 있는 query에는 일반 write API key가 필요합니다. API 오류에는 로컬 경로나 Pack 본문을 넣지 않습니다.
+
+이는 archive 또는 remote ingestion API가 아닙니다. ZIP extraction/quarantine, 자동 update/diff/rollback, OCR/CLIP/audio/video 분석은 후속 범위입니다.
+
 ## 실행과 상태 확인
 
 ```bash
@@ -151,3 +170,36 @@ Compose는 PostgreSQL, migration, API, worker를 분리합니다. 호스트의 `
 - Kafka/NATS 수준의 분산 이벤트 전달과 부하·장애 주입 검증이 없습니다.
 
 따라서 현재 버전은 **실제로 실행되고 확장 가능한 공유용 알파/레퍼런스 구현**이지, 사람 검토 없이 고위험 의사결정을 맡길 완제품은 아닙니다.
+
+## Autonomous Deliberation D1
+
+Autonomous Deliberation D1은 하나의 Mission과 이미 설치한 OpenCrab Pack으로 Decision Dossier를 만듭니다. 사실 근거는 Pack evidence뿐입니다. Mission의 목표·질문·제약·선호·문맥은 제어 입력이며 사실 근거가 아닙니다. 실행 결과에는 belief, option, 기본/불리 scenario, 독립 critic 결과, 선택 또는 기권, flip condition, 실행하지 않는 Knowledge Request, Cognitive Impact, 결정적 audit replay가 저장됩니다.
+
+stub provider로 fixture 전체 흐름을 확인하는 예시는 다음과 같습니다.
+
+```bash
+openoyster pack install tests/fixtures/opencrab_pack_runtime/p0-f1-minimal
+
+openoyster deliberate run tests/fixtures/deliberation_d1/mission_happy.json \
+  --packs p0-f1-minimal \
+  --impact-baseline-packs p0-f1-minimal \
+  --allow-compatible-packs \
+  --idempotency-key manual-d1-001
+```
+
+첫 명령의 JSON 출력에서 `id`를 확인한 뒤 다음 명령으로 감사 정보를 봅니다.
+
+```bash
+openoyster deliberate show RUN_ID
+openoyster deliberate dossier RUN_ID --format json
+openoyster deliberate dossier RUN_ID --format markdown
+openoyster deliberate impact RUN_ID
+openoyster deliberate knowledge-requests RUN_ID
+openoyster deliberate replay RUN_ID
+```
+
+정상 경로는 유계 stage를 정확히 다섯 번 호출합니다. 검색된 Pack evidence가 없으면 모델 호출 없이 기권으로 완료합니다. 같은 `--idempotency-key`를 다시 쓰면 새 실행을 만들지 않고 저장된 run을 반환합니다. `replay`는 LLM을 재호출하지 않고 저장된 artifact와 dossier digest를 다시 검증합니다.
+
+CLI 종료 코드는 완료된 선택/기권이면 `0`, database·indeterminate·복구 불가능 실행 오류면 `1`, Mission·Pack scope/profile·인자 오류면 `2`입니다. 출력에는 raw Pack record, 전체 prompt, 서버 파일 경로, storage URI, runtime 설정, secret을 넣지 않습니다.
+
+API는 `POST /v1/deliberations`, `GET /v1/deliberations/{id}`, dossier, replay, cognitive-impact, knowledge-requests endpoint를 제공합니다. **D1 API는 조회를 포함한 모든 endpoint에 설정된 API key가 필요합니다.** 생성 요청에는 `Idempotency-Key` header도 반드시 넣어야 합니다. Knowledge Request는 기록·내보내기만 하며 Pack 갱신, 검색, 외부 작업을 자동 실행하지 않습니다. 요청/응답 형식은 `docs/API_REFERENCE.md`의 Autonomous Deliberation D1 절을 따르세요.

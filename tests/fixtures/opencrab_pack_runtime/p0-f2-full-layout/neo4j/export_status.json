@@ -1,0 +1,11 @@
+{
+  "edges": 2,
+  "evidence": 1,
+  "exported_at": "2026-07-13T00:00:00Z",
+  "live_neo4j_executed": false,
+  "nodes": 3,
+  "origin": "fixture_synthetic",
+  "output": "neo4j/opencrab_ingest.jsonl",
+  "pack_id": "p0-f2-full-layout",
+  "status": "ok"
+}

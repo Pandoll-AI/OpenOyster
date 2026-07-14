@@ -15,6 +15,9 @@ venv/
 
 # OpenOyster runtime
 openoyster.db
+*.db-wal
+*.db-shm
+*.db-journal
 workspace/
 .codex-llm/logs/
 .omo/

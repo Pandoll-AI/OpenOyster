@@ -446,3 +446,436 @@ class SystemState(Base):
     key: Mapped[str] = mapped_column(String(180), primary_key=True)
     value_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PackInstall(Base):
+    """Installed OpenCrab Pack revision (content-addressed by source_digest)."""
+
+    __tablename__ = "pack_installs"
+    __table_args__ = (
+        UniqueConstraint("source_digest", name="uq_pack_installs_source_digest"),
+        UniqueConstraint(
+            "pack_id",
+            "declared_version",
+            "source_digest",
+            name="uq_pack_installs_revision",
+        ),
+        Index("ix_pack_installs_pack_status", "pack_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pack_id: Mapped[str] = mapped_column(String(250), index=True)
+    declared_version: Mapped[str] = mapped_column(String(120), index=True)
+    format_version: Mapped[str] = mapped_column(String(80), default="opencrab-pack-v1")
+    grammar_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_digest: Mapped[str] = mapped_column(String(128), index=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="directory")
+    source_location: Mapped[str] = mapped_column(Text)
+    storage_uri: Mapped[str] = mapped_column(Text)
+    admission_profile: Mapped[str] = mapped_column(String(40), default="compatible")
+    status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+    original_manifest_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    original_quality_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    admission_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    files: Mapped[list[PackFile]] = relationship(back_populates="install", cascade="all, delete-orphan")
+    nodes: Mapped[list[PackNode]] = relationship(back_populates="install", cascade="all, delete-orphan")
+    edges: Mapped[list[PackEdge]] = relationship(back_populates="install", cascade="all, delete-orphan")
+    evidence: Mapped[list[PackEvidence]] = relationship(
+        back_populates="install", cascade="all, delete-orphan"
+    )
+
+
+class PackFile(Base):
+    __tablename__ = "pack_files"
+    __table_args__ = (
+        UniqueConstraint("pack_install_id", "relative_path", name="uq_pack_files_install_path"),
+        Index("ix_pack_files_hash", "computed_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="CASCADE"), index=True
+    )
+    relative_path: Mapped[str] = mapped_column(String(500))
+    role: Mapped[str] = mapped_column(String(80), default="content")
+    media_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    declared_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    computed_hash: Mapped[str] = mapped_column(String(128))
+    byte_count: Mapped[int] = mapped_column(Integer, default=0)
+    storage_uri: Mapped[str] = mapped_column(Text)
+    validation_status: Mapped[str] = mapped_column(String(40), default="ok")
+
+    install: Mapped[PackInstall] = relationship(back_populates="files")
+
+
+class PackNode(Base):
+    __tablename__ = "pack_nodes"
+    __table_args__ = (
+        UniqueConstraint("global_node_id", name="uq_pack_nodes_global_id"),
+        UniqueConstraint("pack_install_id", "local_node_id", name="uq_pack_nodes_install_local"),
+        Index("ix_pack_nodes_label", "label"),
+        Index("ix_pack_nodes_type", "node_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="CASCADE"), index=True
+    )
+    local_node_id: Mapped[str] = mapped_column(String(500))
+    global_node_id: Mapped[str] = mapped_column(String(1000), index=True)
+    space: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    node_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    properties_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    quality_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    record_hash: Mapped[str] = mapped_column(String(128))
+    evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    install: Mapped[PackInstall] = relationship(back_populates="nodes")
+
+
+class PackEdge(Base):
+    __tablename__ = "pack_edges"
+    __table_args__ = (
+        UniqueConstraint("global_edge_id", name="uq_pack_edges_global_id"),
+        UniqueConstraint("pack_install_id", "local_edge_id", name="uq_pack_edges_install_local"),
+        Index("ix_pack_edges_relation", "relation"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="CASCADE"), index=True
+    )
+    local_edge_id: Mapped[str] = mapped_column(String(500))
+    global_edge_id: Mapped[str] = mapped_column(String(1000), index=True)
+    from_local_id: Mapped[str] = mapped_column(String(500))
+    to_local_id: Mapped[str] = mapped_column(String(500))
+    from_global_id: Mapped[str] = mapped_column(String(1000))
+    to_global_id: Mapped[str] = mapped_column(String(1000))
+    from_space: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    to_space: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    relation: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    properties_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    record_hash: Mapped[str] = mapped_column(String(128))
+    evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    install: Mapped[PackInstall] = relationship(back_populates="edges")
+
+
+class PackEvidence(Base):
+    __tablename__ = "pack_evidence"
+    __table_args__ = (
+        UniqueConstraint("global_evidence_id", name="uq_pack_evidence_global_id"),
+        UniqueConstraint(
+            "pack_install_id", "local_evidence_id", name="uq_pack_evidence_install_local"
+        ),
+        Index("ix_pack_evidence_kind", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="CASCADE"), index=True
+    )
+    local_evidence_id: Mapped[str] = mapped_column(String(500))
+    global_evidence_id: Mapped[str] = mapped_column(String(1000), index=True)
+    kind: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    parser_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ocr_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    vision_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    location_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    links_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    asset_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_record_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    record_hash: Mapped[str] = mapped_column(String(128))
+
+    install: Mapped[PackInstall] = relationship(back_populates="evidence")
+
+
+class DeliberationRun(Base):
+    """Source-of-truth aggregate for one Autonomous Deliberation D1 execution."""
+
+    __tablename__ = "deliberation_runs"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_deliberation_runs_idempotency_key"),
+        Index("ix_deliberation_runs_status", "status"),
+        Index("ix_deliberation_runs_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(250))
+    mission_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    mission_digest: Mapped[str] = mapped_column(String(128))
+    policy_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    runtime_config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    policy_digest: Mapped[str] = mapped_column(String(128))
+    runtime_config_digest: Mapped[str] = mapped_column(String(128))
+    contract_version: Mapped[str] = mapped_column(String(80))
+    prompt_template_version: Mapped[str] = mapped_column(String(80))
+    primary_scope_digest: Mapped[str] = mapped_column(String(128))
+    impact_baseline_scope_digest: Mapped[str] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(40), default="created")
+    current_stage: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    failure_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    degraded_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    llm_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    pack_scopes: Mapped[list[DeliberationPackScope]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    evidence_snapshots: Mapped[list[DeliberationEvidenceSnapshot]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    stage_calls: Mapped[list[DeliberationStageCall]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    artifacts: Mapped[list[DeliberationArtifact]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    dossier: Mapped[DeliberationDossier | None] = relationship(
+        back_populates="run", cascade="all, delete-orphan", uselist=False
+    )
+    cognitive_impact: Mapped[DeliberationCognitiveImpact | None] = relationship(
+        back_populates="run", cascade="all, delete-orphan", uselist=False
+    )
+    replay_results: Mapped[list[DeliberationReplayResult]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class DeliberationPackScope(Base):
+    __tablename__ = "deliberation_pack_scopes"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "role",
+            "pack_install_id",
+            name="uq_deliberation_pack_scopes_run_role_install",
+        ),
+        Index("ix_deliberation_pack_scopes_run_role", "run_id", "role"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(40))
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="RESTRICT"), index=True
+    )
+    pack_id: Mapped[str] = mapped_column(String(250))
+    declared_version: Mapped[str] = mapped_column(String(120))
+    source_digest: Mapped[str] = mapped_column(String(128))
+    admission_profile: Mapped[str] = mapped_column(String(40))
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="pack_scopes")
+
+
+class DeliberationEvidenceSnapshot(Base):
+    __tablename__ = "deliberation_evidence_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "snapshot_key",
+            name="uq_deliberation_evidence_snapshots_run_key",
+        ),
+        Index("ix_deliberation_evidence_snapshots_global", "global_evidence_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_key: Mapped[str] = mapped_column(String(120))
+    pack_evidence_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_evidence.id", ondelete="RESTRICT"), index=True
+    )
+    global_evidence_id: Mapped[str] = mapped_column(String(1000))
+    local_evidence_id: Mapped[str] = mapped_column(String(500))
+    pack_install_id: Mapped[int] = mapped_column(Integer)
+    record_hash: Mapped[str] = mapped_column(String(128))
+    prompt_visible_payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    payload_digest: Mapped[str] = mapped_column(String(128))
+    retrieval_rank: Mapped[int] = mapped_column(Integer)
+    retrieval_score: Mapped[float] = mapped_column(Float, default=0.0)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="evidence_snapshots")
+    citations: Mapped[list[DeliberationCitation]] = relationship(back_populates="evidence_snapshot")
+
+
+class DeliberationStageCall(Base):
+    __tablename__ = "deliberation_stage_calls"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "stage",
+            "attempt_number",
+            name="uq_deliberation_stage_calls_run_stage_attempt",
+        ),
+        Index("ix_deliberation_stage_calls_run_stage", "run_id", "stage"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    stage: Mapped[str] = mapped_column(String(80))
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(40), default="started")
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    effort: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    template_version: Mapped[str] = mapped_column(String(80))
+    prompt_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    config_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    input_manifest_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    response_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    response_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    raw_response_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    raw_response_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usage_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="stage_calls")
+    artifacts: Mapped[list[DeliberationArtifact]] = relationship(back_populates="stage_call")
+
+
+class DeliberationArtifact(Base):
+    __tablename__ = "deliberation_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "kind",
+            "local_key",
+            name="uq_deliberation_artifacts_run_kind_key",
+        ),
+        Index("ix_deliberation_artifacts_run_kind", "run_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    stage_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("deliberation_stage_calls.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(80))
+    local_key: Mapped[str] = mapped_column(String(120))
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    payload_digest: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="artifacts")
+    stage_call: Mapped[DeliberationStageCall | None] = relationship(back_populates="artifacts")
+    assertions: Mapped[list[DeliberationAssertion]] = relationship(
+        back_populates="artifact", cascade="all, delete-orphan"
+    )
+
+
+class DeliberationAssertion(Base):
+    __tablename__ = "deliberation_assertions"
+    __table_args__ = (Index("ix_deliberation_assertions_classification", "classification"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_artifacts.id", ondelete="CASCADE"), index=True
+    )
+    path: Mapped[str] = mapped_column(String(250), default="")
+    text: Mapped[str] = mapped_column(Text)
+    classification: Mapped[str] = mapped_column(String(40))
+    mission_pointer: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    artifact_ref: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    issue_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    artifact: Mapped[DeliberationArtifact] = relationship(back_populates="assertions")
+    citations: Mapped[list[DeliberationCitation]] = relationship(
+        back_populates="assertion", cascade="all, delete-orphan"
+    )
+
+
+class DeliberationCitation(Base):
+    __tablename__ = "deliberation_citations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assertion_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_assertions.id", ondelete="CASCADE"), index=True
+    )
+    evidence_snapshot_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_evidence_snapshots.id", ondelete="RESTRICT"), index=True
+    )
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    json_pointer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    value_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    assertion: Mapped[DeliberationAssertion] = relationship(back_populates="citations")
+    evidence_snapshot: Mapped[DeliberationEvidenceSnapshot] = relationship(
+        back_populates="citations"
+    )
+
+
+class DeliberationDossier(Base):
+    __tablename__ = "deliberation_dossiers"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_deliberation_dossiers_run"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    dossier_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    dossier_markdown: Mapped[str] = mapped_column(Text, default="")
+    json_digest: Mapped[str] = mapped_column(String(128))
+    markdown_digest: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="dossier")
+
+
+class DeliberationCognitiveImpact(Base):
+    __tablename__ = "deliberation_cognitive_impacts"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_deliberation_cognitive_impacts_run"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    method: Mapped[str] = mapped_column(String(80), default="citation_scope_projection_v1")
+    impact_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    impact_digest: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="cognitive_impact")
+
+
+class DeliberationReplayResult(Base):
+    __tablename__ = "deliberation_replay_results"
+    __table_args__ = (Index("ix_deliberation_replay_results_run", "run_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    matched: Mapped[bool] = mapped_column(Boolean, default=False)
+    result_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    stored_dossier_digest: Mapped[str] = mapped_column(String(128))
+    recomputed_dossier_digest: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[DeliberationRun] = relationship(back_populates="replay_results")

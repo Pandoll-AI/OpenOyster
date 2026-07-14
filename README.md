@@ -3,36 +3,144 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
-[![Database](https://img.shields.io/badge/database-SQLite%20%7C%20PostgreSQL-336791.svg)](docs/OPERATIONS.md)
-[![Language](https://img.shields.io/badge/language-Korean%20%7C%20English-lightgrey.svg)](README-en.md)
+[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen.svg)](tests)
+[![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
+[![Language](https://img.shields.io/badge/docs-Korean%20%7C%20English-lightgrey.svg)](README-en.md)
 
 > 한국어 우선 문서입니다. English documentation is available in [README-en.md](README-en.md).
 
 <p align="center">
-  <img src="assets/hero.png" alt="OpenOyster가 신호, 가설, 이벤트, 산출물을 근거 그래프로 연결하는 인텔리전스 런타임 hero image" width="100%">
+  <img src="assets/hero.png" alt="OpenOyster가 검증된 OpenCrab Pack을 근거로 숙고하고 의사결정 dossier를 만드는 모습을 표현한 hero image" width="100%">
 </p>
 
-**OpenOyster는 문서와 피드에서 근거 있는 신호를 뽑고, 가설과 반증 후보를 추적 가능한 형태로 남기는 알파 단계의 인텔리전스 런타임입니다.**
+**OpenOyster는 OpenCrab Pack을 사실 입력으로만 사용하는 자율 숙의 도구입니다.**
 
-현재 구현은 LLM-first 파이프라인입니다. 기본 추출기는 `codex` CLI를 배치로 호출하고, 구조 검증에 실패하거나 모델을 쓸 수 없으면 저품질 대체 결과를 만들지 않고 deferred 상태와 실패 사유를 남깁니다. 검색은 SQLite FTS5를 사용하고, 가설 병합과 방향성 반증 판정은 LLM 판정자를 통합니다.
+질문에 답하는 데서 멈추지 않습니다. 하나의 Mission을 받아 믿음, 대안, 불리한
+시나리오, 반론을 구성하고, 선택하거나 기권합니다. 무엇이 바뀌면 결정을 뒤집어야
+하는지와 어떤 지식이 더 필요한지도 함께 남깁니다.
 
-## 현재 실제 동작
+한 문장으로 정리하면 이렇습니다.
 
-- 파일, URL, RSS, GitHub 릴리즈/이슈를 durable DB에 수집합니다.
-- 문서를 청크로 나누고 codex CLI 기반 LLM 추출로 entity, claim, signal을 만듭니다.
-- 추출 실패는 chunk 단위로 retry/deferred 상태와 오류를 기록합니다.
-- SQLite FTS5로 관련 청크를 찾고 matched terms와 provenance를 남깁니다.
-- LLM 병합 판정으로 유사한 scoped claim을 같은 hypothesis로 합칩니다.
-- counter-evidence 평가는 방향성을 구분하고 verbatim quote가 있는 반대 근거만 인정하도록 설계했습니다.
-- gold set 평가 하네스가 core entity recall, signal type F1, quote existence, counter-evidence precision을 측정합니다.
-- API, read-only dashboard, Typer CLI, Alembic migration, Docker Compose가 있습니다.
+> OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 생각하고 결정한다.
 
-OpenOyster는 범용 자율 에이전트가 아닙니다. 고위험 의사결정을 자동화하는 제품도 아닙니다. 지금의 목표는 **LLM 추출 결과를 근거, 이벤트, 평가 기록과 함께 운영 가능한 형태로 남기는 reference implementation**입니다.
+# 왜 필요한가
 
-## 5분 데모
+잘 정리된 지식 그래프도 그 자체로는 결정이 아닙니다. 실제 판단에는 서로 다른
+근거를 연결하고, 충돌을 드러내고, 대안을 비교하고, 실패 가능성을 상상하는 과정이
+필요합니다.
 
-Python 3.11-3.13을 지원합니다.
+일반적인 RAG 답변은 “무엇을 찾았는가”를 설명합니다. OpenOyster는 여기서 한 단계
+더 나아가 다음 질문을 다룹니다.
+
+- 지금 믿을 수 있는 것은 무엇인가?
+- 근거가 충돌하는 지점은 어디인가?
+- 실행 가능한 대안은 무엇인가?
+- 어떤 제약 때문에 제외되는가?
+- 불리한 조건에서는 어떻게 실패하는가?
+- 지금 선택해야 하는가, 더 알아볼 때까지 기권해야 하는가?
+- 어떤 새로운 근거가 들어오면 결정을 뒤집어야 하는가?
+
+이 때문에 OpenOyster의 핵심 산출물은 채팅 답변이 아니라 **Decision Dossier**입니다.
+
+# OpenCrab과의 역할 분리
+
+OpenCrab과 OpenOyster는 경쟁 제품이 아니라 앞뒤로 연결되는 두 계층입니다.
+
+```text
+원천 자료
+  ↓
+OpenCrab
+  지식 수집 · 구조화 · 검증 · Pack 생성/갱신
+  ↓ OpenCrab Pack
+OpenOyster
+  믿음 형성 · 대안 생성 · 시나리오 · 반론 · 결정/기권
+  ↓
+Decision Dossier + Knowledge Requests
+```
+
+OpenOyster는 입력을 의도적으로 OpenCrab Pack으로 제한합니다. 웹 검색, 모델의 사전
+지식, Mission에 적힌 사실 같은 내용을 몰래 근거로 승격하지 않습니다.
+
+- Pack 생성과 갱신은 OpenCrab의 역할입니다.
+- Knowledge Request는 OpenCrab이나 사람에게 전달할 요청입니다. OpenOyster가
+  자동으로 검색하거나 Pack을 고치지 않습니다.
+
+# 지금 실제로 수행하는 일
+
+Autonomous Deliberation D1은 Mission 하나와 설치된 Pack 집합을 받아 다음 흐름을
+한 번에 실행합니다.
+
+```text
+Mission
+  ↓
+정확한 Pack install ID 동결
+  ↓
+Evidence snapshot
+  ↓
+Belief State
+  ↓
+Options + hard-constraint 판정
+  ↓
+Expected / Adverse Scenarios
+  ↓
+Independent Critic
+  ↓
+Selection 또는 Abstention
+  ↓
+Flip Conditions + Knowledge Requests
+  ↓
+Cognitive Impact + Decision Dossier + Audit Replay
+```
+
+정상 실행은 다섯 개의 유계 LLM stage를 사용합니다.
+
+1. `deliberation_beliefs` — 지지·반대 근거를 가진 atomic belief를 만듭니다.
+2. `deliberation_options` — 대안과 모든 Mission 제약을 연결합니다.
+3. `deliberation_scenarios` — 각 대안의 기본·불리한 결과를 구성합니다.
+4. `deliberation_critic` — 누락 대안, 증거 편향, 제약 오해, 과도한 주장을 검사합니다.
+5. `deliberation_decision` — 선택 또는 기권, 전환 조건, 지식 요청을 만듭니다.
+
+근거가 없으면 모델을 부르지 않고 기권합니다. critic이 통과하지 못하거나 실행 가능한
+대안이 부족해도 억지로 선택하지 않습니다.
+
+# 근거를 믿는 방법
+
+OpenOyster는 단순한 citation ID만으로 사실을 인정하지 않습니다.
+
+- 실행 전에 정확한 Pack 설치 ID와 digest를 고정합니다.
+- 모델에 보여 준 evidence만 snapshot으로 저장합니다.
+- grounded assertion마다 정확한 문장 인용 또는 JSON pointer를 요구합니다.
+- 인용 문장이 evidence text에 실제로 존재하는지 검사합니다.
+- JSON pointer가 정확한 값과 digest로 해석되는지 검사합니다.
+- local-only ID, 다른 Pack의 ID, 조회되지 않은 evidence는 거부합니다.
+- Mission의 목표와 제약은 제어 입력일 뿐 evidence가 아닙니다.
+
+정확한 인용은 출처를 증명하지만 의미적 함의까지 수학적으로 보장하지는 않습니다.
+그래서 별도의 critic stage와 기권 경로를 둡니다.
+
+# Decision Dossier에 들어가는 것
+
+각 실행은 JSON과 Markdown 두 형식으로 저장됩니다.
+
+- Mission snapshot과 digest
+- 사용한 Pack ID, version, install ID, source digest
+- belief와 상충 근거
+- option, 제외 이유, hard-constraint 판정
+- expected/adverse scenario
+- critic 결과
+- 선택 또는 기권과 그 근거
+- 결정을 뒤집는 flip condition
+- 부족한 지식을 명시한 Knowledge Request
+- citation-scope 기반 Cognitive Impact
+- evidence anchor와 stage/model/effort 정보
+
+`replay`는 LLM을 다시 호출하지 않습니다. 저장된 입력과 산출물을 재검증하고 dossier를
+다시 렌더링해 digest가 같은지 확인합니다. 새로운 모델 호출은 replay가 아니라 별도의
+새 실행이어야 합니다.
+
+# 5분 실행
+
+Python 3.11–3.13을 지원합니다.
 
 ```bash
 python -m venv .venv
@@ -41,138 +149,205 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 
 openoyster init
-openoyster ingest examples/inbox
-openoyster run --cycles 4 --sleep 0
-openoyster status
-openoyster serve --host 127.0.0.1 --port 8080
 ```
 
-기본값은 `OPENOYSTER_LLM_PROVIDER=codex`입니다. 실제 추출 데모에는 `codex` CLI와 `.codex-llm/models.json`, `.codex-llm/pipeline.json` 설정이 필요합니다.
+먼저 예제 OpenCrab Pack을 설치합니다. 이 fixture는 네 파일짜리 compatible Pack이므로
+D1 실행에서 명시적으로 허용합니다.
 
 ```bash
+openoyster pack install tests/fixtures/opencrab_pack_runtime/p0-f1-minimal
+```
+
+기능 흐름을 빠르게 확인하려면 stub provider를 사용합니다. Stub은 테스트용이며 실제
+판단 품질을 의미하지 않습니다.
+
+```bash
+export OPENOYSTER_LLM_PROVIDER=stub
+
+openoyster deliberate run tests/fixtures/deliberation_d1/mission_happy.json \
+  --packs p0-f1-minimal \
+  --impact-baseline-packs p0-f1-minimal \
+  --allow-compatible-packs \
+  --idempotency-key demo-d1-001
+```
+
+출력에서 `id`를 확인한 뒤 전체 결과를 조회합니다.
+
+```bash
+openoyster deliberate show RUN_ID
+openoyster deliberate dossier RUN_ID --format markdown
+openoyster deliberate impact RUN_ID
+openoyster deliberate knowledge-requests RUN_ID
+openoyster deliberate replay RUN_ID
+```
+
+기본 provider는 `codex`입니다. 실제 로컬 생성에는 Codex CLI와
+`.codex-llm/models.json`, `.codex-llm/pipeline.json` 설정이 필요합니다.
+
+```bash
+unset OPENOYSTER_LLM_PROVIDER
 openoyster doctor
 ```
 
-codex 설정 없이 흐름만 확인하려면 stub provider를 쓰십시오. Stub 결과는 기능 점검용이며 평가 수치로 해석하면 안 됩니다.
+# Mission 작성법
 
-```bash
-OPENOYSTER_LLM_PROVIDER=stub openoyster run --cycles 4 --sleep 0
+Mission은 YAML 또는 JSON으로 작성합니다.
+
+```yaml
+goal: 되돌릴 수 있는 대응안을 선택한다
+decision_question: 현재 Pack 근거로 어떤 대응을 선택해야 하는가?
+constraints:
+  - Pack 밖의 사실을 사용하지 않는다
+  - 되돌릴 수 없는 행동은 선택하지 않는다
+preferences:
+  - 불확실할 때는 정보 획득을 우선한다
+deadline: null
+context: 이 내용은 제어용 배경이며 사실 근거가 아니다
 ```
 
-대시보드: `http://127.0.0.1:8080`
+`goal`과 `decision_question`은 필수입니다. `constraints`, `preferences`, `deadline`,
+`context`, `mission_charter_id`는 선택 사항입니다. Mission 안의 문장이 사실처럼 보여도
+Pack evidence를 대신할 수 없습니다.
 
-OpenAPI: `http://127.0.0.1:8080/docs`
+# Cognitive Impact
 
-로컬 장기 실행 개발 런처:
+Cognitive Impact는 Pack diff가 아닙니다. 사용자가 지정한 primary Pack 집합과 baseline
+부분집합을 비교해, 현재 결정의 인용 근거가 baseline에서도 유지되는지만 계산합니다.
+
+- `retained` — 인용 근거가 baseline에 모두 남아 있습니다.
+- `partially_supported` — 일부 근거만 남아 있습니다.
+- `unsupported` — 근거가 baseline에 없습니다.
+
+최종 decision support는 `retained`, `weakened`, `lost`로 집계합니다. 이 기능은 Pack의
+업데이트나 삭제 원인을 추론하지 않으며, baseline만으로 새로 실행했을 때 나올 다른
+추론을 예측하지도 않습니다.
+
+# CLI 지도
+
+```text
+openoyster pack validate PATH [--profile compatible|strict]
+openoyster pack install PATH [--profile compatible|strict]
+openoyster pack list
+openoyster pack show PACK_ID
+openoyster pack query "QUESTION" [--packs PACK_ID,...]
+
+openoyster deliberate run MISSION.yaml --packs PACK_ID,... --idempotency-key KEY
+openoyster deliberate show RUN_ID
+openoyster deliberate dossier RUN_ID --format json|markdown
+openoyster deliberate replay RUN_ID
+openoyster deliberate impact RUN_ID
+openoyster deliberate knowledge-requests RUN_ID
+
+openoyster serve
+openoyster status
+openoyster doctor
+openoyster db upgrade
+```
+
+기존 durable signal/hypothesis runtime도 유지됩니다. 파일·URL·RSS·GitHub 읽기,
+event-driven loop, evidence inspection, policy/evaluation 명령은 상세 매뉴얼에서 확인할 수
+있습니다.
+
+# API
+
+모든 D1 endpoint는 설정된 API key를 요구합니다. 생성 요청에는
+`Idempotency-Key`도 필요합니다.
+
+```text
+POST /v1/deliberations
+GET  /v1/deliberations/{id}
+GET  /v1/deliberations/{id}/dossier
+POST /v1/deliberations/{id}/replay
+GET  /v1/deliberations/{id}/cognitive-impact
+GET  /v1/deliberations/{id}/knowledge-requests
+```
+
+API 응답에는 raw Pack body, 전체 prompt, server path, storage URI, secret이 포함되지
+않습니다. 요청 예시는 [API Reference](docs/API_REFERENCE.md)에 있습니다.
+
+# 로컬 서비스 실행
 
 ```bash
 ./run.sh start
 ./run.sh stop
+./run.sh restart
 ```
 
-`run.sh`는 로컬 개발용입니다. 원격 또는 장기 운영에는 launchd, systemd, 컨테이너, 또는 서버 배포 방식을 별도로 구성해야 합니다.
+`run.sh`는 `0.0.0.0:3388`에 바인딩하고 Tailscale IPv4 URL을 출력하는 임시 로컬 개발
+런처입니다. 정식 장기 운영에는 macOS `launchd`, 컨테이너, 또는 원격 서버 배포를
+사용해야 합니다.
 
-`run.sh`는 Tailscale 접근을 위해 `0.0.0.0:3377`에 바인딩합니다. 읽기 API와 대시보드는 API 키로 보호되지 않으므로 신뢰할 수 없는 네트워크에서 실행하지 마십시오. `stop`은 개발 편의를 위해 3377 포트를 점유한 프로세스를 종료합니다.
-
-## RSS 예시
+# 검증
 
 ```bash
-openoyster ingest-rss examples/feeds.yaml
+PATH="$PWD/.venv/bin:$PATH" make check
 ```
 
-`examples/feeds.yaml`에는 AI Times, Byline Network, TechCrunch AI RSS가 들어 있습니다.
+현재 검증 범위는 다음을 포함합니다.
 
-## 평가 상태
+- Ruff와 mypy
+- 145개 unit/integration test
+- Pack source 불변성
+- D1 contract, migration, runtime, CLI/API
+- SQLite migration upgrade/downgrade
+- sdist와 wheel build
 
-gold set 34건(한/영 실문서, 저자 미작성)에 대한 최신 품질 루프 수치입니다 (`gpt-5.6-sol`, 이터레이션 5). 라벨은 아직 사람이 검수하지 않았습니다.
+# 의도적으로 하지 않는 일
 
-| Metric | Value | Gate | Note |
-|---|---:|---|---|
-| Korean core entity recall | 0.912 | ≥ 0.80 PASS | unreviewed labels |
-| Entity precision | 0.525 | (no gate) | 0.367에서 개선 |
-| Signal type F1 | 0.804 | ≥ 0.75 PASS | unreviewed labels |
-| Quote existence | 0.996 | ≥ 0.95 PASS | 날조 인용 감지 지표 |
-| Counter-evidence precision | 측정 불가 (oppose 0건) | ≥ 0.70 | 아래 설명 참조 |
+- OpenCrab Pack 생성·자동 갱신·revision diff·rollback
+- 웹 검색이나 모델 사전 지식의 evidence 승격
+- Knowledge Request 자동 수행
+- 범용 자율 agent와 외부 시스템 write action
+- 사람 승인 없는 고위험 결정 자동 집행
 
-Counter-evidence는 6회 이터레이션의 결과가 그대로 기록돼 있습니다 (`docs/EVAL_REPORT.md`): 검증 게이트 도입 전에는 시스템이 "부정 톤이지만 실제로는 가설을 지지하는" 인용을 반증으로 날조했고(정밀도 0.000), 모든 oppose 저장 경로에 max-effort 검증자를 강제한 뒤에는 날조가 0건이 됐습니다. 현재 코퍼스에는 진짜 상호 모순 문서쌍이 부족해 양성 정밀도는 미측정 상태입니다.
+OpenOyster는 현재 알파입니다. 높은 위험의 판단에는 dossier와 evidence를 사람이
+검토해야 합니다.
 
-현재 judge, verifier, auditor는 모두 `gpt-5.6-sol`을 사용하며 역할 프롬프트와 reasoning effort만 다릅니다. 따라서 counter precision은 독립 확인이 아니라 동일 모델의 self-consistency 측정치입니다. 수치는 운영 품질의 증거이지, 제품 안정성 보증은 아닙니다.
-
-## CLI 지도
-
-```text
-openoyster init
-openoyster ingest PATH
-openoyster ingest-url URL
-openoyster ingest-rss examples/feeds.yaml
-openoyster ingest-github owner/repo --kind releases
-openoyster ingest-github owner/repo --kind issues
-openoyster run [--cycles N | --forever]
-openoyster serve
-openoyster status
-openoyster doctor
-openoyster doctor-dev
-openoyster feedback ARTIFACT_ID --verdict useful
-openoyster hypothesis show HYPOTHESIS_ID --evidence
-openoyster artifact show ARTIFACT_ID --provenance
-openoyster eval gold [--limit N]
-openoyster eval counter [--cycles N]
-openoyster gold review
-openoyster export --output FILE
-openoyster policy show
-openoyster policy list
-openoyster policy create examples/policy.sample.yaml
-openoyster policy promote POLICY_ID
-openoyster db upgrade
-```
-
-## 프로젝트 구조
+# 프로젝트 구조
 
 ```text
 src/openoyster/
-  api/          FastAPI application and escaped read-only dashboard
-  connectors/   Filesystem, HTTP, RSS, GitHub ingestion
-  loops/        Eight event-driven loops
-  migrations/   Alembic environment and versioned schema
-  services/     LLM runtime, extraction, retrieval, judging, evaluation, tools
+  deliberation_contracts.py       D1의 닫힌 데이터 계약
+  api/                             FastAPI와 D1 endpoint
+  migrations/                     Pack/D1 Alembic schema
+  services/
+    opencrab_packs.py              Pack 검증·불변 설치
+    pack_retrieval.py              Pack-aware retrieval
+    deliberation.py                다섯 stage 오케스트레이션
+    deliberation_gates.py          근거·참조·선택 gate
+    deliberation_dossier.py        JSON/Markdown dossier
+    deliberation_replay.py         LLM-free audit replay
+    cognitive_impact.py            citation-scope projection
 
-tests/          Unit, API, CLI, retrieval, LLM, event, and evaluation tests
-docs/           User, contributor, architecture, operations, security docs
-examples/       Demo documents, policy override, mission example, RSS feeds
+tests/
+  fixtures/opencrab_pack_runtime/  OpenCrab Pack fixtures
+  fixtures/deliberation_d1/        Mission fixture
+  test_deliberation_*.py           D1 contract/runtime/API/migration tests
 ```
 
-## 현재 한계
+# 문서
 
-- Gold labels are marked as unreviewed.
-- Counter-evidence precision measures role-separated self-consistency within `gpt-5.6-sol`, not independent confirmation.
-- SQLite mode is best treated as local or single-host.
-- No default vector index.
-- No RBAC, multi-tenancy, or secret-manager integration.
-- No browser-scale crawler.
-- No external write-action SDK.
-- No load, chaos, or security certification.
-
-## 문서
-
-- [English README](README-en.md)
-- [사용자 매뉴얼](docs/USER_MANUAL_KO.md)
-- [User Manual](docs/USER_MANUAL.md)
-- [Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)
+- [Autonomous Deliberation D1 요구사항](docs/AUTONOMOUS_DELIBERATION_D1_REQUIREMENTS.md)
+- [한국어 사용자 매뉴얼](docs/USER_MANUAL_KO.md)
+- [English User Manual](docs/USER_MANUAL.md)
+- [API Reference](docs/API_REFERENCE.md)
+- [OpenCrab Pack Runtime Requirements](docs/OPENCRAB_PACK_RUNTIME_REQUIREMENTS.md)
+- [MVP-P1 Final Acceptance](docs/delegation/MVP-P1_FINAL_ACCEPTANCE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Operations](docs/OPERATIONS.md)
-- [Policy Tuning](docs/POLICY_TUNING.md)
-- [API Reference](docs/API_REFERENCE.md)
-- [Connectors](docs/CONNECTORS.md)
 - [Threat Model](docs/THREAT_MODEL.md)
+- [Coding Delegation Contract](docs/CODING_DELEGATION_CONTRACT.md)
 
-## 기여
+# 기여
 
-기여 전 [CONTRIBUTING.md](CONTRIBUTING.md)와 [docs/CONTRIBUTOR_MANUAL.md](docs/CONTRIBUTOR_MANUAL.md)를 읽어주세요.
+기여 전 [CONTRIBUTING.md](CONTRIBUTING.md)와
+[Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)을 읽어주세요.
 
-PR은 다음 조건을 만족해야 합니다.
+새 기능은 다음 원칙을 지켜야 합니다.
 
-- 감사 가능한 event/model 흐름 유지.
-- 관련 테스트 추가.
-- lint/typecheck/test 통과.
-- 새 event, policy key, command, endpoint, connector 문서화.
-- 외부 write capability를 추가할 경우 명시적인 approval boundary 포함.
+- Pack-only factual boundary를 약화하지 않습니다.
+- Mission과 evidence를 분리합니다.
+- 새 narrative field에는 epistemic classification과 검증 gate를 둡니다.
+- 관련 RED/GREEN 테스트를 추가합니다.
+- `make check`를 통과합니다.
+- 외부 write capability에는 명시적 승인 경계를 둡니다.

@@ -1,0 +1,16 @@
+[
+  {
+    "community_id": "community:support-chain",
+    "evidence_ids": [
+      "evidence:1"
+    ],
+    "member_node_ids": [
+      "resource:doc:1",
+      "evidence:1",
+      "claim:1"
+    ],
+    "rank": 1,
+    "summary": "resource:doc:1 provides evidence:1, which supports claim:1 in a single validated multi-hop path.",
+    "title": "Document evidence claim chain"
+  }
+]

@@ -196,7 +196,11 @@ def test_repository_codex_config_uses_single_model_with_graded_effort():
         "oppose_verify": "max",
         "merge_judge": "medium",
         "gold_label": "xhigh",
+        "pack_answer": "medium",
     }
+    assert next(stage for stage in pipeline["stages"] if stage["name"] == "pack_answer")[
+        "model_type"
+    ] == "reasoning"
 
 
 def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):

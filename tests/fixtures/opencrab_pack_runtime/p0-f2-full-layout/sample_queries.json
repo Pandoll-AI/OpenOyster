@@ -1,0 +1,20 @@
+[
+  {
+    "expected_relation": "supports",
+    "focus_node_ids": [
+      "claim:1",
+      "evidence:1"
+    ],
+    "id": "q1-claim-support",
+    "question": "What evidence supports claim:1?"
+  },
+  {
+    "expected_relation": "contains",
+    "focus_node_ids": [
+      "resource:doc:1",
+      "evidence:1"
+    ],
+    "id": "q2-document-evidence",
+    "question": "Which evidence chunks does resource:doc:1 contain?"
+  }
+]

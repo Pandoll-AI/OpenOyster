@@ -3,36 +3,67 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
-[![Database](https://img.shields.io/badge/database-SQLite%20%7C%20PostgreSQL-336791.svg)](docs/OPERATIONS.md)
-[![Language](https://img.shields.io/badge/language-English%20%7C%20Korean-lightgrey.svg)](README.md)
+[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen.svg)](tests)
+[![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 
-> This is the English README. The Korean-first README is available in [README.md](README.md).
+> This is the English overview. The Korean-first README is [README.md](README.md).
 
 <p align="center">
-  <img src="assets/hero.png" alt="OpenOyster intelligence runtime hero image showing signals, hypotheses, events, and artifacts connected through an evidence graph" width="100%">
+  <img src="assets/hero.png" alt="OpenOyster deliberating over validated OpenCrab Packs and producing an auditable decision dossier" width="100%">
 </p>
 
-**OpenOyster is an alpha intelligence runtime that extracts grounded signals from documents and feeds, then records hypotheses and counter-evidence in traceable state.**
+**OpenOyster is an autonomous deliberation tool whose factual input is limited to OpenCrab Packs.**
 
-The current implementation is LLM-first. The default extractor calls the `codex` CLI in batches, validates structured output, and records deferred failures instead of fabricating lower-quality fallback results. Retrieval uses SQLite FTS5. Hypothesis merge decisions and directional counter-evidence checks are made by LLM judges.
+It goes beyond answering a question. Given a Mission and selected installed Packs, it builds
+beliefs, alternatives, expected and adverse scenarios, an independent critique, a selection or
+abstention, flip conditions, and Knowledge Requests. It persists the result as an auditable
+Decision Dossier.
 
-## What Actually Works Now
+> OpenCrab builds knowledge. OpenOyster thinks and decides with that knowledge.
 
-- Ingest files, URLs, RSS feeds, and GitHub releases/issues into durable database state.
-- Split documents into chunks and use codex CLI based LLM extraction for entities, claims, and signals.
-- Record retry/deferred status and failure reasons at chunk granularity.
-- Retrieve relevant chunks with SQLite FTS5, matched terms, and provenance.
-- Merge similar scoped claims into hypotheses with an LLM merge judge.
-- Evaluate directional counter-evidence and require verbatim quotes for accepted opposing evidence.
-- Run a gold-set evaluation harness for core entity recall, signal type F1, quote existence, and counter-evidence precision.
-- Use FastAPI, a read-only dashboard, Typer CLI, Alembic migrations, and Docker Compose.
+# Product boundary
 
-OpenOyster is not a general-purpose autonomous agent. It is not ready for unreviewed high-stakes decisions. The current goal is a **reference implementation for operating LLM extraction with evidence, events, and evaluation records**.
+OpenCrab owns collection, structuring, validation, Pack creation, and Pack updates. OpenOyster
+consumes immutable installed Packs and owns the deliberation state.
 
-## 5-Minute Demo
+OpenOyster does not:
 
-Python 3.11-3.13 is supported.
+- create or automatically update Packs;
+- compute Pack record/revision diffs or rollbacks;
+- browse the web or promote model prior knowledge to evidence;
+- execute Knowledge Requests or external actions.
+
+Mission goals, constraints, preferences, deadlines, and context are control inputs. They are
+never evidence.
+
+# Autonomous Deliberation D1
+
+```text
+Mission
+  → freeze exact Pack install IDs
+  → evidence snapshots
+  → beliefs
+  → options and hard constraints
+  → expected/adverse scenarios
+  → independent critic
+  → selection or abstention
+  → flip conditions and Knowledge Requests
+  → Cognitive Impact, Decision Dossier, audit replay
+```
+
+The happy path uses exactly five bounded LLM stages. No retrieved Pack evidence means a
+deterministic abstention with zero model calls. A non-passing critic, too few viable options, or
+a hard-constraint violation also prevents selection.
+
+Grounded assertions require an exact quote or a resolvable JSON pointer into a frozen evidence
+snapshot. Unknown, local-only, out-of-scope, or mismatched citations fail closed.
+
+Replay never invokes the LLM. It revalidates stored stage payloads and citation anchors,
+re-renders the dossier, and compares deterministic hashes.
+
+# Five-minute smoke run
+
+Python 3.11–3.13 is supported.
 
 ```bash
 python -m venv .venv
@@ -41,135 +72,99 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 
 openoyster init
-openoyster ingest examples/inbox
-openoyster run --cycles 4 --sleep 0
-openoyster status
-openoyster serve --host 127.0.0.1 --port 8080
+openoyster pack install tests/fixtures/opencrab_pack_runtime/p0-f1-minimal
+
+export OPENOYSTER_LLM_PROVIDER=stub
+openoyster deliberate run tests/fixtures/deliberation_d1/mission_happy.json \
+  --packs p0-f1-minimal \
+  --impact-baseline-packs p0-f1-minimal \
+  --allow-compatible-packs \
+  --idempotency-key demo-d1-001
 ```
 
-The default provider is `OPENOYSTER_LLM_PROVIDER=codex`. A real extraction demo requires the `codex` CLI plus `.codex-llm/models.json` and `.codex-llm/pipeline.json`.
+Use the returned run ID:
 
 ```bash
-openoyster doctor
+openoyster deliberate show RUN_ID
+openoyster deliberate dossier RUN_ID --format markdown
+openoyster deliberate impact RUN_ID
+openoyster deliberate knowledge-requests RUN_ID
+openoyster deliberate replay RUN_ID
 ```
 
-To check the runtime flow without codex configuration, use the stub provider. Stub output is only for functional smoke testing and should not be interpreted as extraction quality.
+The stub proves the workflow, not decision quality. The default provider is `codex`; real local
+generation requires Codex CLI plus the tracked `.codex-llm` configuration.
 
-```bash
-OPENOYSTER_LLM_PROVIDER=stub openoyster run --cycles 4 --sleep 0
+# Mission format
+
+Mission files can be YAML or JSON.
+
+```yaml
+goal: Choose a reversible response
+decision_question: Which option is supported by the installed Packs?
+constraints:
+  - Do not introduce facts outside Pack evidence
+preferences:
+  - Prefer reversible options
+context: Control background only; never evidence
 ```
 
-Dashboard: `http://127.0.0.1:8080`
+`goal` and `decision_question` are required. Constraints, preferences, deadline, context, and
+mission charter reference are optional.
 
-OpenAPI: `http://127.0.0.1:8080/docs`
+# CLI and API
 
-Local long-running development launcher:
+```text
+openoyster pack validate|install|list|show|query
+openoyster deliberate run|show|dossier|replay|impact|knowledge-requests
+```
+
+D1 API endpoints:
+
+```text
+POST /v1/deliberations
+GET  /v1/deliberations/{id}
+GET  /v1/deliberations/{id}/dossier
+POST /v1/deliberations/{id}/replay
+GET  /v1/deliberations/{id}/cognitive-impact
+GET  /v1/deliberations/{id}/knowledge-requests
+```
+
+Every D1 endpoint requires the configured API key. Create also requires `Idempotency-Key`.
+Responses omit raw Pack bodies, full prompts, filesystem paths, storage URIs, and secrets.
+
+# Local service launcher
 
 ```bash
 ./run.sh start
 ./run.sh stop
 ```
 
-`run.sh` is a local development launcher. Use launchd, systemd, containers, or a server deployment path for formal long-running operation.
+The temporary development launcher binds to `0.0.0.0:3388` and prints the Tailscale IPv4 URL.
+Use macOS `launchd`, containers, or a remote deployment path for formal long-running service.
 
-`run.sh` binds to `0.0.0.0:3377` for Tailscale access. Read endpoints and the dashboard are not protected by the API key, so do not run it on an untrusted network. `stop` terminates the process occupying port 3377 for development convenience.
-
-## RSS Example
+# Verification
 
 ```bash
-openoyster ingest-rss examples/feeds.yaml
+PATH="$PWD/.venv/bin:$PATH" make check
 ```
 
-`examples/feeds.yaml` includes AI Times, Byline Network, and TechCrunch AI RSS feeds.
+The current gate covers Ruff, mypy, 145 tests, D1 contracts/runtime/migrations/CLI/API,
+Pack-source immutability, and sdist/wheel builds.
 
-## Evaluation Status
-
-First-pass gold-set measurements are below. Labels have not yet been human-reviewed.
-
-| Metric | Value | Note |
-|---|---:|---|
-| Korean core entity recall | 1.000 | unreviewed labels |
-| Signal type F1 | 0.806 | unreviewed labels |
-| Quote existence | 0.996 | unreviewed labels |
-| Counter-evidence precision | see `docs/EVAL_REPORT.md` | single-model self-consistency; labels unreviewed |
-
-The judge, verifier, and auditor all use `gpt-5.6-sol`; only their role prompts and reasoning effort differ. Counter-evidence precision therefore measures single-model self-consistency, not independent confirmation. Treat the numbers as operational evidence, not a product guarantee.
-
-## CLI Map
-
-```text
-openoyster init
-openoyster ingest PATH
-openoyster ingest-url URL
-openoyster ingest-rss examples/feeds.yaml
-openoyster ingest-github owner/repo --kind releases
-openoyster ingest-github owner/repo --kind issues
-openoyster run [--cycles N | --forever]
-openoyster serve
-openoyster status
-openoyster doctor
-openoyster doctor-dev
-openoyster feedback ARTIFACT_ID --verdict useful
-openoyster hypothesis show HYPOTHESIS_ID --evidence
-openoyster artifact show ARTIFACT_ID --provenance
-openoyster eval gold [--limit N]
-openoyster eval counter [--cycles N]
-openoyster gold review
-openoyster export --output FILE
-openoyster policy show
-openoyster policy list
-openoyster policy create examples/policy.sample.yaml
-openoyster policy promote POLICY_ID
-openoyster db upgrade
-```
-
-## Repository Layout
-
-```text
-src/openoyster/
-  api/          FastAPI application and escaped read-only dashboard
-  connectors/   Filesystem, HTTP, RSS, GitHub ingestion
-  loops/        Eight event-driven loops
-  migrations/   Alembic environment and versioned schema
-  services/     LLM runtime, extraction, retrieval, judging, evaluation, tools
-
-tests/          Unit, API, CLI, retrieval, LLM, event, and evaluation tests
-docs/           User, contributor, architecture, operations, security docs
-examples/       Demo documents, policy override, mission example, RSS feeds
-```
-
-## Current Limits
-
-- Gold labels are marked as unreviewed.
-- Counter-evidence precision measures role-separated self-consistency within `gpt-5.6-sol`, not independent confirmation.
-- SQLite mode is best treated as local or single-host.
-- No default vector index.
-- No RBAC, multi-tenancy, or secret-manager integration.
-- No browser-scale crawler.
-- No external write-action SDK.
-- No load, chaos, or security certification.
-
-## Documentation
+# Documentation
 
 - [Korean README](README.md)
+- [D1 Requirements](docs/AUTONOMOUS_DELIBERATION_D1_REQUIREMENTS.md)
 - [Korean User Manual](docs/USER_MANUAL_KO.md)
 - [User Manual](docs/USER_MANUAL.md)
-- [Contributor Manual](docs/CONTRIBUTOR_MANUAL.md)
+- [API Reference](docs/API_REFERENCE.md)
+- [OpenCrab Pack Runtime Requirements](docs/OPENCRAB_PACK_RUNTIME_REQUIREMENTS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Operations](docs/OPERATIONS.md)
-- [Policy Tuning](docs/POLICY_TUNING.md)
-- [API Reference](docs/API_REFERENCE.md)
-- [Connectors](docs/CONNECTORS.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 
-## Contributing
+# Status
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/CONTRIBUTOR_MANUAL.md](docs/CONTRIBUTOR_MANUAL.md) before opening a PR.
-
-Pull requests should:
-
-- preserve auditable event/model flow;
-- add relevant tests;
-- pass lint, typecheck, and tests;
-- document new events, policy keys, commands, endpoints, or connectors;
-- include an explicit approval boundary for any external write capability.
+OpenOyster is alpha software. Exact anchors prove provenance, not semantic entailment. Humans
+should review the dossier and underlying evidence before using it for high-stakes decisions.

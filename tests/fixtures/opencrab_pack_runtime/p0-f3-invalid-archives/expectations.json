@@ -1,0 +1,37 @@
+{
+  "archives": {
+    "absolute-path.zip": {
+      "primary_issue": "absolute_path"
+    },
+    "case-collision.zip": {
+      "primary_issue": "case_collision"
+    },
+    "compression-ratio-limit.zip": {
+      "primary_issue": "compression_ratio_limit"
+    },
+    "duplicate-path.zip": {
+      "primary_issue": "duplicate_path"
+    },
+    "file-count-limit.zip": {
+      "primary_issue": "file_count_limit"
+    },
+    "path-traversal.zip": {
+      "primary_issue": "path_traversal"
+    },
+    "symlink-escape.zip": {
+      "primary_issue": "symlink_escape"
+    },
+    "uncompressed-bytes-limit.zip": {
+      "primary_issue": "uncompressed_bytes_limit"
+    }
+  },
+  "limits": {
+    "max_compression_ratio": 100,
+    "max_file_count": 32,
+    "max_uncompressed_bytes": 65536
+  },
+  "notes": {
+    "preflight": "metadata_and_symlink_payload_only",
+    "production_admission": false
+  }
+}

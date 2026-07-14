@@ -72,6 +72,34 @@ Request:
 
 The connector validates public addressing, redirects, response size, and content type. Existing identical ingest keys return the existing document.
 
+## Trusted OpenCrab Pack runtime
+
+The MVP-P1 Pack surface accepts only a trusted local directory already visible to the service process. It never accepts ZIP uploads, archive extraction, remote URLs, or raw asset bodies.
+
+### `POST /v1/packs/validate`
+
+Authentication required. Validates a directory without modifying it. Authentication prevents unauthorised server-local path inspection and validation work.
+
+```json
+{"path":"/trusted/packs/example","profile":"compatible"}
+```
+
+`profile` is `compatible` (four validator files) or `strict` (the documented eleven-file layout). Responses include admission status, Pack identity, digest, and sanitized issue codes; they do not echo local paths or Pack content.
+
+### `POST /v1/packs/install`
+
+Authentication required. Uses the same request shape, validates first, copies immutable bytes into the Pack workspace, and registers the active revision. Non-directory input returns `422`; a same Pack/version with a different digest returns `409`. The response omits source and storage paths.
+
+### `GET /v1/packs` and `GET /v1/packs/{pack_id}`
+
+Return active Pack registry metadata only: identity, declared version, digest, profile, status, and record counts. Raw assets and local paths are not returned.
+
+### `POST /v1/packs/query`
+
+Authentication required because this operation may invoke the configured LLM. It accepts `{"question":"...","packs":["optional-pack-id"],"top_k":20}` and returns `supported` only when every citation is a retrieved global evidence id. No evidence or an unverified citation returns `unknown`.
+
+Deferred Pack capabilities: ZIP/quarantine admission, automatic updates/diffs/rollback, and OCR/CLIP/audio/video analysis.
+
 ## 6. Events
 
 ### `GET /v1/events?limit=50&offset=0`
@@ -167,3 +195,47 @@ curl -X POST http://127.0.0.1:8080/v1/run-cycle \
 - Raw document responses may expose sensitive text.
 - Evidence/provenance endpoints expose bounded excerpts and source metadata, not full raw document bodies.
 - No stable compatibility guarantee before `1.0`.
+- Pack endpoints are trusted-directory MVP surfaces, not a remote upload API.
+
+## 15. Autonomous Deliberation D1
+
+Autonomous Deliberation uses already-installed OpenCrab Packs as its only factual input. A Mission supplies control input, not evidence. The service freezes exact Pack install IDs before the first model call, persists a Decision Dossier, and can replay the audit deterministically without calling the model again.
+
+Every D1 endpoint requires a configured API key, including reads. Unlike legacy write routes, D1 remains unavailable (`503`) when `OPENOYSTER_API_KEY` is absent, even if unsafe legacy-write mode is enabled. Send the configured key header on every request.
+
+### `POST /v1/deliberations`
+
+Requires both the API key and a non-empty `Idempotency-Key` header. Reusing the same key returns the existing run without another model execution.
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/deliberations \
+  -H 'Content-Type: application/json' \
+  -H 'X-OpenOyster-Key: YOUR_KEY' \
+  -H 'Idempotency-Key: review-2026-07-14' \
+  -d '{
+    "mission": {
+      "goal": "Choose a reversible response",
+      "decision_question": "Which supported option should we choose?",
+      "constraints": ["Do not introduce facts outside Pack evidence"],
+      "preferences": ["Prefer reversible options"],
+      "context": "Control background only"
+    },
+    "packs": ["pack-a", "pack-b"],
+    "impact_baseline_packs": ["pack-a"],
+    "allow_compatible_packs": false
+  }'
+```
+
+`mission.goal` and `mission.decision_question` are required. `constraints` and `preferences` default to empty lists; `deadline`, `context`, and `mission_charter_id` are optional. `packs` contains installed Pack IDs. `impact_baseline_packs`, when present, must be a subset of `packs`. Strict Pack admission is the default; `allow_compatible_packs` is explicit opt-in.
+
+The response is safe run metadata: run ID, status/outcome, frozen-input digests, contract/template versions, timestamps, and model-attempt count. It omits Mission free text, Pack bodies, prompts, filesystem locations, storage URIs, runtime configuration, and errors with internal detail.
+
+### Run inspection and audit
+
+- `GET /v1/deliberations/{id}` — safe run metadata.
+- `GET /v1/deliberations/{id}/dossier?format=json|markdown` — persisted dossier. The default is `json`.
+- `POST /v1/deliberations/{id}/replay` — deterministic audit revalidation. It does not call the LLM.
+- `GET /v1/deliberations/{id}/cognitive-impact` — citation-scope projection only; it is not a Pack diff or baseline rerun.
+- `GET /v1/deliberations/{id}/knowledge-requests` — inert persisted requests. This endpoint never executes retrieval or Pack updates.
+
+All D1 responses sanitize raw Pack bodies, full prompts, filesystem paths, storage URIs, runtime/secret fields, and raw model responses. Citation anchors, Pack identities/digests, assertions, decision data, and replay digest results remain available for audit.
