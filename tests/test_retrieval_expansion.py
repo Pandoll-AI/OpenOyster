@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from openoyster.cli import _sanitize_deliberation_value
 from openoyster.config import Settings
 from openoyster.deliberation_contracts import CitationAnchor, Mission
 from openoyster.llm import LLMProvider
@@ -23,12 +24,14 @@ from openoyster.models import (
 )
 from openoyster.schemas import TextAnalysis
 from openoyster.services import deliberation, opencrab_packs, pack_retrieval
+from openoyster.services.deliberation_dossier import build_dossier_payload
 from openoyster.services.deliberation_gates import (
     EvidenceSnapshotView,
     StageGateError,
     validate_anchor,
 )
 from openoyster.services.llm_judges import stub_query_json
+from openoyster.utils import sha256_text
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MINIMAL_FIXTURE = PROJECT_ROOT / "tests/fixtures/opencrab_pack_runtime/p0-f1-minimal"
@@ -266,8 +269,19 @@ def test_expansion_stub_recovers_without_hints(
         assert trace is not None
         payload = trace.payload_json or {}
         assert payload.get("matched_via") == "query_expansion"
-        assert payload.get("expanded_queries")
-        assert payload.get("used_query")
+        assert int(payload.get("expanded_query_count") or 0) > 0
+        assert payload.get("used_query_digest")
+        assert len(str(payload["used_query_digest"])) == 64
+        # #8: public retrieval_trace must not carry raw queries / hints.
+        blob = json.dumps(payload, ensure_ascii=False)
+        assert KOREAN_DECISION_QUESTION not in blob
+        assert "source supports this claim" not in blob
+        assert "supports this claim" not in blob
+        assert payload.get("original_query") is None
+        assert payload.get("expanded_queries") in (None, [])
+        assert payload.get("used_query") in (None, "")
+        assert "pack_metadata" not in payload or payload.get("pack_metadata") in (None, [])
+        assert payload.get("original_query_digest")
         snaps = session.scalars(
             select(DeliberationEvidenceSnapshot).where(
                 DeliberationEvidenceSnapshot.run_id == run.id
@@ -460,3 +474,134 @@ def test_invalid_retrieval_hints_shape_is_ignored_at_admission(
         install = session.get(PackInstall, result.pack_install_id)
         assert install is not None
         assert pack_retrieval.install_retrieval_hints(install) == []
+
+
+def test_retrieval_trace_exposes_digests_not_raw_queries_or_hints(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    """#8 RED/GREEN: retrieval_trace + dossier carry digests/counts only."""
+    secret_hint = "INTERNAL_ALIAS_secret_hint_zz9"
+    expansion_query = "source supports this claim"
+    provider = ExpandingProvider()
+    mission = _korean_mission()
+    with session_factory() as session:
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "pack-trace-redact")
+        manifest_path = pack_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["pack_id"] = "p0-trace-redact"
+        manifest["title"] = "Secret Pack Title For Trace"
+        manifest["retrieval_hints"] = [secret_hint]
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session, pack_dir, workspace=temp_settings.workspace, profile="compatible"
+        )
+        session.commit()
+        install = session.get(PackInstall, result.pack_install_id)
+        assert install is not None
+
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[install.pack_id],
+            idempotency_key="trace-redact-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+
+        # Korean DQ + English-only evidence → expansion path (hints do not match KO).
+        trace = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run.id,
+                DeliberationArtifact.kind == "retrieval_trace",
+            )
+        )
+        assert trace is not None
+        payload = trace.payload_json or {}
+        assert payload.get("original_query_digest") == sha256_text(KOREAN_DECISION_QUESTION)
+        assert int(payload.get("expanded_query_count") or 0) >= 1
+        digests = payload.get("expanded_query_digests") or []
+        assert sha256_text(expansion_query) in digests
+        assert payload.get("used_query_digest") == sha256_text(expansion_query)
+
+        blob = json.dumps(payload, ensure_ascii=False)
+        assert KOREAN_DECISION_QUESTION not in blob
+        assert expansion_query not in blob
+        assert secret_hint not in blob
+        assert "Secret Pack Title For Trace" not in blob
+        assert "original_query" not in payload
+        assert "expanded_queries" not in payload
+        assert "used_query" not in payload
+        assert "pack_metadata" not in payload
+
+        summary = payload.get("pack_metadata_summary") or []
+        assert summary
+        assert summary[0].get("hint_count") == 1
+        assert summary[0].get("hint_digests") == [sha256_text(secret_hint)]
+        assert summary[0].get("title_digest") == sha256_text("Secret Pack Title For Trace")
+
+        dossier = build_dossier_payload(session, run)
+        # Mission snapshot may still carry the decision question (expected);
+        # retrieval_trace must not re-expose original/expanded query plaintext.
+        # (Evidence body may share lexical tokens with expansion queries — only
+        # the retrieval_trace subtree is the leak surface under test here.)
+        rt = dossier.get("retrieval_trace") or {}
+        rt_blob = json.dumps(rt, ensure_ascii=False)
+        assert expansion_query not in rt_blob or rt.get("used_query_digest") == sha256_text(
+            expansion_query
+        )
+        # Stronger: raw fields and secret surfaces must be absent from the trace.
+        assert "original_query" not in rt
+        assert "expanded_queries" not in rt
+        assert "used_query" not in rt
+        assert KOREAN_DECISION_QUESTION not in rt_blob
+        assert secret_hint not in rt_blob
+        assert "Secret Pack Title For Trace" not in rt_blob
+        # Exact expanded query string as a standalone JSON string value must not appear.
+        assert json.dumps(expansion_query, ensure_ascii=False) not in rt_blob
+        sanitized_rt = _sanitize_deliberation_value(rt)
+        sanitized_blob = json.dumps(sanitized_rt, ensure_ascii=False)
+        assert KOREAN_DECISION_QUESTION not in sanitized_blob
+        assert secret_hint not in sanitized_blob
+        assert json.dumps(expansion_query, ensure_ascii=False) not in sanitized_blob
+
+
+def test_retrieval_hints_capped_at_count_and_length() -> None:
+    """#8: normalize_retrieval_hints enforces 32x200 caps."""
+    long_hint = "x" * 500
+    many = [f"hint-{i}" for i in range(50)]
+    capped = pack_retrieval.normalize_retrieval_hints([*many, long_hint])
+    assert len(capped) == pack_retrieval.MAX_RETRIEVAL_HINTS
+    assert all(len(h) <= pack_retrieval.MAX_RETRIEVAL_HINT_CHARS for h in capped)
+    # Over-length single hint is truncated, not dropped.
+    one = pack_retrieval.normalize_retrieval_hints([long_hint])
+    assert one == [long_hint[: pack_retrieval.MAX_RETRIEVAL_HINT_CHARS]]
+
+
+def test_admission_truncates_oversized_retrieval_hints(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "huge-hints")
+    manifest_path = pack_dir / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["pack_id"] = "p0-huge-hints"
+    payload["retrieval_hints"] = [f"h{i}-{'y' * 300}" for i in range(40)]
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    validation = opencrab_packs.validate_pack_directory(pack_dir, profile="compatible")
+    assert validation.status == "pass"
+    codes = {issue["code"] for issue in validation.issues}
+    assert "truncated_retrieval_hints" in codes
+
+    with session_factory() as session:
+        result = opencrab_packs.install_pack(
+            session, pack_dir, workspace=temp_settings.workspace, profile="compatible"
+        )
+        session.commit()
+        install = session.get(PackInstall, result.pack_install_id)
+        assert install is not None
+        hints = pack_retrieval.install_retrieval_hints(install)
+        assert len(hints) == pack_retrieval.MAX_RETRIEVAL_HINTS
+        assert all(len(h) <= pack_retrieval.MAX_RETRIEVAL_HINT_CHARS for h in hints)

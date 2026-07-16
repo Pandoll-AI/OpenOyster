@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 
 from openoyster.config import Settings
-from openoyster.llm import ClaudeCliProvider, ExtractionUnavailable, critic2_provider_from_settings
+from openoyster.llm import (
+    CLAUDE_CLI_SAFE_FLAGS,
+    ClaudeCliProvider,
+    ExtractionUnavailable,
+    claude_cli_subprocess_env,
+    critic2_provider_from_settings,
+)
 from openoyster.utils import sha256_text
 
 
@@ -155,6 +161,91 @@ def test_command_omits_dangerous_permission_flags(monkeypatch, tmp_path: Path) -
     assert not any("skip-permissions" in str(part) for part in cmd)
     # Prompt is stdin, never argv.
     assert "x" not in cmd
+
+
+def test_claude_cli_isolation_flags_cwd_env_and_stdin(monkeypatch, tmp_path: Path) -> None:
+    """#2 RED/GREEN: safe flags, isolated cwd, allowlisted env, prompt on stdin."""
+    calls: list[tuple[list[str], dict]] = []
+    secret_prompt = "untrusted pack evidence injection marker 7c2e"
+
+    def fake_run(cmd, **kwargs):
+        calls.append((list(cmd), dict(kwargs)))
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=_claude_wrapped({"ok": True}), stderr=""
+        )
+
+    monkeypatch.setenv("OPENOYSTER_DATABASE_URL", "postgresql://secret-db")
+    monkeypatch.setenv("OPENOYSTER_WORKSPACE", "/tmp/openoyster-secret-ws")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://other-secret")
+    monkeypatch.setenv("MY_API_SECRET", "super-secret-token")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    monkeypatch.setattr("openoyster.llm.subprocess.run", fake_run)
+
+    ClaudeCliProvider(_settings(tmp_path)).query_json(
+        secret_prompt, "deliberation_critic_secondary"
+    )
+
+    assert len(calls) == 1
+    cmd, kwargs = calls[0]
+
+    # (a) isolation flag set present
+    assert cmd[0] == "claude-test"
+    for flag in (
+        "--tools",
+        "--no-session-persistence",
+        "--bare",
+        "--strict-mcp-config",
+        "--mcp-config",
+        "--permission-mode",
+    ):
+        assert flag in cmd
+    assert cmd[cmd.index("--tools") + 1] == ""
+    assert cmd[cmd.index("--mcp-config") + 1] == "{}"
+    assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+    for flag in CLAUDE_CLI_SAFE_FLAGS:
+        assert flag in cmd
+
+    # (b) never skip permissions
+    assert "--dangerously-skip-permissions" not in cmd
+    assert not any("dangerously" in str(part) for part in cmd)
+
+    # (c) isolated temp cwd — not the repository root
+    repo_root = Path(__file__).resolve().parents[1]
+    cwd = kwargs.get("cwd")
+    assert cwd is not None
+    assert Path(cwd).resolve() != repo_root.resolve()
+    assert "openoyster-claude-cli-" in str(cwd)
+
+    # (d) env allowlist only — no Pack/DB/OPENOYSTER/secret bleed
+    env = kwargs.get("env")
+    assert isinstance(env, dict)
+    assert "OPENOYSTER_DATABASE_URL" not in env
+    assert "OPENOYSTER_WORKSPACE" not in env
+    assert "DATABASE_URL" not in env
+    assert "MY_API_SECRET" not in env
+    assert env.get("ANTHROPIC_API_KEY") == "test-anthropic-key"
+    for key in env:
+        assert key in {"PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "ANTHROPIC_API_KEY"} or key.startswith(
+            "LC_"
+        )
+
+    # (e) prompt via stdin (input=), never argv
+    assert secret_prompt in kwargs.get("input", "")
+    assert secret_prompt not in cmd
+
+
+def test_claude_cli_subprocess_env_allowlist(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("HOME", "/home/test")
+    monkeypatch.setenv("OPENOYSTER_FOO", "nope")
+    monkeypatch.setenv("DATABASE_URL", "nope")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    env = claude_cli_subprocess_env()
+    assert "PATH" in env
+    assert "HOME" in env
+    assert "OPENOYSTER_FOO" not in env
+    assert "DATABASE_URL" not in env
+    assert "ANTHROPIC_API_KEY" not in env
 
 
 def test_stage_profile_reports_claude_cli(tmp_path: Path) -> None:

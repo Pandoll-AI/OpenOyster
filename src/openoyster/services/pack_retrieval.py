@@ -15,6 +15,10 @@ from openoyster.scoring import clamp, tokenize
 MATCHED_VIA_LEXICAL: str = "lexical"
 MATCHED_VIA_MANIFEST_HINT: str = "manifest_hint"
 
+# Admission/search caps for optional manifest retrieval_hints (routing aids only).
+MAX_RETRIEVAL_HINTS: int = 32
+MAX_RETRIEVAL_HINT_CHARS: int = 200
+
 
 @dataclass(frozen=True)
 class PackRetrievalHit:
@@ -110,15 +114,18 @@ def normalize_retrieval_hints(raw: Any) -> list[str]:
 
     Invalid shapes are ignored (admission records diagnostics separately).
     Hints are search routing aids — never citation-grade evidence text.
+    Caps: at most MAX_RETRIEVAL_HINTS items, each at most MAX_RETRIEVAL_HINT_CHARS.
     """
     if not isinstance(raw, list):
         return []
     hints: list[str] = []
     for item in raw:
+        if len(hints) >= MAX_RETRIEVAL_HINTS:
+            break
         if isinstance(item, str):
             text = item.strip()
             if text:
-                hints.append(text)
+                hints.append(text[:MAX_RETRIEVAL_HINT_CHARS])
     return hints
 
 

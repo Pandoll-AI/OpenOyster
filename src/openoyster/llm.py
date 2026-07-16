@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -29,6 +30,44 @@ from .services.llm_runtime import (
 from .services.llm_stub import stub_analysis
 from .services.prompts import T1_CONSTRAINT_BLOCK, build_extract_user_prompt
 from .utils import sha256_text
+
+# Claude CLI isolation flags for critic-only text judgments on untrusted Pack
+# evidence prompts. Never add --dangerously-skip-permissions.
+CLAUDE_CLI_SAFE_FLAGS: tuple[str, ...] = (
+    "-p",
+    "--output-format",
+    "json",
+    "--tools",
+    "",  # disable all tools (text judgment only)
+    "--no-session-persistence",  # do not write session history
+    "--bare",  # skip CLAUDE.md / hooks / plugins / MCP / skills / custom
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{}",  # double-block MCP
+    "--permission-mode",
+    "dontAsk",  # auto-deny even if tools appear
+)
+
+# Minimal env for Claude CLI auth (HOME → ~/.claude) without Pack/DB/secret bleed.
+_CLAUDE_CLI_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "ANTHROPIC_API_KEY",
+    }
+)
+
+
+def claude_cli_subprocess_env() -> dict[str, str]:
+    """Allowlist env for Claude CLI: PATH/HOME/LANG/LC_* + optional API key."""
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key in _CLAUDE_CLI_ENV_ALLOWLIST or key.startswith("LC_"):
+            env[key] = value
+    return env
 
 
 class LLMProvider(ABC):
@@ -232,22 +271,22 @@ class ClaudeCliProvider(LLMProvider):
         parsing_success = False
         error: str | None = None
         try:
-            command = [
-                self.settings.claude_binary,
-                "-p",
-                "--output-format",
-                "json",
-            ]
-            if model:
-                command.extend(["--model", model])
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                input=prepared_prompt,
-                text=True,
-                timeout=self.settings.claude_timeout_seconds,
-                check=False,
-            )
+            # Isolated cwd + allowlisted env: untrusted Pack evidence may appear in
+            # the prompt; do not inherit repo CLAUDE.md/hooks/MCP/session or secrets.
+            with tempfile.TemporaryDirectory(prefix="openoyster-claude-cli-") as sandbox_root:
+                command = [self.settings.claude_binary, *CLAUDE_CLI_SAFE_FLAGS]
+                if model:
+                    command.extend(["--model", model])
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    input=prepared_prompt,
+                    text=True,
+                    timeout=self.settings.claude_timeout_seconds,
+                    check=False,
+                    cwd=sandbox_root,
+                    env=claude_cli_subprocess_env(),
+                )
             exit_code = completed.returncode
             if completed.returncode != 0:
                 error = f"claude-cli exited with {completed.returncode}"

@@ -726,6 +726,32 @@ def _build_retrieval_expansion_prompt(
     )
 
 
+def _public_pack_metadata_summary(
+    pack_metadata: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Digest/count view of pack control metadata for public retrieval_trace.
+
+    Raw titles and retrieval_hints stay out of the authenticated dossier surface.
+    Full-text audit, if ever required, belongs on a non-public field only.
+    """
+    summary: list[dict[str, Any]] = []
+    for row in pack_metadata:
+        title = row.get("title")
+        hints = row.get("retrieval_hints") or []
+        if not isinstance(hints, list):
+            hints = []
+        hint_texts = [h for h in hints if isinstance(h, str)]
+        summary.append(
+            {
+                "pack_id": row.get("pack_id"),
+                "title_digest": sha256_text(title) if isinstance(title, str) and title else None,
+                "hint_count": len(hint_texts),
+                "hint_digests": [sha256_text(h) for h in hint_texts],
+            }
+        )
+    return summary
+
+
 def _attempt_retrieval_query_expansion(
     session: Session,
     *,
@@ -738,13 +764,15 @@ def _attempt_retrieval_query_expansion(
     """One optional expansion LLM call. Never kills the run on schema/provider failure."""
     pack_metadata = _pack_control_metadata_for_expansion(session, install_ids)
     prompt = _build_retrieval_expansion_prompt(mission, pack_metadata)
+    # Public dossier artifact: digests/counts only — no raw queries, titles, or hints.
+    # (Raw expansion inputs remain in the private LLM prompt for this call only.)
     trace: dict[str, Any] = {
-        "original_query": mission.decision_question,
-        "expanded_queries": [],
-        "used_query": None,
+        "original_query_digest": sha256_text(mission.decision_question),
+        "expanded_query_count": 0,
+        "used_query_digest": None,
         "matched_via": None,
         "safety_code": None,
-        "pack_metadata": pack_metadata,
+        "pack_metadata_summary": _public_pack_metadata_summary(pack_metadata),
     }
 
     try:
@@ -826,7 +854,8 @@ def _attempt_retrieval_query_expansion(
     session.flush()
     session.commit()
     queries = list(parsed.queries)
-    trace["expanded_queries"] = queries
+    trace["expanded_query_count"] = len(queries)
+    trace["expanded_query_digests"] = [sha256_text(q) for q in queries]
     return queries, call, trace
 
 
@@ -871,6 +900,7 @@ def _materialize_evidence_snapshots(
                     settings=settings,
                 )
             )
+            # Counts-only diagnostics; never copy raw query/hit text into the trace.
             retrieval_trace["primary_diagnostics"] = dict(retrieval.diagnostics)
             for alt_query in expanded_queries:
                 alt = search_pack_context(
@@ -882,12 +912,12 @@ def _materialize_evidence_snapshots(
                 if alt.evidence:
                     retrieval = alt
                     used_query = alt_query
-                    retrieval_trace["used_query"] = alt_query
+                    retrieval_trace["used_query_digest"] = sha256_text(alt_query)
                     retrieval_trace["matched_via"] = "query_expansion"
                     retrieval_trace["match_diagnostics"] = dict(alt.diagnostics)
                     break
             else:
-                retrieval_trace["used_query"] = None
+                retrieval_trace["used_query_digest"] = None
                 if expanded_queries and retrieval_trace.get("safety_code") is None:
                     retrieval_trace["safety_code"] = "expansion_no_match"
 
@@ -934,10 +964,10 @@ def _materialize_evidence_snapshots(
         snapshots.append(snap)
     session.flush()
     run.status = "context_ready"
-    # Keep used_query visible on run degraded_json only when expansion ran.
+    # Digest only — raw expanded queries must not land on public run surfaces.
     if retrieval_trace is not None:
         degraded = dict(run.degraded_json or {})
-        degraded["retrieval_used_query"] = used_query
+        degraded["retrieval_used_query_digest"] = sha256_text(used_query)
         run.degraded_json = degraded
     session.flush()
     return snapshots

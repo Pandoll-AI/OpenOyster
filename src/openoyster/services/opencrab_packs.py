@@ -142,7 +142,15 @@ def _diagnose_retrieval_hints(manifest: dict[str, Any], issues: list[dict[str, A
 
     Invalid shapes/elements are ignored with a non-error diagnostic; admission
     is never rejected for this field. Hints are search routing aids only.
+    Caps (shared with pack_retrieval): max 32 hints, 200 chars each.
     """
+    # Local import avoids a hard package cycle at module load.
+    from openoyster.services.pack_retrieval import (
+        MAX_RETRIEVAL_HINT_CHARS,
+        MAX_RETRIEVAL_HINTS,
+        normalize_retrieval_hints,
+    )
+
     if "retrieval_hints" not in manifest:
         return []
     raw = manifest.get("retrieval_hints")
@@ -160,11 +168,17 @@ def _diagnose_retrieval_hints(manifest: dict[str, Any], issues: list[dict[str, A
         return []
     accepted: list[str] = []
     ignored_elements = False
+    truncated = False
     for item in raw:
+        if len(accepted) >= MAX_RETRIEVAL_HINTS:
+            truncated = True
+            break
         if isinstance(item, str):
             text = item.strip()
             if text:
-                accepted.append(text)
+                if len(text) > MAX_RETRIEVAL_HINT_CHARS:
+                    truncated = True
+                accepted.append(text[:MAX_RETRIEVAL_HINT_CHARS])
             # empty strings are silently dropped
         else:
             ignored_elements = True
@@ -177,7 +191,20 @@ def _diagnose_retrieval_hints(manifest: dict[str, Any], issues: list[dict[str, A
                 path="manifest.json",
             )
         )
-    return accepted
+    if truncated:
+        issues.append(
+            _issue(
+                "truncated_retrieval_hints",
+                "info",
+                (
+                    f"manifest.retrieval_hints truncated to {MAX_RETRIEVAL_HINTS} items "
+                    f"and {MAX_RETRIEVAL_HINT_CHARS} chars each"
+                ),
+                path="manifest.json",
+            )
+        )
+    # Keep admission-time list identical to runtime normalize path.
+    return normalize_retrieval_hints(accepted)
 
 
 def _iter_pack_files(root: Path) -> list[Path]:
