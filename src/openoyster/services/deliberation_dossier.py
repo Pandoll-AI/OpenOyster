@@ -117,6 +117,8 @@ def build_dossier_payload(session: Session, run: DeliberationRun) -> dict[str, A
         "options": artifacts.get("options"),
         "scenarios": artifacts.get("scenarios"),
         "critic_result": artifacts.get("critic_result"),
+        "critic_result_secondary": artifacts.get("critic_result_secondary"),
+        "critic_effective": artifacts.get("critic_effective"),
         "decision": artifacts.get("decision"),
         "flip_conditions": artifacts.get("flip_conditions"),
         "knowledge_requests": artifacts.get("knowledge_requests"),
@@ -189,9 +191,11 @@ def render_dossier_markdown(payload: dict[str, Any]) -> str:
     if isinstance(kr_items, list) and kr_items:
         for item in kr_items:
             if isinstance(item, dict):
+                retrieval = item.get("retrieval_status")
+                retrieval_suffix = f" retrieval={retrieval}" if retrieval else ""
                 lines.append(
                     f"- [{item.get('priority', 'critical')}] {item.get('question', '')} "
-                    f"(gap={item.get('gap_ref', '')})"
+                    f"(gap={item.get('gap_ref', '')}){retrieval_suffix}"
                 )
     else:
         lines.append("- (none)")

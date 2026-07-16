@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from openoyster.config import Settings
@@ -39,6 +39,9 @@ from openoyster.utils import sha256_text, utcnow
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MINIMAL_FIXTURE = PROJECT_ROOT / "tests/fixtures/opencrab_pack_runtime/p0-f1-minimal"
+EMPTY_EVIDENCE_FIXTURE = (
+    PROJECT_ROOT / "tests/fixtures/opencrab_pack_runtime/p0-f7-empty-evidence"
+)
 MISSION_PATH = PROJECT_ROOT / "tests/fixtures/deliberation_d1/mission_happy.json"
 
 
@@ -51,15 +54,16 @@ def _load_mission() -> Mission:
     return Mission.model_validate(json.loads(MISSION_PATH.read_text(encoding="utf-8")))
 
 
-def _install_minimal(
+def _install_fixture(
     session: Session,
     settings: Settings,
     tmp_path: Path,
+    fixture: Path,
     *,
     pack_id: str | None = None,
     dirname: str = "pack-a",
 ) -> PackInstall:
-    pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / dirname)
+    pack_dir = _copy_fixture(fixture, tmp_path / dirname)
     if pack_id is not None:
         manifest = pack_dir / "manifest.json"
         payload = json.loads(manifest.read_text(encoding="utf-8"))
@@ -75,6 +79,24 @@ def _install_minimal(
     install = session.get(PackInstall, result.pack_install_id)
     assert install is not None
     return install
+
+
+def _install_minimal(
+    session: Session,
+    settings: Settings,
+    tmp_path: Path,
+    *,
+    pack_id: str | None = None,
+    dirname: str = "pack-a",
+) -> PackInstall:
+    return _install_fixture(
+        session,
+        settings,
+        tmp_path,
+        MINIMAL_FIXTURE,
+        pack_id=pack_id,
+        dirname=dirname,
+    )
 
 
 class CountingProvider(LLMProvider):
@@ -285,8 +307,97 @@ def test_no_evidence_completes_abstention_with_zero_llm_calls(
                 "question": mission.decision_question,
                 "gap_ref": "evidence:no_evidence",
                 "priority": "critical",
+                "retrieval_status": "pack_has_no_evidence",
             }
         ]
+
+
+def test_empty_evidence_pack_abstains_with_pack_has_no_evidence(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    provider = CountingProvider()
+    mission = _load_mission()
+    with session_factory() as session:
+        install = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            EMPTY_EVIDENCE_FIXTURE,
+            dirname="empty-evidence-pack",
+        )
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key="empty-evidence-pack-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+
+        assert provider.calls == []
+        assert run.status == "completed"
+        assert run.outcome == "abstain"
+        knowledge = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run.id,
+                DeliberationArtifact.kind == "knowledge_requests",
+            )
+        )
+        assert knowledge is not None
+        requests = knowledge.payload_json.get("knowledge_requests") or []
+        assert len(requests) == 1
+        assert requests[0]["local_key"] == "kr_no_evidence"
+        assert requests[0]["retrieval_status"] == "pack_has_no_evidence"
+
+
+def test_no_match_in_pack_evidence_abstains_with_retrieval_status(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    provider = CountingProvider()
+    mission = _load_mission().model_copy(
+        update={"decision_question": "zzz qqq xxx unmatched lexical query"}
+    )
+    with session_factory() as session:
+        install = _install_minimal(session, temp_settings, tmp_path)
+        evidence_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(PackEvidence)
+                .where(PackEvidence.pack_install_id == install.id)
+            )
+            or 0
+        )
+        assert evidence_count > 0
+
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key="no-match-in-pack-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+
+        assert provider.calls == []
+        assert run.status == "completed"
+        assert run.outcome == "abstain"
+        knowledge = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run.id,
+                DeliberationArtifact.kind == "knowledge_requests",
+            )
+        )
+        assert knowledge is not None
+        requests = knowledge.payload_json.get("knowledge_requests") or []
+        assert len(requests) == 1
+        assert requests[0]["local_key"] == "kr_no_evidence"
+        assert requests[0]["retrieval_status"] == "no_match_in_pack_evidence"
 
 
 def test_provider_failure_is_execution_failure_not_epistemic_abstention(
@@ -390,6 +501,7 @@ def test_linked_redeliberation_fulfills_knowledge_request_and_records_cognitive_
                 "question": mission.decision_question,
                 "gap_ref": "evidence:no_evidence",
                 "priority": "critical",
+                "retrieval_status": "pack_has_no_evidence",
                 "status": "verified_fulfilled",
                 "verification_method": "added_cited_evidence_v1",
                 "verification_evidence_ids": payload["citation_scope_changes"][
@@ -1125,7 +1237,7 @@ def test_cognitive_impact_identical_scope_is_retained(
             )
         )
         assert impact is not None
-        assert impact.method == "citation_scope_projection_v1"
+        assert impact.method == "citation_scope_projection_v2"
         payload = impact.impact_json
         assert payload.get("decision_support") == "retained"
         grounded = payload.get("grounded_assertions") or []
@@ -1254,3 +1366,174 @@ def test_quote_mismatch_rejects_anchor(
             ).all()
             == []
         )
+
+
+def test_legacy_null_fingerprint_lazy_backfill_then_mismatch(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    """RED→GREEN #4: NULL fingerprint fills once, then fail-closed on mismatch.
+
+    First reuse of a legacy NULL-fingerprint row accepts the presented
+    fingerprint and persists it. A later request with a different fingerprint
+    on the same idempotency key raises idempotency_request_mismatch.
+    """
+    mission = _load_mission()
+    with session_factory() as session:
+        install_a = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="legacy-fp-pack-a",
+            dirname="legacy-fp-pack-a",
+        )
+        install_b = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="legacy-fp-pack-b",
+            dirname="legacy-fp-pack-b",
+        )
+        # Simulate a pre-0007/incomplete-backfill row: completed but NULL fingerprint.
+        legacy = DeliberationRun(
+            idempotency_key="legacy-fp-key",
+            request_fingerprint=None,
+            fulfilled_request_keys_json=[],
+            parent_run_id=None,
+            mission_snapshot_json=mission.model_dump(mode="json"),
+            mission_digest=mission_digest(mission),
+            policy_snapshot_json={"allow_compatible_packs": True},
+            runtime_config_json={},
+            policy_digest="p" * 64,
+            runtime_config_digest="r" * 64,
+            contract_version="deliberation-d1-v1",
+            prompt_template_version="deliberation-prompts-d1-v8",
+            primary_scope_digest="s" * 64,
+            impact_baseline_scope_digest="i" * 64,
+            status="completed",
+            outcome="select",
+            llm_attempt_count=0,
+        )
+        session.add(legacy)
+        session.commit()
+        legacy_id = legacy.id
+
+        first = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install_a.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key="legacy-fp-key",
+            provider=CountingProvider(),
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        assert first.id == legacy_id
+        reloaded = session.get(DeliberationRun, legacy_id)
+        assert reloaded is not None
+        assert reloaded.request_fingerprint is not None
+        filled = reloaded.request_fingerprint
+
+        with pytest.raises(deliberation.DeliberationContinuationError) as exc_info:
+            deliberation.run_deliberation(
+                session,
+                mission,
+                pack_ids=[install_b.pack_id],
+                impact_baseline_pack_ids=[],
+                idempotency_key="legacy-fp-key",
+                provider=CountingProvider(),
+                settings=temp_settings,
+                allow_compatible_packs=True,
+            )
+        assert exc_info.value.code == "idempotency_request_mismatch"
+        reloaded2 = session.get(DeliberationRun, legacy_id)
+        assert reloaded2 is not None
+        assert reloaded2.request_fingerprint == filled
+
+
+def test_assert_request_fingerprint_does_not_commit_unrelated_dirty(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    """R2: lazy fill must not session.commit() unrelated dirty rows on the Session."""
+    mission = _load_mission()
+    with session_factory() as session:
+        install = _install_minimal(session, temp_settings, tmp_path)
+        # Unrelated dirty row that must stay uncommitted after fingerprint helper.
+        decoy = DeliberationRun(
+            idempotency_key="decoy-dirty-row",
+            request_fingerprint=None,
+            fulfilled_request_keys_json=[],
+            parent_run_id=None,
+            mission_snapshot_json=mission.model_dump(mode="json"),
+            mission_digest=mission_digest(mission),
+            policy_snapshot_json={"allow_compatible_packs": True},
+            runtime_config_json={},
+            policy_digest="p" * 64,
+            runtime_config_digest="r" * 64,
+            contract_version="deliberation-d1-v1",
+            prompt_template_version="deliberation-prompts-d1-v8",
+            primary_scope_digest="s" * 64,
+            impact_baseline_scope_digest="i" * 64,
+            status="completed",
+            outcome="select",
+            llm_attempt_count=0,
+        )
+        session.add(decoy)
+        session.flush()
+        decoy_id = decoy.id
+
+        legacy = DeliberationRun(
+            idempotency_key="legacy-fp-no-commit",
+            request_fingerprint=None,
+            fulfilled_request_keys_json=[],
+            parent_run_id=None,
+            mission_snapshot_json=mission.model_dump(mode="json"),
+            mission_digest=mission_digest(mission),
+            policy_snapshot_json={"allow_compatible_packs": True},
+            runtime_config_json={},
+            policy_digest="p" * 64,
+            runtime_config_digest="r" * 64,
+            contract_version="deliberation-d1-v1",
+            prompt_template_version="deliberation-prompts-d1-v8",
+            primary_scope_digest="s" * 64,
+            impact_baseline_scope_digest="i" * 64,
+            status="completed",
+            outcome="select",
+            llm_attempt_count=0,
+        )
+        session.add(legacy)
+        session.flush()
+        legacy_id = legacy.id
+
+        # Present a real fingerprint for the legacy row.
+        fp = deliberation.compute_request_fingerprint(
+            mission_digest_value=mission_digest(mission),
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[],
+            allow_compatible_packs=True,
+            parent_run_id=None,
+            fulfilled_keys=None,
+        )
+        deliberation._assert_request_fingerprint(session, legacy, fp)
+
+        # Same session sees the fill, but helper must not have committed the decoy.
+        session.expire_all()
+        # Open a fresh connection/session view of durable state.
+        with session_factory() as other:
+            durable_decoy = other.get(DeliberationRun, decoy_id)
+            durable_legacy = other.get(DeliberationRun, legacy_id)
+            # Decoy was never committed by the helper.
+            assert durable_decoy is None
+            # Legacy fill also not committed yet (caller owns commit).
+            assert durable_legacy is None
+
+        # After explicit commit by caller, both persist; second fp mismatches.
+        session.commit()
+        reloaded = session.get(DeliberationRun, legacy_id)
+        assert reloaded is not None
+        assert reloaded.request_fingerprint == fp
+
+        with pytest.raises(deliberation.DeliberationContinuationError) as exc_info:
+            deliberation._assert_request_fingerprint(session, reloaded, "f" * 64)
+        assert exc_info.value.code == "idempotency_request_mismatch"
+        # silence unused pack install in lint-free path
+        assert install.pack_id
