@@ -11,9 +11,11 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from openoyster.models import DeliberationOutcome, DeliberationRun, utcnow
+from openoyster.models import DeliberationArtifact, DeliberationOutcome, DeliberationRun, utcnow
+from openoyster.utils import ensure_utc
 
 OUTCOME_LABELS = frozenset(
     {
@@ -24,6 +26,9 @@ OUTCOME_LABELS = frozenset(
         "expired",
     }
 )
+
+# adopted_rate numerator: any adoption (full or modified). Explicit criterion.
+ADOPTED_ANY_LABELS = frozenset({"adopted", "adopted_modified"})
 
 SCENARIO_STATUSES = frozenset(
     {
@@ -50,6 +55,7 @@ ERROR_RUN_NOT_COMPLETED = "outcome_run_not_completed"
 ERROR_INVALID_LABEL = "outcome_invalid_label"
 ERROR_INVALID_SCENARIO = "outcome_invalid_scenario_assessment"
 ERROR_INVALID_ABSTENTION = "outcome_invalid_abstention_assessment"
+ERROR_IDEMPOTENCY_KEY_CONFLICT = "outcome_idempotency_key_conflict"
 
 
 class OutcomeLedgerError(Exception):
@@ -108,6 +114,28 @@ def _normalize_scenario_assessments(
     )
 
 
+def _lookup_by_run_and_key(
+    session: Session, run_id: int, key: str
+) -> DeliberationOutcome | None:
+    return session.scalar(
+        select(DeliberationOutcome).where(
+            DeliberationOutcome.run_id == run_id,
+            DeliberationOutcome.idempotency_key == key,
+        )
+    )
+
+
+def _lookup_key_on_other_run(
+    session: Session, run_id: int, key: str
+) -> DeliberationOutcome | None:
+    return session.scalar(
+        select(DeliberationOutcome).where(
+            DeliberationOutcome.idempotency_key == key,
+            DeliberationOutcome.run_id != run_id,
+        )
+    )
+
+
 def record_outcome(
     session: Session,
     run_id: int,
@@ -119,16 +147,24 @@ def record_outcome(
     noted_by: str = "user",
     idempotency_key: str | None = None,
 ) -> DeliberationOutcome:
-    """Append one outcome row for a completed run. Idempotent on key when set."""
+    """Append one outcome row for a completed run.
+
+    Idempotency is bound to (run_id, idempotency_key):
+    - same run + key → return existing row
+    - different run + same key → outcome_idempotency_key_conflict
+    """
+    key: str | None = None
     if idempotency_key is not None and idempotency_key.strip():
         key = idempotency_key.strip()
-        existing = session.scalar(
-            select(DeliberationOutcome).where(DeliberationOutcome.idempotency_key == key)
-        )
+        existing = _lookup_by_run_and_key(session, run_id, key)
         if existing is not None:
             return existing
-    else:
-        key = None
+        conflict = _lookup_key_on_other_run(session, run_id, key)
+        if conflict is not None:
+            raise OutcomeLedgerError(
+                ERROR_IDEMPOTENCY_KEY_CONFLICT,
+                f"idempotency_key already used by run {conflict.run_id}",
+            )
 
     run = session.get(DeliberationRun, run_id)
     if run is None:
@@ -166,8 +202,23 @@ def record_outcome(
         noted_by=(noted_by or "user").strip() or "user",
         idempotency_key=key,
     )
-    session.add(row)
-    session.flush()
+    try:
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
+    except IntegrityError:
+        if key is None:
+            raise
+        existing = _lookup_by_run_and_key(session, run_id, key)
+        if existing is not None:
+            return existing
+        conflict = _lookup_key_on_other_run(session, run_id, key)
+        if conflict is not None:
+            raise OutcomeLedgerError(
+                ERROR_IDEMPOTENCY_KEY_CONFLICT,
+                f"idempotency_key already used by run {conflict.run_id}",
+            ) from None
+        raise
     return row
 
 
@@ -224,15 +275,46 @@ def _latest_outcome_by_run(
         if prev is None:
             latest[row.run_id] = row
             continue
-        if (row.noted_at, row.id) >= (prev.noted_at, prev.id):
+        # Normalize aware/naive before comparison (sqlite may return either).
+        row_key = (ensure_utc(row.noted_at), row.id)
+        prev_key = (ensure_utc(prev.noted_at), prev.id)
+        if row_key >= prev_key:
             latest[row.run_id] = row
     return latest
+
+
+def _scenario_kinds_by_run(
+    session: Session, run_ids: set[int]
+) -> dict[int, dict[str, str]]:
+    """Map run_id -> {scenario local_key: kind} from stored scenarios artifacts."""
+    if not run_ids:
+        return {}
+    arts = session.scalars(
+        select(DeliberationArtifact).where(
+            DeliberationArtifact.run_id.in_(run_ids),
+            DeliberationArtifact.kind == "scenarios",
+        )
+    ).all()
+    out: dict[int, dict[str, str]] = {}
+    for art in arts:
+        kinds: dict[str, str] = {}
+        payload = art.payload_json if isinstance(art.payload_json, dict) else {}
+        for sc in payload.get("scenarios") or []:
+            if not isinstance(sc, dict):
+                continue
+            local_key = sc.get("local_key")
+            kind = sc.get("kind")
+            if isinstance(local_key, str) and local_key.strip() and isinstance(kind, str):
+                kinds[local_key.strip()] = kind
+        out[art.run_id] = kinds
+    return out
 
 
 def _aggregate_slice(
     runs: list[DeliberationRun],
     latest: dict[int, DeliberationOutcome],
     all_outcomes: list[DeliberationOutcome],
+    scenario_kinds: dict[int, dict[str, str]],
     *,
     min_sample: int,
 ) -> dict[str, Any]:
@@ -241,26 +323,31 @@ def _aggregate_slice(
 
     decision_with_outcome = [r for r in decision_runs if r.id in latest]
     n_decision = len(decision_with_outcome)
+    # adopted(any): full adoption or modified adoption (not reversed/not_adopted/expired).
     adopted_n = sum(
-        1 for r in decision_with_outcome if latest[r.id].outcome_label == "adopted"
+        1
+        for r in decision_with_outcome
+        if latest[r.id].outcome_label in ADOPTED_ANY_LABELS
     )
     reversed_n = sum(
         1 for r in decision_with_outcome if latest[r.id].outcome_label == "reversed"
     )
 
+    # Authority: latest outcome per run only. Keys must match scenarios artifact kinds.
     adverse_total = 0
     adverse_materialized = 0
     run_ids = {r.id for r in runs}
-    for row in all_outcomes:
-        if row.run_id not in run_ids:
+    for run in runs:
+        row = latest.get(run.id)
+        if row is None:
             continue
+        kinds = scenario_kinds.get(run.id) or {}
         assessments = row.scenario_assessments or {}
         if not isinstance(assessments, dict):
             continue
         for key, status in assessments.items():
-            key_l = str(key).casefold()
-            if "adverse" not in key_l:
-                continue
+            if kinds.get(str(key)) != "adverse":
+                continue  # unverified or non-adverse keys ignored
             adverse_total += 1
             if status == "materialized":
                 adverse_materialized += 1
@@ -330,7 +417,10 @@ def calibration_report(
             r for r in scoped_runs if _mission_charter_id(r) == mission_charter_id
         ]
 
-    overall = _aggregate_slice(scoped_runs, latest, outcomes, min_sample=min_sample)
+    scenario_kinds = _scenario_kinds_by_run(session, {r.id for r in scoped_runs})
+    overall = _aggregate_slice(
+        scoped_runs, latest, outcomes, scenario_kinds, min_sample=min_sample
+    )
 
     by_charter: dict[str, Any] = {}
     charter_ids: set[int | None] = set()
@@ -341,12 +431,12 @@ def calibration_report(
         for cid in sorted(c for c in charter_ids if c is not None):
             subset = [r for r in scoped_runs if _mission_charter_id(r) == cid]
             by_charter[str(cid)] = _aggregate_slice(
-                subset, latest, outcomes, min_sample=min_sample
+                subset, latest, outcomes, scenario_kinds, min_sample=min_sample
             )
         none_subset = [r for r in scoped_runs if _mission_charter_id(r) is None]
         if none_subset:
             by_charter["null"] = _aggregate_slice(
-                none_subset, latest, outcomes, min_sample=min_sample
+                none_subset, latest, outcomes, scenario_kinds, min_sample=min_sample
             )
 
     return {

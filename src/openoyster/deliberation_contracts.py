@@ -6,7 +6,14 @@ import json
 from enum import StrEnum
 from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from openoyster.utils import sha256_text
 
@@ -18,7 +25,8 @@ MAX_OPTIONS: Final = 5
 MAX_SCENARIOS_PER_OPTION: Final = 3
 MAX_EVIDENCE_SNAPSHOTS: Final = 24
 MAX_PROMPT_CHARS: Final = 100_000
-MAX_LLM_ATTEMPTS: Final = 10
+# Expansion (1) + 5 stages x 2 attempts + critic2 headroom.
+MAX_LLM_ATTEMPTS: Final = 12
 MIN_QUOTE_CHARS: Final = 12
 MAX_RETRIEVAL_EXPANSION_QUERIES: Final = 5
 MAX_RETRIEVAL_EXPANSION_QUERY_CHARS: Final = 200
@@ -155,7 +163,8 @@ class Mission(StrictModel):
     preferences: list[str] = Field(default_factory=list)
     deadline: str | None = None
     context: str | None = None
-    mission_charter_id: int | None = None
+    # Strict positive int only: reject bool, numeric strings, 0, negatives.
+    mission_charter_id: StrictInt | None = Field(default=None, gt=0)
 
     @field_validator("constraints", "preferences", mode="before")
     @classmethod

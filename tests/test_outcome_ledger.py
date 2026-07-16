@@ -17,6 +17,7 @@ from openoyster.config import Settings
 from openoyster.deliberation_contracts import Mission
 from openoyster.llm import LLMProvider
 from openoyster.models import (
+    DeliberationArtifact,
     DeliberationDossier,
     DeliberationOutcome,
     DeliberationRun,
@@ -72,6 +73,38 @@ def _seed_run(
     session.add(run)
     session.flush()
     return run
+
+
+def _seed_scenarios_artifact(
+    session: Session,
+    run_id: int,
+    *,
+    scenarios: list[dict[str, Any]] | None = None,
+) -> DeliberationArtifact:
+    """Minimal scenarios artifact so calibration can verify assessment keys."""
+    if scenarios is None:
+        scenarios = [
+            {
+                "local_key": "s_expected",
+                "option_key": "opt_a",
+                "kind": "expected",
+            },
+            {
+                "local_key": "s_adverse",
+                "option_key": "opt_a",
+                "kind": "adverse",
+            },
+        ]
+    art = DeliberationArtifact(
+        run_id=run_id,
+        kind="scenarios",
+        local_key="scenarios",
+        payload_json={"scenarios": scenarios},
+        payload_digest="f" * 64,
+    )
+    session.add(art)
+    session.flush()
+    return art
 
 
 class RecordingStubProvider(LLMProvider):
@@ -145,12 +178,15 @@ def test_record_completed_run_updates_calibration(
                 idempotency_key=f"cal-dec-{i}",
                 mission_charter_id=id_a if i < 3 else id_b,
             )
+            _seed_scenarios_artifact(session, run.id)
             label = "adopted" if i < 4 else "reversed"
             outcome_ledger.record_outcome(
                 session,
                 run.id,
                 outcome_label=label,
-                scenario_assessments={"adverse": "materialized" if i % 2 == 0 else "not_materialized"},
+                scenario_assessments={
+                    "s_adverse": "materialized" if i % 2 == 0 else "not_materialized"
+                },
                 idempotency_key=f"cal-out-{i}",
             )
         # Abstain runs with assessments
@@ -215,6 +251,153 @@ def test_idempotency_key_returns_existing(
         assert second.note == "first"
         count = len(outcome_ledger.list_outcomes(session, run.id))
         assert count == 1
+
+
+def test_idempotency_key_conflict_across_runs(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """#3: same key on different run → conflict; same run re-request → existing."""
+    with session_factory() as session:
+        run1 = _seed_run(session, idempotency_key="idemp-run-1")
+        run2 = _seed_run(session, idempotency_key="idemp-run-2")
+        session.commit()
+        first = outcome_ledger.record_outcome(
+            session,
+            run1.id,
+            outcome_label="adopted",
+            note="owned-by-run1",
+            idempotency_key="s",
+        )
+        session.commit()
+        with pytest.raises(outcome_ledger.OutcomeLedgerError) as exc_info:
+            outcome_ledger.record_outcome(
+                session,
+                run2.id,
+                outcome_label="reversed",
+                note="should-conflict",
+                idempotency_key="s",
+            )
+        assert exc_info.value.code == outcome_ledger.ERROR_IDEMPOTENCY_KEY_CONFLICT
+        again = outcome_ledger.record_outcome(
+            session,
+            run1.id,
+            outcome_label="reversed",
+            note="should-return-first",
+            idempotency_key="s",
+        )
+        assert again.id == first.id
+        assert again.note == "owned-by-run1"
+        assert outcome_ledger.list_outcomes(session, run2.id) == []
+
+
+def test_calibration_uses_latest_outcome_only(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """#4a: corrections must not average — latest outcome is authoritative."""
+    with session_factory() as session:
+        for i in range(5):
+            run = _seed_run(session, idempotency_key=f"latest-only-{i}")
+            # First wrong, then corrected to adopted.
+            outcome_ledger.record_outcome(
+                session,
+                run.id,
+                outcome_label="reversed",
+                idempotency_key=f"latest-only-out-{i}-a",
+            )
+            outcome_ledger.record_outcome(
+                session,
+                run.id,
+                outcome_label="adopted",
+                idempotency_key=f"latest-only-out-{i}-b",
+            )
+        session.commit()
+        report = outcome_ledger.calibration_report(session, min_sample=5)
+        assert report["overall"]["adopted_rate"] == pytest.approx(1.0)
+        assert report["overall"]["reversed_rate"] == pytest.approx(0.0)
+
+
+def test_calibration_ignores_unverified_scenario_keys(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """#4b: fake adverse_* keys cannot inflate adverse sample past real artifact."""
+    with session_factory() as session:
+        run = _seed_run(session, idempotency_key="fake-keys-run")
+        _seed_scenarios_artifact(
+            session,
+            run.id,
+            scenarios=[
+                {"local_key": "s_real_adverse", "option_key": "o", "kind": "adverse"},
+            ],
+        )
+        fake = {f"adverse_fake_{i}": "materialized" for i in range(5)}
+        fake["s_real_adverse"] = "not_materialized"
+        outcome_ledger.record_outcome(
+            session,
+            run.id,
+            outcome_label="adopted",
+            scenario_assessments=fake,
+            idempotency_key="fake-keys-out",
+        )
+        session.commit()
+        report = outcome_ledger.calibration_report(session, min_sample=1)
+        # Only the verified adverse key counts (n=1).
+        assert report["overall"]["sample"]["adverse_scenario_assessments"] == 1
+        assert report["overall"]["adverse_materialized_rate"] == pytest.approx(0.0)
+
+
+def test_calibration_adopted_modified_counts_as_adopted(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """#4c: adopted_modified is included in adopted(any) numerator."""
+    with session_factory() as session:
+        for i in range(5):
+            run = _seed_run(session, idempotency_key=f"mod-adopt-{i}")
+            label = "adopted_modified" if i < 3 else "adopted"
+            outcome_ledger.record_outcome(
+                session,
+                run.id,
+                outcome_label=label,
+                idempotency_key=f"mod-adopt-out-{i}",
+            )
+        session.commit()
+        report = outcome_ledger.calibration_report(session, min_sample=5)
+        assert report["overall"]["adopted_rate"] == pytest.approx(1.0)
+
+
+def test_latest_outcome_by_run_handles_mixed_tz(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """#4d: aware/naive noted_at must not crash comparison."""
+    from datetime import datetime
+
+    with session_factory() as session:
+        run = _seed_run(session, idempotency_key="tz-mix-run")
+        first = outcome_ledger.record_outcome(
+            session,
+            run.id,
+            outcome_label="reversed",
+            idempotency_key="tz-mix-a",
+        )
+        session.flush()
+        # Force naive datetime on second row (sqlite-like).
+        second = DeliberationOutcome(
+            run_id=run.id,
+            outcome_label="adopted",
+            scenario_assessments={},
+            noted_at=datetime(2099, 1, 1, 12, 0, 0),  # naive
+            noted_by="user",
+            idempotency_key="tz-mix-b",
+        )
+        session.add(second)
+        session.commit()
+        assert first.noted_at is not None
+        latest = outcome_ledger._latest_outcome_by_run(
+            outcome_ledger.list_outcomes(session, run.id)
+        )
+        assert latest[run.id].outcome_label == "adopted"
+        # Full report path also must not crash.
+        report = outcome_ledger.calibration_report(session, min_sample=1)
+        assert report["overall"]["adopted_rate"] == pytest.approx(1.0)
 
 
 def test_insufficient_sample_string(
@@ -449,3 +632,19 @@ def test_api_auth_and_sanitize(
         assert cal.status_code == 200
         assert "overall" in cal.json()
         assert "idempotency_key" not in json.dumps(cal.json())
+
+        # Cross-run idempotency key reuse → 409 conflict
+        with session_factory() as session:
+            other = _seed_run(session, idempotency_key="api-outcome-run-2")
+            session.commit()
+            other_id = other.id
+        conflict = client.post(
+            f"/v1/deliberations/{other_id}/outcomes",
+            json={"outcome_label": "adopted"},
+            headers={
+                temp_settings.api_key_header: temp_settings.api_key or "",
+                "Idempotency-Key": "api-out-1",
+            },
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["detail"]["code"] == "outcome_idempotency_key_conflict"

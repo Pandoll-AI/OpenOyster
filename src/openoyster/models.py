@@ -980,8 +980,9 @@ class DeliberationOutcome(Base):
     __tablename__ = "deliberation_outcomes"
     __table_args__ = (
         UniqueConstraint(
+            "run_id",
             "idempotency_key",
-            name="uq_deliberation_outcomes_idempotency_key",
+            name="uq_deliberation_outcomes_run_idempotency_key",
         ),
         Index("ix_deliberation_outcomes_noted_at", "noted_at"),
         Index("ix_deliberation_outcomes_outcome_label", "outcome_label"),

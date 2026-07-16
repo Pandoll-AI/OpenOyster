@@ -996,7 +996,15 @@ def _run_stage(
     # Exactly one retry for non-provider invalid/gate failures (attempt_number=2).
     for attempt_number in (1, 2):
         if run.llm_attempt_count >= MAX_LLM_ATTEMPTS:
-            raise RuntimeError("llm attempt budget exhausted")
+            # Handled terminal: never raise uncaught RuntimeError (run stuck).
+            return (
+                None,
+                last_call,
+                StageGateError(
+                    "llm_attempt_budget_exhausted",
+                    "llm attempt budget exhausted",
+                ),
+            )
 
         prompt = base_prompt
         if attempt_number == 2 and last_gate_error is not None:
@@ -1442,7 +1450,10 @@ def run_deliberation(
             ctx=ctx,
         )
         if error is not None or model is None:
-            if error is not None and error.code == "provider_error":
+            if error is not None and error.code in {
+                "provider_error",
+                "llm_attempt_budget_exhausted",
+            }:
                 run.status = "failed_execution"
                 run.outcome = None
                 run.failure_code = error.code

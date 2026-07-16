@@ -799,7 +799,10 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
             code = exc.code
             if code == outcome_ledger.ERROR_RUN_NOT_FOUND:
                 http_status = status.HTTP_404_NOT_FOUND
-            elif code == outcome_ledger.ERROR_RUN_NOT_COMPLETED:
+            elif code in {
+                outcome_ledger.ERROR_RUN_NOT_COMPLETED,
+                outcome_ledger.ERROR_IDEMPOTENCY_KEY_CONFLICT,
+            }:
                 http_status = status.HTTP_409_CONFLICT
             else:
                 http_status = status.HTTP_422_UNPROCESSABLE_CONTENT

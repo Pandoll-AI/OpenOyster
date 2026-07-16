@@ -12,6 +12,7 @@ from openoyster.deliberation_contracts import (
     CONTRACT_VERSION,
     MAX_BELIEFS,
     MAX_EVIDENCE_SNAPSHOTS,
+    MAX_LLM_ATTEMPTS,
     MAX_OPTIONS,
     MAX_SCENARIOS_PER_OPTION,
     MIN_QUOTE_CHARS,
@@ -54,6 +55,8 @@ def test_contract_version_constants_are_frozen() -> None:
     assert MAX_SCENARIOS_PER_OPTION == 3
     assert MAX_EVIDENCE_SNAPSHOTS == 24
     assert MIN_QUOTE_CHARS == 12
+    # expansion(1) + 5 stagesx2 + critic2 headroom
+    assert MAX_LLM_ATTEMPTS == 12
 
 
 def test_mission_requires_goal_and_decision_question() -> None:
@@ -95,6 +98,23 @@ def test_mission_forbids_extra_fields() -> None:
                 "extra_field": "nope",
             }
         )
+
+
+def test_mission_charter_id_strict_positive_int() -> None:
+    """#9: bool / numeric strings / 0 / negatives rejected; positive int accepted."""
+    ok = Mission.model_validate(
+        {"goal": "g", "decision_question": "q", "mission_charter_id": 7}
+    )
+    assert ok.mission_charter_id == 7
+    assert Mission.model_validate(
+        {"goal": "g", "decision_question": "q", "mission_charter_id": None}
+    ).mission_charter_id is None
+
+    for bad in (True, False, "1", "7", 0, -1, 1.5, "true"):
+        with pytest.raises(ValidationError):
+            Mission.model_validate(
+                {"goal": "g", "decision_question": "q", "mission_charter_id": bad}
+            )
 
 
 def test_citation_anchor_requires_quote_or_pointer_not_both_empty() -> None:

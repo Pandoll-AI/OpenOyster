@@ -177,14 +177,32 @@ def discover_scenarios(scenarios_dir: Path) -> list[ScenarioSpec]:
     return specs
 
 
-def _provider_provenance(provider: LLMProvider) -> dict[str, Any]:
+def _secondary_model_for_settings(settings: Settings) -> str | None:
+    match settings.critic2_provider:
+        case "claude-cli":
+            return settings.claude_model
+        case "codex":
+            return settings.llm_model
+        case "stub":
+            return "stub"
+        case _:
+            return None
+
+
+def _provider_provenance(
+    provider: LLMProvider, *, settings: Settings | None = None
+) -> dict[str, Any]:
     profile = provider.stage_profile("deliberation_decision")
-    return {
+    payload: dict[str, Any] = {
         "provider": getattr(provider, "name", type(provider).__name__),
         "model": profile.get("model"),
         "effort": profile.get("effort"),
         "stage_profile": profile,
     }
+    if settings is not None:
+        payload["secondary_provider"] = settings.critic2_provider
+        payload["secondary_model"] = _secondary_model_for_settings(settings)
+    return payload
 
 
 def _isolated_settings(base: Settings, work_root: Path) -> Settings:
@@ -210,6 +228,10 @@ def _isolated_settings(base: Settings, work_root: Path) -> Settings:
         codex_batch_size=base.codex_batch_size,
         codex_timeout_seconds=base.codex_timeout_seconds,
         codex_config_dir=base.codex_config_dir,
+        # critic2/claude-cli isolation: copy full secondary provider config.
+        claude_binary=base.claude_binary,
+        claude_timeout_seconds=base.claude_timeout_seconds,
+        claude_model=base.claude_model,
         api_key=base.api_key or "goldset-eval",
         api_allow_unsafe_no_key=base.api_allow_unsafe_no_key,
         scheduler_tick_seconds=base.scheduler_tick_seconds,
@@ -472,7 +494,7 @@ def evaluate_deliberation_goldset(
         wanted = set(scenario_ids)
         specs = [s for s in specs if s.scenario_id in wanted]
 
-    provenance = _provider_provenance(provider)
+    provenance = _provider_provenance(provider, settings=runtime_settings)
     provider_name = str(provenance.get("provider") or getattr(provider, "name", "unknown"))
     model = provenance.get("model")
     is_stub = provider_name == "stub" or model == "stub"

@@ -307,6 +307,84 @@ def test_happy_path_remains_five_llm_calls(
         assert "retrieval_query_expansion" not in provider.calls
 
 
+class RejectOncePerStageProvider(ExpandingProvider):
+    """Expansion once; each deliberation stage fails gate once then succeeds."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._stage_attempts: dict[str, int] = {}
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        self.calls.append(stage)
+        if stage == "retrieval_query_expansion":
+            return {"queries": ["source supports this claim", "supports this claim"]}
+        n = self._stage_attempts.get(stage, 0) + 1
+        self._stage_attempts[stage] = n
+        if n == 1:
+            # Invalid payload → gate reject → one retry.
+            return {"not": "a-valid-stage-payload"}
+        return stub_query_json(prompt, stage)
+
+
+def test_expansion_plus_stage_retries_does_not_stuck_run(
+    session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
+) -> None:
+    """#1: expansion + 1 reject/retry per stage must not raise uncaught budget error."""
+    provider = RejectOncePerStageProvider()
+    mission = _korean_mission()
+    with session_factory() as session:
+        install = _install_fixture(session, temp_settings, tmp_path, MINIMAL_FIXTURE)
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[install.pack_id],
+            idempotency_key="budget-reject-retry-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+        # 1 expansion + 5 stages x 2 attempts = 11; MAX_LLM_ATTEMPTS=12 leaves headroom.
+        assert run.status == "completed"
+        assert run.failure_code is None
+        assert run.lease_owner is None
+        assert run.completed_at is not None
+        assert run.llm_attempt_count == 11
+        assert provider.calls[0] == "retrieval_query_expansion"
+
+
+def test_llm_attempt_budget_exhausted_is_handled_terminal(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1: budget exhaustion → failed_execution + llm_attempt_budget_exhausted."""
+    monkeypatch.setattr(deliberation, "MAX_LLM_ATTEMPTS", 1)
+    provider = ExpandingProvider()
+    mission = _korean_mission()
+    with session_factory() as session:
+        install = _install_fixture(session, temp_settings, tmp_path, MINIMAL_FIXTURE)
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[install.pack_id],
+            idempotency_key="budget-exhausted-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+        # Expansion consumes the only attempt; first stage hits budget gate.
+        assert run.status == "failed_execution"
+        assert run.failure_code == "llm_attempt_budget_exhausted"
+        assert run.lease_owner is None
+        assert run.lease_until is None
+        assert run.completed_at is not None
+
+
 def test_manifest_hints_are_not_citable_quote_anchors(
     session_factory: sessionmaker[Session], temp_settings: Settings, tmp_path: Path
 ) -> None:

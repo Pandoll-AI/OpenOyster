@@ -704,7 +704,7 @@ def test_0010_decision_outcome_ledger_upgrade_and_downgrade(temp_settings: Setti
             for idx in inspector.get_indexes("deliberation_outcomes")
             if idx.get("unique")
         }
-        assert ("idempotency_key",) in uniques or any(
+        assert ("run_id", "idempotency_key") in uniques or any(
             name and "idempotency" in name for name in unique_indexes
         )
 
