@@ -934,7 +934,10 @@ def pack_install(
             )
             session.commit()
             # Post-commit flip scan owns its own commit; failures never affect install.
-            opencrab_packs.scan_installed_pack(session, result.pack_install_id)
+            # Pass runtime settings so flip_confirm_provider is not re-read from cache.
+            opencrab_packs.scan_installed_pack(
+                session, result.pack_install_id, settings=settings
+            )
         except opencrab_packs.PackValidationError as exc:
             session.rollback()
             _print_pack_json(
@@ -1329,8 +1332,10 @@ def deliberate_watch_scan(
         _print_pack_json({"error": {"code": "pack_install_required"}})
         raise typer.Exit(code=2)
     try:
-        with _runtime() as (_, _, factory), factory() as session:
-            triggers = flip_monitoring.scan_pack_install(session, pack_install)
+        with _runtime() as (settings, _, factory), factory() as session:
+            triggers = flip_monitoring.scan_pack_install(
+                session, pack_install, settings=settings
+            )
             session.commit()
             trigger_payloads = []
             for trigger in triggers:

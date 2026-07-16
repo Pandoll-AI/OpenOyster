@@ -384,7 +384,8 @@ def _stub_deliberation_decision(prompt: str) -> dict[str, Any]:
 def _stub_flip_confirm(prompt: str) -> dict[str, Any]:
     """Deterministic flip_confirm stub: related=true with a real evidence quote.
 
-    Parses the first ``[EVIDENCE id=...]...[/EVIDENCE]`` body and returns a
+    Parses the first body from ``[UNTRUSTED_EVIDENCE_JSON]...`` (preferred) or
+    the legacy ``[EVIDENCE id=...]...[/EVIDENCE]`` block and returns a
     verbatim substring meeting MIN_QUOTE_CHARS so tests can assert
     llm_supported. Force unsupported by overriding the provider in tests
     (related=false or a fabricated quote).
@@ -393,14 +394,27 @@ def _stub_flip_confirm(prompt: str) -> dict[str, Any]:
         return {"related": False, "quote": None}
     if "FLIP_CONFIRM_FAKE_QUOTE" in prompt:
         return {"related": True, "quote": "this quote is not in any evidence body"}
-    match = re.search(
-        r"\[EVIDENCE id=(?P<id>[^\]]+)\]\n(?P<body>.*?)\n\[/EVIDENCE\]",
-        prompt,
-        re.S,
-    )
-    if match is None:
-        return {"related": False, "quote": None}
-    body = match.group("body").strip()
+    body: str | None = None
+    try:
+        from openoyster.services.flip_monitoring import parse_untrusted_evidence_json
+
+        items = parse_untrusted_evidence_json(prompt)
+    except Exception:
+        items = None
+    if items:
+        first = items[0]
+        if isinstance(first.get("text"), str):
+            body = first["text"]
+    if body is None:
+        match = re.search(
+            r"\[EVIDENCE id=(?P<id>[^\]]+)\]\n(?P<body>.*?)\n\[/EVIDENCE\]",
+            prompt,
+            re.S,
+        )
+        if match is None:
+            return {"related": False, "quote": None}
+        body = match.group("body").strip()
+    body = body.strip()
     if len(body) < MIN_QUOTE_CHARS:
         return {"related": False, "quote": None}
     # First contiguous phrase long enough for the quote gate.

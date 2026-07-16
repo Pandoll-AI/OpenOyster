@@ -12,7 +12,7 @@ import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
 from urllib.parse import quote
 
 from sqlalchemy import select
@@ -20,6 +20,9 @@ from sqlalchemy.orm import Session
 
 from openoyster.models import PackEdge, PackEvidence, PackFile, PackInstall, PackNode, utcnow
 from openoyster.utils import stable_hash
+
+if TYPE_CHECKING:
+    from openoyster.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -884,17 +887,25 @@ def install_pack(
     )
 
 
-def scan_installed_pack(session: Session, pack_install_id: int) -> None:
+def scan_installed_pack(
+    session: Session,
+    pack_install_id: int,
+    *,
+    settings: Settings | None = None,
+) -> None:
     """Post-commit flip-condition scan for a freshly installed Pack.
 
     Callers invoke this AFTER committing the install so the deterministic scan
     runs against durable evidence. Scan failures never affect admission; the
     caller's install result is already committed and returned.
+
+    Pass the caller's runtime ``settings`` so flip_confirm_provider is not
+    re-resolved from the global ``get_settings()`` cache.
     """
     from openoyster.services.flip_monitoring import safe_scan_pack_install
 
     try:
-        safe_scan_pack_install(session, pack_install_id)
+        safe_scan_pack_install(session, pack_install_id, settings=settings)
         session.commit()
     except Exception:
         session.rollback()
