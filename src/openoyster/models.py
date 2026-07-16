@@ -948,6 +948,29 @@ class DeliberationFlipTrigger(Base):
     watch: Mapped[DeliberationFlipWatch] = relationship(back_populates="triggers")
 
 
+class DeliberationCharter(Base):
+    """First-class sustained concern grouping for deliberation missions.
+
+    Control-plane grouping only — never Pack evidence, never injected into
+    stage prompts. Soft-delete via status=archived (no hard delete).
+    """
+
+    __tablename__ = "deliberation_charters"
+    __table_args__ = (
+        Index("ix_deliberation_charters_status", "status"),
+        Index("ix_deliberation_charters_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(250))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class DeliberationOutcome(Base):
     """Append-only user-recorded result for a completed deliberation run.
 

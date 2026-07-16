@@ -26,6 +26,7 @@ REQUIRED_TABLES = {
     "deliberation_flip_watches",
     "deliberation_flip_triggers",
     "deliberation_outcomes",
+    "deliberation_charters",
 }
 
 

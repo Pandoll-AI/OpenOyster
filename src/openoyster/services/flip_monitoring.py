@@ -273,6 +273,7 @@ def list_watches(
     *,
     run_id: int | None = None,
     status: str | None = None,
+    mission_charter_id: int | None = None,
 ) -> list[DeliberationFlipWatch]:
     stmt = select(DeliberationFlipWatch).order_by(DeliberationFlipWatch.id.asc())
     if run_id is not None:
@@ -281,7 +282,35 @@ def list_watches(
         if status not in WATCH_STATUSES:
             raise FlipWatchError("invalid_watch_status", status)
         stmt = stmt.where(DeliberationFlipWatch.status == status)
-    return list(session.scalars(stmt).all())
+    watches = list(session.scalars(stmt).all())
+    if mission_charter_id is None:
+        return watches
+    # Optional filter via parent run mission snapshot (scan logic unchanged).
+    from openoyster.models import DeliberationRun
+
+    run_ids = {w.run_id for w in watches}
+    if not run_ids:
+        return []
+    runs = {
+        r.id: r
+        for r in session.scalars(
+            select(DeliberationRun).where(DeliberationRun.id.in_(run_ids))
+        ).all()
+    }
+
+    def _run_charter_id(run: DeliberationRun | None) -> int | None:
+        if run is None or not isinstance(run.mission_snapshot_json, dict):
+            return None
+        raw = run.mission_snapshot_json.get("mission_charter_id")
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    target = int(mission_charter_id)
+    return [w for w in watches if _run_charter_id(runs.get(w.run_id)) == target]
 
 
 def get_watch(session: Session, watch_id: int) -> DeliberationFlipWatch | None:

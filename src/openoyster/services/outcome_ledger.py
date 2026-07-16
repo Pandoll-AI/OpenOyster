@@ -304,6 +304,13 @@ def calibration_report(
     min_sample: int = DEFAULT_MIN_SAMPLE,
 ) -> dict[str, Any]:
     """Deterministic frequency aggregates. Never calls an LLM."""
+    # When filtering by charter, require the charter entity to exist so callers
+    # get a stable error instead of a silent empty breakdown for typos/orphans.
+    if mission_charter_id is not None:
+        from openoyster.services.charters import require_charter_exists
+
+        require_charter_exists(session, mission_charter_id)
+
     outcome_stmt = select(DeliberationOutcome).order_by(
         DeliberationOutcome.noted_at.asc(), DeliberationOutcome.id.asc()
     )

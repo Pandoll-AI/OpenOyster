@@ -23,7 +23,7 @@ from openoyster.models import (
     DeliberationStageCall,
 )
 from openoyster.schemas import TextAnalysis
-from openoyster.services import deliberation, opencrab_packs, outcome_ledger
+from openoyster.services import charters, deliberation, opencrab_packs, outcome_ledger
 from openoyster.services.deliberation_prompts import build_stage_prompt, prompt_digest
 from openoyster.services.llm_judges import stub_query_json
 
@@ -132,6 +132,10 @@ def test_record_completed_run_updates_calibration(
     session_factory: sessionmaker[Session],
 ) -> None:
     with session_factory() as session:
+        charter_a = charters.create_charter(session, title="cal-a")
+        charter_b = charters.create_charter(session, title="cal-b")
+        session.flush()
+        id_a, id_b = charter_a.id, charter_b.id
         # Below min_sample (5) → insufficient; then add enough decision outcomes.
         for i in range(5):
             run = _seed_run(
@@ -139,7 +143,7 @@ def test_record_completed_run_updates_calibration(
                 status="completed",
                 outcome="select",
                 idempotency_key=f"cal-dec-{i}",
-                mission_charter_id=7 if i < 3 else 9,
+                mission_charter_id=id_a if i < 3 else id_b,
             )
             label = "adopted" if i < 4 else "reversed"
             outcome_ledger.record_outcome(
@@ -156,7 +160,7 @@ def test_record_completed_run_updates_calibration(
                 status="completed",
                 outcome="abstain",
                 idempotency_key=f"cal-abs-{i}",
-                mission_charter_id=7,
+                mission_charter_id=id_a,
             )
             outcome_ledger.record_outcome(
                 session,
@@ -175,13 +179,13 @@ def test_record_completed_run_updates_calibration(
         assert overall["reversed_rate"] == pytest.approx(0.2)
         assert overall["abstention_was_right_rate"] == pytest.approx(0.6)
         assert overall["adverse_materialized_rate"] == pytest.approx(0.6)
-        assert "7" in report["by_mission_charter_id"]
-        assert "9" in report["by_mission_charter_id"]
+        assert str(id_a) in report["by_mission_charter_id"]
+        assert str(id_b) in report["by_mission_charter_id"]
 
-        charter7 = outcome_ledger.calibration_report(
-            session, mission_charter_id=7, min_sample=3
+        charter_a_report = outcome_ledger.calibration_report(
+            session, mission_charter_id=id_a, min_sample=3
         )
-        assert charter7["overall"]["sample"]["decision_runs_with_outcome"] == 3
+        assert charter_a_report["overall"]["sample"]["decision_runs_with_outcome"] == 3
 
 
 def test_idempotency_key_returns_existing(

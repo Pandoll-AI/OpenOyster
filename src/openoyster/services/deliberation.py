@@ -46,6 +46,7 @@ from openoyster.models import (
     PackEvidence,
     PackInstall,
 )
+from openoyster.services.charters import require_active_charter
 from openoyster.services.cognitive_impact import compute_cognitive_impact
 from openoyster.services.cognitive_transition import persist_cognitive_transition
 from openoyster.services.deliberation_dossier import persist_dossier
@@ -1294,6 +1295,10 @@ def run_deliberation(
     if existing is not None:
         _assert_request_fingerprint(session, existing, fingerprint)
         return _existing_run_state(session, existing)
+
+    # Charter validation is freeze-preflight (new runs only): mission_charter_id
+    # is control-plane grouping (integer id). Title/description never enter prompts.
+    require_active_charter(session, mission.mission_charter_id)
 
     try:
         run = _freeze_and_create_run(

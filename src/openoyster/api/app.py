@@ -104,6 +104,15 @@ class FlipWatchDismissRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class CharterCreateRequest(BaseModel):
+    """Public request to create a deliberation charter (control-plane grouping)."""
+
+    title: str = Field(min_length=1)
+    description: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
 class OutcomeRecordRequest(BaseModel):
     """Public request to append a decision-outcome ledger entry."""
 
@@ -462,8 +471,15 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={"code": exc.code},
             ) from None
-        except Exception:
+        except Exception as exc:
+            from openoyster.services import charters as charter_service
+
             session.rollback()
+            if isinstance(exc, charter_service.CharterError):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"code": exc.code},
+                ) from None
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={"code": "deliberation_execution_failed"},
@@ -510,8 +526,15 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={"code": exc.code},
             ) from None
-        except Exception:
+        except Exception as exc:
+            from openoyster.services import charters as charter_service
+
             session.rollback()
+            if isinstance(exc, charter_service.CharterError):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"code": exc.code},
+                ) from None
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={"code": "deliberation_execution_failed"},
@@ -836,12 +859,134 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={"code": "invalid_since_date"},
                 ) from exc
-        report = outcome_ledger.calibration_report(
-            session,
-            since=since_dt,
-            mission_charter_id=charter,
-        )
+        try:
+            report = outcome_ledger.calibration_report(
+                session,
+                since=since_dt,
+                mission_charter_id=charter,
+            )
+        except Exception as exc:
+            from openoyster.services import charters as charter_service
+
+            if isinstance(exc, charter_service.CharterError):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND
+                    if exc.code == charter_service.ERROR_UNKNOWN_CHARTER
+                    else status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"code": exc.code},
+                ) from None
+            raise
         return _sanitize_deliberation_value(report)  # type: ignore[return-value]
+
+    @application.post(
+        "/v1/charters",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def create_charter(
+        payload: CharterCreateRequest,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Create an active deliberation charter (control-plane grouping only)."""
+        from openoyster.services import charters
+
+        try:
+            row = charters.create_charter(
+                session, title=payload.title, description=payload.description
+            )
+            session.commit()
+        except charters.CharterError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
+        except Exception:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "charter_create_failed"},
+            ) from None
+        return _sanitize_deliberation_value(
+            {"charter": charters.charter_public_payload(row)}
+        )  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/charters",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def list_charters(
+        status_filter: Annotated[str | None, Query(alias="status")] = None,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """List deliberation charters; optional status filter."""
+        from openoyster.services import charters
+
+        try:
+            rows = charters.list_charters(session, status=status_filter)
+        except charters.CharterError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
+        return _sanitize_deliberation_value(
+            {"charters": [charters.charter_public_payload(row) for row in rows]}
+        )  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/charters/{charter_id}",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def get_charter(
+        charter_id: int,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Show one deliberation charter."""
+        from openoyster.services import charters
+
+        row = charters.get_charter(session, charter_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": charters.ERROR_UNKNOWN_CHARTER},
+            )
+        return _sanitize_deliberation_value(
+            {"charter": charters.charter_public_payload(row)}
+        )  # type: ignore[return-value]
+
+    @application.post(
+        "/v1/charters/{charter_id}/archive",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def archive_charter(
+        charter_id: int,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Archive a charter (soft-delete)."""
+        from openoyster.services import charters
+
+        try:
+            row = charters.archive_charter(session, charter_id)
+            session.commit()
+        except charters.CharterError as exc:
+            session.rollback()
+            http_status = (
+                status.HTTP_404_NOT_FOUND
+                if exc.code == charters.ERROR_UNKNOWN_CHARTER
+                else status.HTTP_422_UNPROCESSABLE_CONTENT
+            )
+            raise HTTPException(
+                status_code=http_status,
+                detail={"code": exc.code},
+            ) from None
+        except Exception:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "charter_archive_failed"},
+            ) from None
+        return _sanitize_deliberation_value(
+            {"charter": charters.charter_public_payload(row)}
+        )  # type: ignore[return-value]
 
     @application.post("/v1/run-cycle", dependencies=[Depends(_write_authorised)])
     def run_cycle() -> dict[str, Any]:
