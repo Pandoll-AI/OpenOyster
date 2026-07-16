@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
+
+from openoyster.deliberation_contracts import MIN_QUOTE_CHARS
 
 from ..llm_contracts import ExtractionUnavailable
 from ..utils import normalise_text
@@ -51,13 +54,46 @@ def _deliberation_quote_from_prompt(prompt: str, snapshot_key: str | None) -> st
         text_match = re.search(r'"text"\s*:\s*"(?P<text>(?:\\.|[^"\\])*)"', body)
         if text_match:
             raw = text_match.group("text").encode("utf-8").decode("unicode_escape")
-            if raw:
-                # Use a stable short substring for anchors.
+            if raw and len(raw.strip()) >= MIN_QUOTE_CHARS:
+                # Use a stable substring that still meets MIN_QUOTE_CHARS.
                 return raw if len(raw) <= 120 else raw[:120]
         stripped = body.strip()
-        if stripped:
+        if len(stripped) >= MIN_QUOTE_CHARS:
             return stripped[:120]
     return preferred
+
+
+def _mission_constraint_count_from_prompt(prompt: str) -> int:
+    """Count Mission.constraints embedded in the deliberation prompt control block."""
+    match = re.search(r'"constraints"\s*:\s*(\[(?:[^\[\]]|\[(?:[^\[\]])*\])*\])', prompt)
+    if match is None:
+        return 0
+    try:
+        constraints = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return 0
+    if not isinstance(constraints, list):
+        return 0
+    return len(constraints)
+
+
+def _stub_constraint_judgements(constraint_count: int) -> list[dict[str, Any]]:
+    """Emit one satisfied judgement per mission constraint (exact coverage)."""
+    judgements: list[dict[str, Any]] = []
+    for index in range(constraint_count):
+        pointer = f"/constraints/{index}"
+        judgements.append(
+            {
+                "constraint_index": index,
+                "satisfied": True,
+                "rationale": {
+                    "text": f"Constraint {index} is satisfied under Pack evidence",
+                    "classification": "mission_control",
+                    "mission_pointer": pointer,
+                },
+            }
+        )
+    return judgements
 
 
 def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
@@ -118,7 +154,7 @@ def _stub_deliberation_beliefs(prompt: str) -> dict[str, Any]:
 
 
 def _stub_deliberation_options(prompt: str) -> dict[str, Any]:
-    del prompt
+    judgements = _stub_constraint_judgements(_mission_constraint_count_from_prompt(prompt))
     return {
         "options": [
             {
@@ -129,17 +165,7 @@ def _stub_deliberation_options(prompt: str) -> dict[str, Any]:
                     "mission_pointer": "/decision_question",
                 },
                 "viable": True,
-                "constraint_judgements": [
-                    {
-                        "constraint_index": 0,
-                        "satisfied": True,
-                        "rationale": {
-                            "text": "Does not invent facts outside Pack evidence",
-                            "classification": "mission_control",
-                            "mission_pointer": "/constraints/0",
-                        },
-                    }
-                ],
+                "constraint_judgements": judgements,
                 "supporting_belief_keys": ["b1"],
                 "opposing_belief_keys": [],
                 "risks": [],
@@ -158,17 +184,7 @@ def _stub_deliberation_options(prompt: str) -> dict[str, Any]:
                     "mission_pointer": "/goal",
                 },
                 "viable": True,
-                "constraint_judgements": [
-                    {
-                        "constraint_index": 0,
-                        "satisfied": True,
-                        "rationale": {
-                            "text": "Deferral invents no external facts",
-                            "classification": "mission_control",
-                            "mission_pointer": "/constraints/0",
-                        },
-                    }
-                ],
+                "constraint_judgements": list(judgements),
                 "supporting_belief_keys": [],
                 "opposing_belief_keys": [],
                 "risks": [],

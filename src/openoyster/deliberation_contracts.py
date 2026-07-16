@@ -11,14 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from openoyster.utils import sha256_text
 
 CONTRACT_VERSION: Final = "deliberation-d1-v1"
-PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v7"
+PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v8"
 
 MAX_BELIEFS: Final = 20
 MAX_OPTIONS: Final = 5
 MAX_SCENARIOS_PER_OPTION: Final = 3
 MAX_EVIDENCE_SNAPSHOTS: Final = 24
 MAX_PROMPT_CHARS: Final = 100_000
-MAX_LLM_ATTEMPTS: Final = 5
+MAX_LLM_ATTEMPTS: Final = 10
+MIN_QUOTE_CHARS: Final = 12
 
 STAGE_BELIEFS: Final = "deliberation_beliefs"
 STAGE_OPTIONS: Final = "deliberation_options"
@@ -325,6 +326,9 @@ class KnowledgeRequest(StrictModel):
     question: str = Field(min_length=1)
     gap_ref: str = Field(min_length=1)
     priority: Literal["critical", "important", "nice_to_have"] = "critical"
+    retrieval_status: (
+        Literal["no_match_in_pack_evidence", "pack_has_no_evidence"] | None
+    ) = None
 
 
 class DecisionStagePayload(StrictModel):
