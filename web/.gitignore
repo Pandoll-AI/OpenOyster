@@ -4,3 +4,6 @@ dist
 .shot-*.png
 .DS_Store
 .vercel
+.nodes.json
+.edges.json
+.config.json
