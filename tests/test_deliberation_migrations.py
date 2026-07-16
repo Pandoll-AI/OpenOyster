@@ -25,6 +25,7 @@ REQUIRED_TABLES = {
     "deliberation_replay_results",
     "deliberation_flip_watches",
     "deliberation_flip_triggers",
+    "deliberation_outcomes",
 }
 
 
@@ -661,6 +662,57 @@ def test_0009_flip_monitoring_tables_upgrade_and_downgrade(temp_settings: Settin
         downgraded = set(inspector.get_table_names())
         assert "deliberation_flip_watches" not in downgraded
         assert "deliberation_flip_triggers" not in downgraded
+        assert "deliberation_runs" in downgraded
+    finally:
+        engine.dispose()
+
+
+def test_0010_decision_outcome_ledger_upgrade_and_downgrade(temp_settings: Settings) -> None:
+    """0010 creates deliberation_outcomes; downgrade removes it symmetrically."""
+    engine = make_engine(temp_settings)
+    try:
+        upgrade_database(temp_settings, revision="0009_flip_monitoring_d3")
+        inspector = inspect(engine)
+        before = set(inspector.get_table_names())
+        assert "deliberation_outcomes" not in before
+        assert "deliberation_flip_watches" in before
+
+        upgrade_database(temp_settings, revision="head")
+        inspector = inspect(engine)
+        after = set(inspector.get_table_names())
+        assert "deliberation_outcomes" in after
+
+        cols = {column["name"] for column in inspector.get_columns("deliberation_outcomes")}
+        assert {
+            "id",
+            "run_id",
+            "outcome_label",
+            "scenario_assessments",
+            "abstention_assessment",
+            "note",
+            "noted_at",
+            "noted_by",
+            "idempotency_key",
+        } <= cols
+        uniques = {
+            tuple(constraint.get("column_names") or ())
+            for constraint in inspector.get_unique_constraints("deliberation_outcomes")
+        }
+        unique_indexes = {
+            idx["name"]
+            for idx in inspector.get_indexes("deliberation_outcomes")
+            if idx.get("unique")
+        }
+        assert ("idempotency_key",) in uniques or any(
+            name and "idempotency" in name for name in unique_indexes
+        )
+
+        config = _alembic_config(temp_settings.db_url)
+        command.downgrade(config, "0009_flip_monitoring_d3")
+        inspector = inspect(engine)
+        downgraded = set(inspector.get_table_names())
+        assert "deliberation_outcomes" not in downgraded
+        assert "deliberation_flip_watches" in downgraded
         assert "deliberation_runs" in downgraded
     finally:
         engine.dispose()

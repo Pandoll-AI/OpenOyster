@@ -946,3 +946,32 @@ class DeliberationFlipTrigger(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     watch: Mapped[DeliberationFlipWatch] = relationship(back_populates="triggers")
+
+
+class DeliberationOutcome(Base):
+    """Append-only user-recorded result for a completed deliberation run.
+
+    Usage record only — never Pack evidence, never injected into prompts.
+    """
+
+    __tablename__ = "deliberation_outcomes"
+    __table_args__ = (
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_deliberation_outcomes_idempotency_key",
+        ),
+        Index("ix_deliberation_outcomes_noted_at", "noted_at"),
+        Index("ix_deliberation_outcomes_outcome_label", "outcome_label"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    outcome_label: Mapped[str] = mapped_column(String(40))
+    scenario_assessments: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    abstention_assessment: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    noted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    noted_by: Mapped[str] = mapped_column(String(120), default="user")
+    idempotency_key: Mapped[str | None] = mapped_column(String(250), nullable=True)

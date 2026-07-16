@@ -77,6 +77,9 @@ artifact_app = typer.Typer(help="Inspect artifacts and provenance.")
 pack_app = typer.Typer(help="Validate, install, inspect, and query trusted OpenCrab Pack directories.")
 deliberate_app = typer.Typer(help="Run and audit Autonomous Deliberation D1 decisions.")
 deliberate_watch_app = typer.Typer(help="Monitor flip-condition watches (D3).")
+deliberate_outcome_app = typer.Typer(
+    help="Record and inspect decision outcome ledger entries (usage records, not evidence)."
+)
 app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
@@ -84,6 +87,7 @@ app.add_typer(artifact_app, name="artifact")
 app.add_typer(pack_app, name="pack")
 app.add_typer(deliberate_app, name="deliberate")
 deliberate_app.add_typer(deliberate_watch_app, name="watch")
+deliberate_app.add_typer(deliberate_outcome_app, name="outcome")
 app.add_typer(eval_app, name="eval")
 app.add_typer(gold_app, name="gold")
 console = Console()
@@ -1352,6 +1356,119 @@ def deliberate_watch_dismiss(
         _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
         raise typer.Exit(code=1) from exc
     _print_pack_json(payload)
+
+
+@deliberate_outcome_app.command("record")
+def deliberate_outcome_record(
+    run_id: Annotated[int, typer.Argument(min=1)],
+    label: Annotated[
+        str,
+        typer.Option(
+            "--label",
+            help="Outcome label: adopted|adopted_modified|not_adopted|reversed|expired",
+        ),
+    ],
+    scenario: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--scenario",
+            help="Scenario assessment as key=status (e.g. expected=materialized).",
+        ),
+    ] = None,
+    abstention: Annotated[
+        str | None,
+        typer.Option(
+            "--abstention",
+            help="Abstention assessment: abstention_was_right|information_arrived_late|should_have_selected",
+        ),
+    ] = None,
+    note: Annotated[str | None, typer.Option("--note", help="Optional free-text note.")] = None,
+    idempotency_key: Annotated[
+        str | None,
+        typer.Option("--idempotency-key", help="Optional idempotency key for safe retries."),
+    ] = None,
+    noted_by: Annotated[
+        str,
+        typer.Option("--noted-by", help="Who recorded this outcome."),
+    ] = "user",
+) -> None:
+    """Append one outcome ledger entry for a completed run (usage record, not evidence)."""
+    from .services import outcome_ledger
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            row = outcome_ledger.record_outcome(
+                session,
+                run_id,
+                outcome_label=label,
+                scenario_assessments=list(scenario or []),
+                abstention_assessment=abstention,
+                note=note,
+                noted_by=noted_by,
+                idempotency_key=idempotency_key,
+            )
+            session.commit()
+            payload = {
+                "outcome": _sanitize_deliberation_value(
+                    outcome_ledger.outcome_public_payload(row)
+                )
+            }
+    except outcome_ledger.OutcomeLedgerError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_outcome_app.command("show")
+def deliberate_outcome_show(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """List append-only outcome ledger entries for one run."""
+    from .services import outcome_ledger
+
+    with _runtime() as (_, _, factory), factory() as session:
+        rows = outcome_ledger.list_outcomes(session, run_id)
+        payload = {
+            "run_id": run_id,
+            "outcomes": [
+                _sanitize_deliberation_value(outcome_ledger.outcome_public_payload(row))
+                for row in rows
+            ],
+        }
+    _print_pack_json(payload)
+
+
+@deliberate_app.command("calibration")
+def deliberate_calibration(
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="Only outcomes noted at or after this ISO date."),
+    ] = None,
+    charter: Annotated[
+        int | None,
+        typer.Option("--charter", help="Filter by mission_charter_id from mission snapshot."),
+    ] = None,
+) -> None:
+    """Deterministic calibration aggregates from the outcome ledger (no LLM)."""
+    from datetime import datetime
+
+    from .services import outcome_ledger
+
+    since_dt = None
+    if since is not None and since.strip():
+        try:
+            since_dt = datetime.fromisoformat(since.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            _print_pack_json({"error": {"code": "invalid_since_date"}})
+            raise typer.Exit(code=2) from exc
+    with _runtime() as (_, _, factory), factory() as session:
+        report = outcome_ledger.calibration_report(
+            session,
+            since=since_dt,
+            mission_charter_id=charter,
+        )
+    _print_pack_json(_sanitize_deliberation_value(report))
 
 
 def _print_results(results) -> None:

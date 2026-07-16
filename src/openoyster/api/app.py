@@ -104,6 +104,31 @@ class FlipWatchDismissRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class OutcomeRecordRequest(BaseModel):
+    """Public request to append a decision-outcome ledger entry."""
+
+    outcome_label: Literal[
+        "adopted",
+        "adopted_modified",
+        "not_adopted",
+        "reversed",
+        "expired",
+    ]
+    scenario_assessments: dict[str, str] | None = None
+    abstention_assessment: (
+        Literal[
+            "abstention_was_right",
+            "information_arrived_late",
+            "should_have_selected",
+        ]
+        | None
+    ) = None
+    note: str | None = None
+    noted_by: str = "user"
+
+    model_config = {"extra": "forbid"}
+
+
 _DELIBERATION_HIDDEN_FIELDS = {
     "failure_detail",
     "idempotency_key",
@@ -720,6 +745,103 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
         return _sanitize_deliberation_value(
             {"watch": flip_monitoring.watch_public_payload(watch)}
         )  # type: ignore[return-value]
+
+    @application.post(
+        "/v1/deliberations/{run_id}/outcomes",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def create_deliberation_outcome(
+        run_id: int,
+        payload: OutcomeRecordRequest,
+        idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Append an outcome ledger entry for a completed run (usage record only)."""
+        from openoyster.services import outcome_ledger
+
+        try:
+            row = outcome_ledger.record_outcome(
+                session,
+                run_id,
+                outcome_label=payload.outcome_label,
+                scenario_assessments=payload.scenario_assessments,
+                abstention_assessment=payload.abstention_assessment,
+                note=payload.note,
+                noted_by=payload.noted_by,
+                idempotency_key=idempotency_key,
+            )
+            session.commit()
+        except outcome_ledger.OutcomeLedgerError as exc:
+            session.rollback()
+            code = exc.code
+            if code == outcome_ledger.ERROR_RUN_NOT_FOUND:
+                http_status = status.HTTP_404_NOT_FOUND
+            elif code == outcome_ledger.ERROR_RUN_NOT_COMPLETED:
+                http_status = status.HTTP_409_CONFLICT
+            else:
+                http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+            raise HTTPException(
+                status_code=http_status,
+                detail={"code": code},
+            ) from None
+        except Exception:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "outcome_record_failed"},
+            ) from None
+        return _sanitize_deliberation_value(
+            {"outcome": outcome_ledger.outcome_public_payload(row)}
+        )  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/deliberations/{run_id}/outcomes",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def get_deliberation_outcomes(
+        run_id: int,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """List append-only outcome ledger entries for one deliberation run."""
+        from openoyster.services import outcome_ledger
+
+        deliberation_run_or_404(session, run_id)
+        rows = outcome_ledger.list_outcomes(session, run_id)
+        payload = {
+            "run_id": run_id,
+            "outcomes": [outcome_ledger.outcome_public_payload(row) for row in rows],
+        }
+        return _sanitize_deliberation_value(payload)  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/calibration",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def get_calibration(
+        since: Annotated[str | None, Query()] = None,
+        charter: Annotated[int | None, Query()] = None,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Deterministic calibration report from the outcome ledger (no LLM)."""
+        from datetime import datetime
+
+        from openoyster.services import outcome_ledger
+
+        since_dt = None
+        if since is not None and since.strip():
+            try:
+                since_dt = datetime.fromisoformat(since.strip().replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"code": "invalid_since_date"},
+                ) from exc
+        report = outcome_ledger.calibration_report(
+            session,
+            since=since_dt,
+            mission_charter_id=charter,
+        )
+        return _sanitize_deliberation_value(report)  # type: ignore[return-value]
 
     @application.post("/v1/run-cycle", dependencies=[Depends(_write_authorised)])
     def run_cycle() -> dict[str, Any]:
