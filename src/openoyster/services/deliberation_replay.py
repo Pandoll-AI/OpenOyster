@@ -38,7 +38,9 @@ from openoyster.services.deliberation_gates import (
 )
 
 IMPACT_METHOD_V2 = "citation_scope_projection_v2"
-TRANSITION_METHOD_V2 = "cognitive_transition_v2"
+# v3 freezes semantic verdicts at creation; replay recomputes LLM-free with
+# stored semantic_verdicts. Legacy v2 (and other) methods skip recompute.
+TRANSITION_METHOD_V3 = "cognitive_transition_v3"
 
 
 def _gate_context(session: Session, run: DeliberationRun) -> GateContext:
@@ -233,7 +235,7 @@ def _verify_cognitive_transition_digest(
         }
 
     stored_method = stored_payload.get("method")
-    if stored_method != TRANSITION_METHOD_V2:
+    if stored_method != TRANSITION_METHOD_V3:
         return {
             "present": True,
             "matched": True,
@@ -268,11 +270,15 @@ def _verify_cognitive_transition_digest(
     if parent is None:
         return {"present": True, "matched": False, "error": "parent_run_not_found"}
 
+    # Replay is LLM-free: re-apply stored frozen semantic_verdicts only.
+    stored_frozen = stored_payload.get("semantic_verdicts")
+    frozen_semantic = stored_frozen if isinstance(stored_frozen, dict) else {}
     recomputed = build_cognitive_transition_payload(
         session,
         parent_run=parent,
         child_run=run,
         fulfilled_knowledge_request_keys=fulfilled_keys,
+        frozen_semantic=frozen_semantic,
     )
     recomputed_digest = payload_digest(recomputed)
     return {

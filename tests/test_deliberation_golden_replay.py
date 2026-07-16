@@ -219,8 +219,8 @@ def test_replay_detects_cognitive_transition_digest_mismatch(
             )
         )
         assert transition is not None
-        # Tamper content while keeping method=v2 so recompute still runs.
-        # (Non-v2 methods skip recompute by design — see method_version tests.)
+        # Tamper content while keeping method=v3 so recompute still runs.
+        # (Non-v3 methods skip recompute by design — see method_version tests.)
         tampered = dict(transition.payload_json or {})
         tampered["critic_verdict_change"] = {"from": "pass", "to": "tampered"}
         transition.payload_json = tampered

@@ -1,4 +1,10 @@
-"""Persisted parent-to-child cognitive transition for Deliberation D1."""
+"""Persisted parent-to-child cognitive transition for Deliberation D1.
+
+Semantic relevance (critic2) is judged only at *creation* time. Verdicts are
+frozen into ``semantic_verdicts`` on the payload. ``build_cognitive_transition_payload``
+is LLM-free and deterministic given ``frozen_semantic`` — replay must never
+construct or call a provider.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openoyster.config import get_settings
+from openoyster.config import Settings, get_settings
 from openoyster.deliberation_contracts import payload_digest
 from openoyster.llm import critic2_provider_from_settings
 from openoyster.models import (
@@ -19,12 +25,16 @@ from openoyster.models import (
     DeliberationPackScope,
     DeliberationRun,
 )
-from openoyster.services.knowledge_request_verifiers import verify_claimed_requests
+from openoyster.services.knowledge_request_verifiers import (
+    SemanticRelevanceVerifier,
+    verify_claimed_requests,
+)
 
 if TYPE_CHECKING:
     from openoyster.llm import LLMProvider
 
-METHOD = "cognitive_transition_v2"
+# v3: semantic verdicts frozen at creation; replay is LLM-free with frozen input.
+METHOD = "cognitive_transition_v3"
 
 
 def _artifact_payloads(session: Session, run_id: int) -> dict[str, dict[str, Any]]:
@@ -153,23 +163,111 @@ def _evidence_text_by_ids(
     return out
 
 
+def _safe_provider_provenance(provider: LLMProvider, settings: Settings) -> dict[str, str]:
+    """Safe provider/model labels only — never raw prompt or evidence text."""
+    prov: dict[str, str] = {
+        "provider": str(getattr(provider, "name", "unknown") or "unknown"),
+        "critic2_provider": str(settings.critic2_provider),
+    }
+    if settings.critic2_provider == "claude-cli" and settings.claude_model:
+        prov["model"] = str(settings.claude_model)
+    elif settings.critic2_provider in ("codex", "stub"):
+        prov["model"] = str(settings.llm_model)
+    return prov
+
+
+def _fail_closed_semantic_entries(
+    requests: list[dict[str, Any]],
+    *,
+    claimed_keys: set[str],
+    reason: str,
+) -> dict[str, dict[str, Any]]:
+    """Mark matching claimed KRs as related=false so structural cannot promote."""
+    verifier = SemanticRelevanceVerifier()
+    frozen: dict[str, dict[str, Any]] = {}
+    for request in requests:
+        key = request.get("local_key")
+        if not isinstance(key, str) or key not in claimed_keys:
+            continue
+        if not verifier.matches(request):
+            continue
+        frozen[key] = {
+            "related": False,
+            "verification_evidence_ids": [],
+            "method": verifier.method_id,
+            "safe_provider_provenance": {"provider": "unavailable", "reason": reason},
+            "input_digest": payload_digest({"error": reason, "local_key": key}),
+        }
+    return frozen
+
+
+def _compute_frozen_semantic(
+    session: Session,
+    *,
+    parent_knowledge_requests: list[dict[str, Any]],
+    claimed_keys: set[str],
+    added_evidence_ids: list[str],
+    child_cited_evidence_ids: set[str],
+    child_run_id: int,
+    provider: LLMProvider,
+    settings: Settings,
+) -> dict[str, dict[str, Any]]:
+    """Run semantic gate once per matching claimed KR; return freeze map."""
+    evidence_text = _evidence_text_by_ids(session, child_run_id, added_evidence_ids)
+    verifier = SemanticRelevanceVerifier()
+    provenance = _safe_provider_provenance(provider, settings)
+    frozen: dict[str, dict[str, Any]] = {}
+    for request in parent_knowledge_requests:
+        key = request.get("local_key")
+        if not isinstance(key, str) or key not in claimed_keys:
+            continue
+        if not verifier.matches(request):
+            continue
+        result = verifier.verify(
+            request,
+            added_evidence_ids,
+            child_cited_evidence_ids=child_cited_evidence_ids,
+            provider=provider,
+            evidence_text_by_id=evidence_text,
+        )
+        evidence_ids = list(result.get("verification_evidence_ids") or [])
+        question = str(request.get("question") or "")[:2000]
+        input_payload = {
+            "local_key": key,
+            "question": question,
+            "evidence_ids": evidence_ids,
+            "evidence_text_digests": {
+                eid: payload_digest({"text": evidence_text.get(eid, "")})
+                for eid in evidence_ids
+            },
+        }
+        frozen[key] = {
+            "related": result.get("status") == "verified_fulfilled",
+            "verification_evidence_ids": evidence_ids,
+            "method": result.get("verification_method") or verifier.method_id,
+            "safe_provider_provenance": dict(provenance),
+            "input_digest": payload_digest(input_payload),
+        }
+    return frozen
+
+
 def _verify_claimed_requests(
     requests: list[dict[str, Any]],
     *,
     claimed_keys: set[str],
     added_evidence_ids: list[str],
     child_cited_evidence_ids: set[str] | None = None,
-    provider: LLMProvider | None = None,
-    evidence_text_by_id: dict[str, str] | None = None,
+    frozen_semantic: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Delegate claimed-KR verification to the type-specific registry."""
+    """Delegate claimed-KR verification — LLM-free when using frozen_semantic."""
     return verify_claimed_requests(
         requests,
         claimed_keys=claimed_keys,
         added_evidence_ids=added_evidence_ids,
         child_cited_evidence_ids=child_cited_evidence_ids or set(),
-        provider=provider,
-        evidence_text_by_id=evidence_text_by_id,
+        provider=None,
+        evidence_text_by_id=None,
+        frozen_semantic=frozen_semantic,
     )
 
 
@@ -179,10 +277,14 @@ def build_cognitive_transition_payload(
     parent_run: DeliberationRun,
     child_run: DeliberationRun,
     fulfilled_knowledge_request_keys: set[str],
+    frozen_semantic: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Pure (read-only) parent→child transition payload.
+    """Pure (read-only, LLM-free) parent→child transition payload.
 
     Session is used only for SELECT; callers persist the result separately.
+    Never constructs or calls an LLM provider. When ``frozen_semantic`` is a
+    dict, those verdicts drive semantic KR outcomes; when None/empty, only the
+    deterministic structural verifiers (added_cited fallback) apply.
     """
     parent = _artifact_payloads(session, parent_run.id)
     child = _artifact_payloads(session, child_run.id)
@@ -197,19 +299,19 @@ def build_cognitive_transition_payload(
     # Child-cited global evidence ids (belief/assertion citations only).
     child_evidence = _used_global_evidence_ids(session, child_run.id)
     added_evidence = sorted(set(child_evidence) - set(parent_evidence))
-    # Optional semantic gate: only when critic2 is configured (default off).
-    provider = critic2_provider_from_settings(get_settings())
-    evidence_text_by_id: dict[str, str] | None = None
-    if provider is not None:
-        # added_evidence is already child-cited minus parent-cited (intersection).
-        evidence_text_by_id = _evidence_text_by_ids(session, child_run.id, added_evidence)
+
+    # frozen_semantic: use exactly as provided for digest stability on replay.
+    # None → treat as empty (pure structural); never invent a provider.
+    frozen: dict[str, Any] = (
+        dict(frozen_semantic) if isinstance(frozen_semantic, dict) else {}
+    )
+
     claimed, verified, unverified, unclaimed = _verify_claimed_requests(
         parent_knowledge_requests,
         claimed_keys=fulfilled_knowledge_request_keys,
         added_evidence_ids=added_evidence,
         child_cited_evidence_ids=set(child_evidence),
-        provider=provider,
-        evidence_text_by_id=evidence_text_by_id,
+        frozen_semantic=frozen if frozen else None,
     )
     # remaining = unverified claimed + unclaimed parent (as-is) + child requests
     remaining = _merge_knowledge_requests(
@@ -249,6 +351,8 @@ def build_cognitive_transition_payload(
         "parent_cited_pack_install_ids_missing_from_child_scope": missing_parent_cited,
         "parent_citation_scope_dropped": bool(missing_parent_cited),
         "remaining_knowledge_requests": remaining,
+        # Frozen semantic section (empty when critic2 was off at creation).
+        "semantic_verdicts": frozen,
     }
 
 
@@ -258,11 +362,16 @@ def persist_cognitive_transition(
     parent_run: DeliberationRun,
     child_run: DeliberationRun,
     fulfilled_knowledge_request_keys: set[str],
+    settings: Settings | None = None,
 ) -> DeliberationArtifact:
     """Store the immutable artifact that explains a linked re-deliberation.
 
     The comparison is artifact- and citation-based. It intentionally does not
     inspect or compare Pack content.
+
+    Semantic gate (critic2) runs here only, once. Verdicts are frozen into the
+    payload. Factory / provider failures fail-closed (no structural promotion
+    for matching KRs when the gate was configured).
     """
     existing = session.scalar(
         select(DeliberationArtifact).where(
@@ -274,11 +383,53 @@ def persist_cognitive_transition(
     if existing is not None:
         return existing
 
+    runtime_settings = settings if settings is not None else get_settings()
+    frozen_semantic: dict[str, Any] = {}
+
+    # Gate active when critic2 is configured; separate from provider object.
+    if runtime_settings.critic2_provider != "none":
+        try:
+            provider = critic2_provider_from_settings(runtime_settings)
+            if provider is None:
+                # Configured but factory returned None — fail-closed.
+                parent_payloads = _artifact_payloads(session, parent_run.id)
+                frozen_semantic = _fail_closed_semantic_entries(
+                    _knowledge_requests(parent_payloads.get("knowledge_requests")),
+                    claimed_keys=fulfilled_knowledge_request_keys,
+                    reason="provider_unavailable",
+                )
+            else:
+                parent_payloads = _artifact_payloads(session, parent_run.id)
+                parent_krs = _knowledge_requests(parent_payloads.get("knowledge_requests"))
+                parent_evidence = _used_global_evidence_ids(session, parent_run.id)
+                child_evidence = _used_global_evidence_ids(session, child_run.id)
+                added_evidence = sorted(set(child_evidence) - set(parent_evidence))
+                frozen_semantic = _compute_frozen_semantic(
+                    session,
+                    parent_knowledge_requests=parent_krs,
+                    claimed_keys=fulfilled_knowledge_request_keys,
+                    added_evidence_ids=added_evidence,
+                    child_cited_evidence_ids=set(child_evidence),
+                    child_run_id=child_run.id,
+                    provider=provider,
+                    settings=runtime_settings,
+                )
+        except Exception:
+            # Factory or semantic execution failure must not break transition;
+            # fail-closed so structural cannot promote matching claims.
+            parent_payloads = _artifact_payloads(session, parent_run.id)
+            frozen_semantic = _fail_closed_semantic_entries(
+                _knowledge_requests(parent_payloads.get("knowledge_requests")),
+                claimed_keys=fulfilled_knowledge_request_keys,
+                reason="semantic_gate_error",
+            )
+
     payload = build_cognitive_transition_payload(
         session,
         parent_run=parent_run,
         child_run=child_run,
         fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys,
+        frozen_semantic=frozen_semantic,
     )
     artifact = DeliberationArtifact(
         run_id=child_run.id,
