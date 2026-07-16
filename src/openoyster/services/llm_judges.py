@@ -120,6 +120,8 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_deliberation_critic(prompt)
         case "deliberation_decision":
             return _stub_deliberation_decision(prompt)
+        case "flip_confirm":
+            return _stub_flip_confirm(prompt)
         case _:
             raise ExtractionUnavailable(f"stub does not implement JSON stage: {stage}")
 
@@ -375,6 +377,35 @@ def _stub_deliberation_decision(prompt: str) -> dict[str, Any]:
         ],
         "knowledge_requests": [],
     }
+
+
+def _stub_flip_confirm(prompt: str) -> dict[str, Any]:
+    """Deterministic flip_confirm stub: related=true with a real evidence quote.
+
+    Parses the first ``[EVIDENCE id=...]...[/EVIDENCE]`` body and returns a
+    verbatim substring meeting MIN_QUOTE_CHARS so tests can assert
+    llm_supported. Force unsupported by overriding the provider in tests
+    (related=false or a fabricated quote).
+    """
+    if "FLIP_CONFIRM_UNRELATED" in prompt:
+        return {"related": False, "quote": None}
+    if "FLIP_CONFIRM_FAKE_QUOTE" in prompt:
+        return {"related": True, "quote": "this quote is not in any evidence body"}
+    match = re.search(
+        r"\[EVIDENCE id=(?P<id>[^\]]+)\]\n(?P<body>.*?)\n\[/EVIDENCE\]",
+        prompt,
+        re.S,
+    )
+    if match is None:
+        return {"related": False, "quote": None}
+    body = match.group("body").strip()
+    if len(body) < MIN_QUOTE_CHARS:
+        return {"related": False, "quote": None}
+    # First contiguous phrase long enough for the quote gate.
+    quote = body if len(body) <= 120 else body[:120]
+    if len(quote.strip()) < MIN_QUOTE_CHARS:
+        return {"related": False, "quote": None}
+    return {"related": True, "quote": quote}
 
 
 def _stub_pack_answer(prompt: str) -> dict[str, Any]:

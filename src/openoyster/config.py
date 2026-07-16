@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     log_json: bool = Field(default=False)
     llm_provider: Literal["codex", "openai-compatible", "stub"] = Field(default="codex")
     critic2_provider: Literal["none", "codex", "stub", "claude-cli"] = Field(default="none")
+    flip_confirm_provider: Literal["none", "codex", "stub", "claude-cli"] = Field(
+        default="none"
+    )
     llm_api_key: str | None = Field(default=None)
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4.1-mini")

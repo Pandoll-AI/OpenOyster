@@ -474,3 +474,19 @@ def critic2_provider_from_settings(settings: Settings | None = None) -> LLMProvi
             return ClaudeCliProvider(settings)
         case other:
             assert_never(other)
+
+
+def flip_confirm_provider_from_settings(settings: Settings | None = None) -> LLMProvider | None:
+    """Optional flip-trigger LLM confirmation provider. ``none`` disables the stage."""
+    settings = settings or get_settings()
+    match settings.flip_confirm_provider:
+        case "none":
+            return None
+        case "codex":
+            return CodexProvider(settings)
+        case "stub":
+            return StubProvider()
+        case "claude-cli":
+            return ClaudeCliProvider(settings)
+        case other:
+            assert_never(other)

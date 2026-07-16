@@ -2,14 +2,16 @@
 
 Creates watches for completed decisions with structured flip predicates,
 scans new Pack installs via lexical matching, and records candidate triggers.
-Never re-runs deliberation; never calls an LLM in this module.
+Never re-runs deliberation. Optional one-shot LLM confirmation of triggers is
+available when ``flip_confirm_provider`` is enabled; it never auto-transitions
+watch status and never re-deliberates.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +19,8 @@ from sqlalchemy.orm import Session, load_only
 
 from openoyster.deliberation_contracts import (
     MAX_ACTIVE_FLIP_WATCHES,
+    MIN_QUOTE_CHARS,
+    CitationAnchor,
     FlipPredicate,
 )
 from openoyster.events import bus
@@ -29,6 +33,10 @@ from openoyster.models import (
     PackInstall,
     utcnow,
 )
+
+if TYPE_CHECKING:
+    from openoyster.config import Settings
+    from openoyster.llm import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,16 @@ EVENT_FLIP_SCAN_BOUNDED = "flip_scan_bounded"
 # Bounded install-time scan defaults (DoS / install latency guard).
 DEFAULT_SCAN_MAX_EVIDENCE_ROWS = 2000
 DEFAULT_SCAN_MAX_EVIDENCE_CHARS = 2_000_000
+
+# Optional LLM confirmation bounds (prompt size guard).
+CONFIRM_MAX_EVIDENCE_ITEMS = 8
+CONFIRM_MAX_EVIDENCE_CHARS = 8000
+CONFIRM_STAGE = "flip_confirm"
+
+CONFIRMATION_NONE = "none"
+CONFIRMATION_LLM_SUPPORTED = "llm_supported"
+CONFIRMATION_LLM_UNSUPPORTED = "llm_unsupported"
+CONFIRMATION_ERROR = "error"
 
 _WS_RE = re.compile(r"\s+")
 
@@ -303,12 +321,15 @@ def scan_pack_install(
     *,
     max_evidence_rows: int = DEFAULT_SCAN_MAX_EVIDENCE_ROWS,
     max_evidence_chars: int = DEFAULT_SCAN_MAX_EVIDENCE_CHARS,
+    settings: Settings | None = None,
 ) -> list[DeliberationFlipTrigger]:
     """Scan all watching predicates against evidence from one Pack install.
 
     On match: atomically claim the watch (watching → triggered_candidate),
     append a trigger row (unique on watch+install; IntegrityError is idempotent),
-    and emit ``flip_trigger_candidate``. LLM confirmation is out of this scope.
+    and emit ``flip_trigger_candidate``. When ``flip_confirm_provider`` is set,
+    each new trigger is confirmed once via LLM; watch status is never advanced
+    by confirmation.
 
     Evidence scan is hard-bounded by row count and total text chars so install-time
     scans cannot unbounded-walk large packs.
@@ -356,6 +377,8 @@ def scan_pack_install(
     if not watches or not evidence_rows:
         return []
 
+    confirm_provider = _resolve_confirm_provider(settings)
+
     created: list[DeliberationFlipTrigger] = []
     now = utcnow()
     for watch in watches:
@@ -383,6 +406,8 @@ def scan_pack_install(
                     watch_id=watch.id,
                     pack_install_id=pack_install_id,
                     matched_evidence_ids=matched_ids,
+                    confirmation=CONFIRMATION_NONE,
+                    confirmation_anchors_json=[],
                     created_at=now,
                 )
                 session.add(trigger)
@@ -415,6 +440,8 @@ def scan_pack_install(
             source_loop="flip_monitoring",
             idempotency_key=f"flip-trigger-candidate:{watch.id}:{pack_install_id}",
         )
+        if confirm_provider is not None:
+            confirm_trigger(session, trigger, confirm_provider)
         created.append(trigger)
     return created
 
@@ -425,6 +452,7 @@ def safe_scan_pack_install(
     *,
     max_evidence_rows: int = DEFAULT_SCAN_MAX_EVIDENCE_ROWS,
     max_evidence_chars: int = DEFAULT_SCAN_MAX_EVIDENCE_CHARS,
+    settings: Settings | None = None,
 ) -> list[DeliberationFlipTrigger]:
     """Run ``scan_pack_install`` without ever aborting the caller's transaction.
 
@@ -438,6 +466,7 @@ def safe_scan_pack_install(
                 pack_install_id,
                 max_evidence_rows=max_evidence_rows,
                 max_evidence_chars=max_evidence_chars,
+                settings=settings,
             )
     except Exception:
         logger.exception(
@@ -459,6 +488,259 @@ def safe_scan_pack_install(
                 pack_install_id,
             )
         return []
+
+
+def _resolve_confirm_provider(settings: Settings | None) -> LLMProvider | None:
+    from openoyster.llm import flip_confirm_provider_from_settings
+
+    return flip_confirm_provider_from_settings(settings)
+
+
+def _flip_condition_text(session: Session, watch: DeliberationFlipWatch) -> str:
+    """Resolve flip condition text from the decision flip_conditions artifact."""
+    artifact = session.scalar(
+        select(DeliberationArtifact).where(
+            DeliberationArtifact.run_id == watch.run_id,
+            DeliberationArtifact.kind == "flip_conditions",
+        )
+    )
+    if artifact is None or not isinstance(artifact.payload_json, dict):
+        predicate = watch.predicate_json or {}
+        note = predicate.get("note")
+        if isinstance(note, str) and note.strip():
+            return note.strip()
+        return watch.flip_local_key
+    items = artifact.payload_json.get("flip_conditions")
+    if not isinstance(items, list):
+        return watch.flip_local_key
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("local_key") != watch.flip_local_key:
+            continue
+        condition = item.get("condition")
+        if isinstance(condition, dict):
+            text = condition.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+        item_predicate = item.get("predicate")
+        if isinstance(item_predicate, dict):
+            note = item_predicate.get("note")
+            if isinstance(note, str) and note.strip():
+                return note.strip()
+        break
+    predicate = watch.predicate_json or {}
+    note = predicate.get("note")
+    if isinstance(note, str) and note.strip():
+        return note.strip()
+    return watch.flip_local_key
+
+
+def _load_matched_evidence_bodies(
+    session: Session,
+    pack_install_id: int,
+    matched_evidence_ids: list[Any],
+) -> list[tuple[str, str]]:
+    """Return (evidence_id, body) pairs for matched ids, prompt-bounded."""
+    if not matched_evidence_ids:
+        return []
+    wanted = {str(eid) for eid in matched_evidence_ids if eid is not None}
+    if not wanted:
+        return []
+    rows = list(
+        session.scalars(
+            select(PackEvidence)
+            .options(
+                load_only(
+                    PackEvidence.id,
+                    PackEvidence.pack_install_id,
+                    PackEvidence.local_evidence_id,
+                    PackEvidence.global_evidence_id,
+                    PackEvidence.text,
+                )
+            )
+            .where(PackEvidence.pack_install_id == pack_install_id)
+            .order_by(PackEvidence.id.asc())
+        ).all()
+    )
+    selected: list[tuple[str, str]] = []
+    char_total = 0
+    for row in rows:
+        eid = row.global_evidence_id or row.local_evidence_id
+        if eid not in wanted and row.local_evidence_id not in wanted:
+            continue
+        body = row.text or ""
+        if not body.strip():
+            continue
+        if len(selected) >= CONFIRM_MAX_EVIDENCE_ITEMS:
+            break
+        if char_total + len(body) > CONFIRM_MAX_EVIDENCE_CHARS and selected:
+            break
+        if char_total + len(body) > CONFIRM_MAX_EVIDENCE_CHARS and not selected:
+            # Truncate first oversized body to stay inside the prompt bound.
+            body = body[:CONFIRM_MAX_EVIDENCE_CHARS]
+        selected.append((str(eid), body))
+        char_total += len(body)
+    return selected
+
+
+def _build_flip_confirm_prompt(
+    condition_text: str,
+    evidence_items: list[tuple[str, str]],
+) -> str:
+    parts = [
+        "You are confirming whether matched Pack evidence is meaningfully related "
+        "to a flip condition. Reply with JSON only: "
+        '{"related": bool, "quote": str|null}.',
+        "If related is true, quote must be a verbatim substring of one evidence body "
+        f"(at least {MIN_QUOTE_CHARS} characters).",
+        "",
+        "Flip condition:",
+        condition_text,
+        "",
+        "Matched evidence:",
+    ]
+    for eid, body in evidence_items:
+        parts.append(f"[EVIDENCE id={eid}]")
+        parts.append(body)
+        parts.append("[/EVIDENCE]")
+        parts.append("")
+    return "\n".join(parts)
+
+
+def _quote_in_evidence(quote: str, evidence_items: list[tuple[str, str]]) -> str | None:
+    """Return evidence_id if quote is a valid verbatim substring of that body."""
+    from openoyster.services.deliberation_gates import (
+        EvidenceSnapshotView,
+        StageGateError,
+        validate_anchor,
+    )
+
+    stripped = quote.strip()
+    if len(stripped) < MIN_QUOTE_CHARS:
+        return None
+    for eid, body in evidence_items:
+        snap = EvidenceSnapshotView(
+            snapshot_key=eid,
+            db_id=0,
+            global_evidence_id=eid,
+            text=body,
+            payload={},
+            pack_install_id=0,
+            record_hash="",
+        )
+        try:
+            validate_anchor(
+                CitationAnchor(evidence_snapshot_id=eid, quote=quote),
+                {eid: snap},
+            )
+        except (StageGateError, ValueError):
+            continue
+        return eid
+    return None
+
+
+def confirm_trigger(
+    session: Session,
+    trigger: DeliberationFlipTrigger,
+    provider: LLMProvider,
+) -> None:
+    """Optionally LLM-confirm a deterministic trigger candidate.
+
+    Never changes watch status. Never re-runs deliberation. Exceptions are
+    swallowed into confirmation='error' so scan/install isolation holds.
+    """
+    try:
+        watch = session.get(DeliberationFlipWatch, trigger.watch_id)
+        if watch is None:
+            trigger.confirmation = CONFIRMATION_ERROR
+            trigger.confirmation_note = "watch_missing"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        condition_text = _flip_condition_text(session, watch)
+        evidence_items = _load_matched_evidence_bodies(
+            session,
+            trigger.pack_install_id,
+            list(trigger.matched_evidence_ids or []),
+        )
+        if not evidence_items:
+            trigger.confirmation = CONFIRMATION_LLM_UNSUPPORTED
+            trigger.confirmation_note = "no_matched_evidence_body"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        prompt = _build_flip_confirm_prompt(condition_text, evidence_items)
+        try:
+            # stage_profile is provider-boundary metadata; failures are non-fatal.
+            try:
+                provider.stage_profile(CONFIRM_STAGE)
+            except Exception:
+                logger.debug("flip_confirm stage_profile failed; continuing", exc_info=True)
+            raw = provider.query_json(prompt, CONFIRM_STAGE)
+        except Exception as exc:
+            logger.warning(
+                "flip_confirm provider failed trigger_id=%s: %s",
+                trigger.id,
+                type(exc).__name__,
+            )
+            trigger.confirmation = CONFIRMATION_ERROR
+            trigger.confirmation_note = f"provider_{type(exc).__name__}"[:120]
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        if not isinstance(raw, dict):
+            trigger.confirmation = CONFIRMATION_ERROR
+            trigger.confirmation_note = "non_object_response"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        related = raw.get("related")
+        quote = raw.get("quote")
+        if related is not True:
+            trigger.confirmation = CONFIRMATION_LLM_UNSUPPORTED
+            trigger.confirmation_note = "related_false" if related is False else "related_missing"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        if not isinstance(quote, str) or not quote.strip():
+            trigger.confirmation = CONFIRMATION_LLM_UNSUPPORTED
+            trigger.confirmation_note = "quote_missing"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        matched_eid = _quote_in_evidence(quote, evidence_items)
+        if matched_eid is None:
+            trigger.confirmation = CONFIRMATION_LLM_UNSUPPORTED
+            trigger.confirmation_note = "quote_unverified"
+            trigger.confirmation_anchors_json = []
+            session.flush()
+            return
+
+        trigger.confirmation = CONFIRMATION_LLM_SUPPORTED
+        trigger.confirmation_note = None
+        trigger.confirmation_anchors_json = [
+            {"evidence_id": matched_eid, "quote": quote.strip()}
+        ]
+        session.flush()
+    except Exception as exc:
+        logger.exception(
+            "flip_confirm unexpected failure trigger_id=%s",
+            getattr(trigger, "id", None),
+        )
+        try:
+            trigger.confirmation = CONFIRMATION_ERROR
+            trigger.confirmation_note = f"unexpected_{type(exc).__name__}"[:120]
+            trigger.confirmation_anchors_json = []
+            session.flush()
+        except Exception:
+            logger.exception("flip_confirm failed to persist error confirmation")
 
 
 def list_watches(
@@ -620,6 +902,9 @@ def trigger_public_payload(
         "flip_local_key": watch.flip_local_key,
         "pack_install_id": trigger.pack_install_id,
         "matched_evidence_ids": list(trigger.matched_evidence_ids or []),
+        "confirmation": getattr(trigger, "confirmation", None) or CONFIRMATION_NONE,
+        "confirmation_anchors": list(getattr(trigger, "confirmation_anchors_json", None) or []),
+        "confirmation_note": getattr(trigger, "confirmation_note", None),
         "watch_status": watch.status,
         "created_at": trigger.created_at.isoformat() if trigger.created_at else None,
     }

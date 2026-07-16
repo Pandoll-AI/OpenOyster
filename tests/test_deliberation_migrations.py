@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from alembic import command
@@ -831,5 +832,160 @@ def test_0011_deliberation_charters_upgrade_and_downgrade(temp_settings: Setting
                 )
             ).scalar_one()
             assert seed_key == "mig-0011-seed"
+    finally:
+        engine.dispose()
+
+
+def test_0012_flip_trigger_confirmation_upgrade_and_downgrade(
+    temp_settings: Settings,
+) -> None:
+    """0012 adds confirmation columns; downgrade removes them symmetrically."""
+    engine = make_engine(temp_settings)
+    try:
+        upgrade_database(temp_settings, revision="0011_deliberation_charters")
+        inspector = inspect(engine)
+        before_cols = {
+            column["name"] for column in inspector.get_columns("deliberation_flip_triggers")
+        }
+        assert "confirmation" not in before_cols
+        assert "confirmation_anchors_json" not in before_cols
+        assert "confirmation_note" not in before_cols
+
+        # Seed a pre-upgrade trigger row that must survive with default confirmation.
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO pack_installs (
+                        pack_id, declared_version, format_version, source_digest,
+                        source_type, source_location, storage_uri, admission_profile,
+                        status, original_manifest_json, admission_report_json, created_at
+                    ) VALUES (
+                        'flip-confirm-mig-pack', '0.0.1', 'opencrab-pack-v1', :digest,
+                        'directory', '/tmp', '/tmp', 'compatible',
+                        'active', '{}', '{}', CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"digest": "c" * 64},
+            )
+            pack_install_id = conn.execute(
+                text("SELECT id FROM pack_installs WHERE pack_id = 'flip-confirm-mig-pack'")
+            ).scalar_one()
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO deliberation_runs (
+                        idempotency_key, mission_snapshot_json, mission_digest,
+                        policy_snapshot_json, runtime_config_json, policy_digest,
+                        runtime_config_digest, contract_version, prompt_template_version,
+                        primary_scope_digest, impact_baseline_scope_digest, status,
+                        degraded_json, llm_attempt_count, created_at, updated_at
+                    ) VALUES (
+                        'mig-0012-seed', '{}', :d, '{}', '{}', :d, :d,
+                        'deliberation-d1-v1', 'deliberation-prompts-d1-v1',
+                        :d, :d, 'completed',
+                        '{}', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"d": "d" * 64},
+            )
+            run_id = conn.execute(
+                text(
+                    "SELECT id FROM deliberation_runs WHERE idempotency_key = 'mig-0012-seed'"
+                )
+            ).scalar_one()
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO deliberation_flip_watches (
+                        run_id, flip_local_key, predicate_json, status,
+                        created_at, updated_at
+                    ) VALUES (
+                        :run_id, 'flip1', :pred, 'triggered_candidate',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"run_id": run_id, "pred": json.dumps({"query_terms": ["x"]})},
+            )
+            watch_id = conn.execute(
+                text(
+                    "SELECT id FROM deliberation_flip_watches WHERE run_id = :run_id"
+                ),
+                {"run_id": run_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO deliberation_flip_triggers (
+                        watch_id, pack_install_id, matched_evidence_ids, created_at
+                    ) VALUES (
+                        :watch_id, :pack_install_id, :matched, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {
+                    "watch_id": watch_id,
+                    "pack_install_id": pack_install_id,
+                    "matched": json.dumps(["ev-1"]),
+                },
+            )
+
+        upgrade_database(temp_settings, revision="0012_flip_trigger_confirmation")
+        inspector = inspect(engine)
+        after_cols = {
+            column["name"] for column in inspector.get_columns("deliberation_flip_triggers")
+        }
+        assert {
+            "confirmation",
+            "confirmation_anchors_json",
+            "confirmation_note",
+        } <= after_cols
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT confirmation, confirmation_anchors_json, confirmation_note
+                      FROM deliberation_flip_triggers
+                     WHERE watch_id = :watch_id
+                    """
+                ),
+                {"watch_id": watch_id},
+            ).one()
+            confirmation, anchors_json, note = row[0], row[1], row[2]
+            assert confirmation == "none"
+            anchors = (
+                anchors_json
+                if isinstance(anchors_json, list)
+                else json.loads(anchors_json or "[]")
+            )
+            assert anchors == []
+            assert note is None
+
+        config = _alembic_config(temp_settings.db_url)
+        command.downgrade(config, "0011_deliberation_charters")
+        inspector = inspect(engine)
+        downgraded_cols = {
+            column["name"] for column in inspector.get_columns("deliberation_flip_triggers")
+        }
+        assert "confirmation" not in downgraded_cols
+        assert "confirmation_anchors_json" not in downgraded_cols
+        assert "confirmation_note" not in downgraded_cols
+        # Seed row still present after column drop.
+        with engine.connect() as conn:
+            remaining = conn.execute(
+                text(
+                    "SELECT matched_evidence_ids FROM deliberation_flip_triggers "
+                    "WHERE watch_id = :watch_id"
+                ),
+                {"watch_id": watch_id},
+            ).one()
+            matched = remaining[0]
+            if isinstance(matched, str):
+                matched = json.loads(matched)
+            assert matched == ["ev-1"]
     finally:
         engine.dispose()
