@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openoyster.deliberation_contracts import (
+    CONTRACT_VERSION,
+    PROMPT_TEMPLATE_VERSION,
     BeliefsStagePayload,
     CriticStagePayload,
     DecisionStagePayload,
@@ -18,12 +20,15 @@ from openoyster.deliberation_contracts import (
 )
 from openoyster.models import (
     DeliberationArtifact,
+    DeliberationCognitiveImpact,
     DeliberationDossier,
     DeliberationEvidenceSnapshot,
     DeliberationReplayResult,
     DeliberationRun,
     DeliberationStageCall,
 )
+from openoyster.services.cognitive_impact import build_cognitive_impact_payload
+from openoyster.services.cognitive_transition import build_cognitive_transition_payload
 from openoyster.services.deliberation_dossier import recompute_dossier_digests
 from openoyster.services.deliberation_gates import (
     EvidenceSnapshotView,
@@ -31,6 +36,9 @@ from openoyster.services.deliberation_gates import (
     StageGateError,
     validate_stage,
 )
+
+IMPACT_METHOD_V2 = "citation_scope_projection_v2"
+TRANSITION_METHOD_V2 = "cognitive_transition_v2"
 
 
 def _gate_context(session: Session, run: DeliberationRun) -> GateContext:
@@ -143,11 +151,144 @@ def _revalidate_stages(session: Session, run: DeliberationRun) -> dict[str, Any]
     return details
 
 
+def _verify_cognitive_impact_digest(
+    session: Session, run: DeliberationRun
+) -> dict[str, Any]:
+    """Recompute impact payload and compare against the stored digest (read-only).
+
+    Self-digest of the stored payload is checked first (detects in-place
+    tampering even when method is legacy and recompute would be skipped).
+    Only ``citation_scope_projection_v2`` is recomputed. Legacy/other methods
+    skip recompute so version skew does not produce a false mismatch.
+    """
+    stored = session.scalar(
+        select(DeliberationCognitiveImpact).where(DeliberationCognitiveImpact.run_id == run.id)
+    )
+    if stored is None:
+        return {"present": False, "matched": True}
+
+    stored_payload = dict(stored.impact_json or {})
+    self_digest = payload_digest(stored_payload)
+    if self_digest != stored.impact_digest:
+        return {
+            "present": True,
+            "matched": False,
+            "mismatch_reason": "cognitive_impact_stored_digest",
+            "stored_digest": stored.impact_digest,
+            "payload_self_digest": self_digest,
+            "stored_method": stored.method,
+        }
+
+    if stored.method != IMPACT_METHOD_V2:
+        return {
+            "present": True,
+            "matched": True,
+            "recompute_skipped": "method_version_mismatch",
+            "stored_method": stored.method,
+        }
+    recomputed = build_cognitive_impact_payload(session, run)
+    recomputed_digest = payload_digest(recomputed)
+    return {
+        "present": True,
+        "matched": recomputed_digest == stored.impact_digest,
+        "stored_digest": stored.impact_digest,
+        "recomputed_digest": recomputed_digest,
+    }
+
+
+def _verify_cognitive_transition_digest(
+    session: Session, run: DeliberationRun
+) -> dict[str, Any]:
+    """Recompute transition from parent/child artifacts (read-only).
+
+    Fulfilled knowledge-request keys come from the immutable run column
+    ``fulfilled_request_keys_json``, not from the stored transition's claimed
+    list (that would be circular self-validation).
+
+    Legacy continuation runs may have empty fulfilled keys (0008 no longer
+    trusts transition claimed for backfill). When claimed exists on the stored
+    transition but the run column is empty, recompute is skipped as
+    unrecoverable rather than producing a false match or a noisy mismatch.
+    """
+    stored_payload = _artifact_payload(session, run.id, "cognitive_transition")
+    if stored_payload is None:
+        return {"present": False, "matched": True}
+
+    stored_row = session.scalar(
+        select(DeliberationArtifact).where(
+            DeliberationArtifact.run_id == run.id,
+            DeliberationArtifact.kind == "cognitive_transition",
+        )
+    )
+    stored_digest = stored_row.payload_digest if stored_row is not None else None
+    self_digest = payload_digest(stored_payload)
+    if stored_digest is not None and self_digest != stored_digest:
+        return {
+            "present": True,
+            "matched": False,
+            "mismatch_reason": "cognitive_transition_stored_digest",
+            "stored_digest": stored_digest,
+            "payload_self_digest": self_digest,
+            "stored_method": stored_payload.get("method"),
+        }
+
+    stored_method = stored_payload.get("method")
+    if stored_method != TRANSITION_METHOD_V2:
+        return {
+            "present": True,
+            "matched": True,
+            "recompute_skipped": "method_version_mismatch",
+            "stored_method": stored_method,
+        }
+
+    fulfilled_keys = {
+        key
+        for key in (run.fulfilled_request_keys_json or [])
+        if isinstance(key, str)
+    }
+    claimed = stored_payload.get("claimed_knowledge_requests") or []
+    has_claimed = isinstance(claimed, list) and len(claimed) > 0
+    if (
+        not fulfilled_keys
+        and run.parent_run_id is not None
+        and has_claimed
+    ):
+        # Legacy continuation: fulfilled keys cannot be trusted-restored from
+        # transition claimed (see migration 0008 + D2 verification limits).
+        return {
+            "present": True,
+            "matched": True,
+            "recompute_skipped": "legacy_fulfilled_keys_unrecoverable",
+            "stored_method": stored_method,
+        }
+
+    if run.parent_run_id is None:
+        return {"present": True, "matched": False, "error": "missing_parent_run_id"}
+    parent = session.get(DeliberationRun, run.parent_run_id)
+    if parent is None:
+        return {"present": True, "matched": False, "error": "parent_run_not_found"}
+
+    recomputed = build_cognitive_transition_payload(
+        session,
+        parent_run=parent,
+        child_run=run,
+        fulfilled_knowledge_request_keys=fulfilled_keys,
+    )
+    recomputed_digest = payload_digest(recomputed)
+    return {
+        "present": True,
+        "matched": recomputed_digest == stored_digest,
+        "stored_digest": stored_digest,
+        "recomputed_digest": recomputed_digest,
+    }
+
+
 def replay_deliberation(session: Session, run_id: int) -> DeliberationReplayResult:
     """Replay a completed run without calling the LLM.
 
     Rebuilds dossier digests from frozen artifacts/scopes and compares against
-    the stored dossier digests. Also revalidates stage gates.
+    the stored dossier digests. Also revalidates stage gates and recomputes
+    cognitive impact/transition digests when those rows exist.
     """
     run = session.get(DeliberationRun, run_id)
     if run is None:
@@ -164,16 +305,42 @@ def replay_deliberation(session: Session, run_id: int) -> DeliberationReplayResu
     )
     gate_details = _revalidate_stages(session, run)
     snapshot_integrity = _verify_evidence_snapshot_integrity(session, run)
+    impact_integrity = _verify_cognitive_impact_digest(session, run)
+    transition_integrity = _verify_cognitive_transition_digest(session, run)
+
+    stored_dossier = dict(dossier.dossier_json or {})
+    stored_contract = stored_dossier.get("contract_version")
+    stored_prompt = stored_dossier.get("prompt_template_version")
+    dossier_version_mismatch = (
+        stored_contract != CONTRACT_VERSION or stored_prompt != PROMPT_TEMPLATE_VERSION
+    )
 
     mismatches: list[str] = []
-    if recomputed_json_digest != dossier.json_digest:
-        mismatches.append("dossier_json_digest")
-    if recomputed_md_digest != dossier.markdown_digest:
-        mismatches.append("dossier_markdown_digest")
+    dossier_recompute_skipped: str | None = None
+    # Self-digest first: detect payload tampering even when template/version
+    # would otherwise skip recompute comparison.
+    dossier_self_digest = payload_digest(stored_dossier)
+    if dossier_self_digest != dossier.json_digest:
+        mismatches.append("dossier_stored_digest")
+    elif dossier_version_mismatch:
+        # Legacy dossiers written under older template/contract versions may
+        # lack newer optional fields; do not treat that as tampering.
+        dossier_recompute_skipped = "template_version_mismatch"
+    else:
+        if recomputed_json_digest != dossier.json_digest:
+            mismatches.append("dossier_json_digest")
+        if recomputed_md_digest != dossier.markdown_digest:
+            mismatches.append("dossier_markdown_digest")
     if gate_details.get("errors"):
         mismatches.append("stage_gate")
     if not snapshot_integrity["matched"]:
         mismatches.append("evidence_snapshot_digest")
+    if not impact_integrity["matched"]:
+        reason = impact_integrity.get("mismatch_reason") or "cognitive_impact_digest"
+        mismatches.append(str(reason))
+    if not transition_integrity["matched"]:
+        reason = transition_integrity.get("mismatch_reason") or "cognitive_transition_digest"
+        mismatches.append(str(reason))
 
     matched = not mismatches
     result_json: dict[str, Any] = {
@@ -185,8 +352,12 @@ def replay_deliberation(session: Session, run_id: int) -> DeliberationReplayResu
         "recomputed_dossier_markdown_digest": recomputed_md_digest,
         "gate_revalidation": gate_details,
         "evidence_snapshot_integrity": snapshot_integrity,
+        "cognitive_impact_integrity": impact_integrity,
+        "cognitive_transition_integrity": transition_integrity,
         "llm_called": False,
     }
+    if dossier_recompute_skipped is not None:
+        result_json["dossier_recompute_skipped"] = dossier_recompute_skipped
     row = DeliberationReplayResult(
         run_id=run_id,
         matched=matched,

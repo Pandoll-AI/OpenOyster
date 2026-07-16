@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -12,6 +13,13 @@ from openoyster.config import clear_settings_cache
 FIXTURE_ROOT = Path(__file__).parent / "goldset_fixtures"
 DOCS_DIR = FIXTURE_ROOT / "docs"
 LABELS_DIR = FIXTURE_ROOT / "labels"
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip Rich/ANSI styles so substring asserts stay stable under TTY capture."""
+    return _ANSI_RE.sub("", text)
 
 
 def _set_stub_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -41,8 +49,9 @@ def test_eval_gold_cli_smoke_with_stub(monkeypatch: pytest.MonkeyPatch, tmp_path
     clear_settings_cache()
 
     assert result.exit_code == 0, result.output
-    assert "stub" in result.output
-    assert "Gold documents evaluated: 2" in result.output
+    plain = _plain(result.output)
+    assert "stub" in plain
+    assert "Gold documents evaluated: 2" in plain
 
 
 def test_gold_review_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

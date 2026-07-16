@@ -4,6 +4,10 @@
 버전: D1
 작성일: 2026-07-14
 
+D2 continuation 계약은 [Decision Continuity D2 요구사항](DECISION_CONTINUITY_D2_REQUIREMENTS.md)을
+참조한다. D2도 설치된 OpenCrab Pack만 사실 입력으로 사용하며, Pack 생성·갱신이나
+Pack 내용 diff를 추가하지 않는다.
+
 ## 1. 제품 정의
 
 OpenOyster D1은 OpenCrab Pack을 사실 입력으로만 사용하는 자율 숙의 실행기다.
@@ -292,7 +296,9 @@ replay는 LLM을 다시 호출하지 않는다.
 - 저장 hash와 재구성 hash 비교
 - matched/mismatched 결과 저장
 
-새 LLM 실행은 replay가 아니라 linked rerun이다. D1에서는 rerun API를 구현하지 않는다.
+새 LLM 실행은 replay가 아니라 linked rerun이다. D1 core의 replay 경로는 새 실행을
+만들지 않으며, linked rerun은 별도 [Decision Continuity D2](DECISION_CONTINUITY_D2_REQUIREMENTS.md)
+continuation 계약으로 제공한다.
 
 ## 11. CLI와 API
 

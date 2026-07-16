@@ -14,6 +14,7 @@ from openoyster.deliberation_contracts import (
     MAX_EVIDENCE_SNAPSHOTS,
     MAX_OPTIONS,
     MAX_SCENARIOS_PER_OPTION,
+    MIN_QUOTE_CHARS,
     PROMPT_TEMPLATE_VERSION,
     AssertionClass,
     Belief,
@@ -47,11 +48,12 @@ def _grounded_assertion(text: str = "The claim is supported.") -> dict[str, Any]
 
 def test_contract_version_constants_are_frozen() -> None:
     assert CONTRACT_VERSION == "deliberation-d1-v1"
-    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v1"
+    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v8"
     assert MAX_BELIEFS == 20
     assert MAX_OPTIONS == 5
     assert MAX_SCENARIOS_PER_OPTION == 3
     assert MAX_EVIDENCE_SNAPSHOTS == 24
+    assert MIN_QUOTE_CHARS == 12
 
 
 def test_mission_requires_goal_and_decision_question() -> None:

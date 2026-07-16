@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "edges": "graph/edges.jsonl",
+    "evidence_index": "evidence/index.jsonl",
+    "nodes": "graph/nodes.jsonl"
+  },
+  "counts": {
+    "documents": 0,
+    "edges": 0,
+    "evidence": 0,
+    "nodes": 0
+  },
+  "created_at": "2026-07-14T00:00:00Z",
+  "created_by": "OpenOyster practical Pack experiment",
+  "format_version": "opencrab-pack-v1",
+  "grammar_version": "1.0.0",
+  "pack_id": "alexai-ecosystem-gap",
+  "quality": {
+    "evidence_coverage": 0.0,
+    "graph_reference_integrity": 1.0,
+    "parsing_completeness": 1.0,
+    "promotion_status": "validated"
+  },
+  "source": {
+    "description": "A valid empty baseline used to prove evidence-aware abstention.",
+    "label": "AlexAI-MCP public GitHub repositories",
+    "mode": "public_repository_docs"
+  },
+  "title": "AlexAI Ecosystem Decision Gap",
+  "version": "1.0.0"
+}

@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from openoyster.cli import app
 from openoyster.config import clear_settings_cache
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip Rich/ANSI styles so substring asserts stay stable under TTY capture."""
+    return _ANSI_RE.sub("", text)
 
 
 def test_cli_local_lifecycle(tmp_path: Path, monkeypatch) -> None:
@@ -33,15 +41,15 @@ def test_cli_local_lifecycle(tmp_path: Path, monkeypatch) -> None:
 
         ingested = runner.invoke(app, ["ingest", str(input_dir)])
         assert ingested.exit_code == 0, ingested.output
-        assert "Copied 1 file" in ingested.output
+        assert "Copied 1 file" in _plain(ingested.output)
 
         executed = runner.invoke(app, ["run", "--cycles", "3", "--sleep", "0"])
         assert executed.exit_code == 0, executed.output
-        assert "document_intake" in executed.output
+        assert "document_intake" in _plain(executed.output)
 
         diagnosed = runner.invoke(app, ["doctor"])
         assert diagnosed.exit_code == 0, diagnosed.output
-        assert "PASS" in diagnosed.output
+        assert "PASS" in _plain(diagnosed.output)
 
         policy_created = runner.invoke(
             app,

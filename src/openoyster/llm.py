@@ -45,6 +45,11 @@ class LLMProvider(ABC):
     def analyse(self, text: str, policy: dict[str, Any] | None = None) -> TextAnalysis:
         return self.analyse_batch([text], policy=policy)[0]
 
+    def stage_profile(self, stage: str) -> dict[str, Any]:
+        """Return provider/model/effort provenance for a deliberation stage call."""
+        del stage
+        return {"provider": self.name, "model": None, "effort": None}
+
 
 class CodexProvider(LLMProvider):
     name = "codex"
@@ -146,6 +151,14 @@ class CodexProvider(LLMProvider):
         except JsonResponseError as exc:
             raise ExtractionUnavailable(exc.reason) from exc
 
+    def stage_profile(self, stage: str) -> dict[str, Any]:
+        stage_config = load_codex_stage_config(Path(self.settings.codex_config_dir), stage)
+        return {
+            "provider": self.name,
+            "model": stage_config.model,
+            "effort": stage_config.effort,
+        }
+
     def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[TextAnalysis]:
         if not texts:
             return []
@@ -235,6 +248,14 @@ class OpenAICompatibleProvider(LLMProvider):
         except JsonResponseError as exc:
             raise ExtractionUnavailable(exc.reason) from exc
 
+    def stage_profile(self, stage: str) -> dict[str, Any]:
+        del stage
+        return {
+            "provider": self.name,
+            "model": self.settings.llm_model,
+            "effort": None,
+        }
+
 
 class StubProvider(LLMProvider):
     """Deterministic test double for extraction and configured JSON judgement stages."""
@@ -245,7 +266,14 @@ class StubProvider(LLMProvider):
         return [stub_analysis(text, index) for index, text in enumerate(texts)]
 
     def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        # Secondary critic reuses the primary critic stub contract.
+        if stage == "deliberation_critic_secondary":
+            stage = "deliberation_critic"
         return stub_query_json(prompt, stage)
+
+    def stage_profile(self, stage: str) -> dict[str, Any]:
+        del stage
+        return {"provider": self.name, "model": "stub", "effort": None}
 
 
 def provider_from_settings(settings: Settings | None = None) -> LLMProvider:
@@ -255,6 +283,20 @@ def provider_from_settings(settings: Settings | None = None) -> LLMProvider:
             return CodexProvider(settings)
         case "openai-compatible":
             return OpenAICompatibleProvider(settings)
+        case "stub":
+            return StubProvider()
+        case other:
+            assert_never(other)
+
+
+def critic2_provider_from_settings(settings: Settings | None = None) -> LLMProvider | None:
+    """Optional second-pass critic provider. ``none`` disables the stage entirely."""
+    settings = settings or get_settings()
+    match settings.critic2_provider:
+        case "none":
+            return None
+        case "codex":
+            return CodexProvider(settings)
         case "stub":
             return StubProvider()
         case other:

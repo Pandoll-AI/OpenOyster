@@ -85,6 +85,17 @@ class DeliberationCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class DeliberationContinueRequest(BaseModel):
+    """Public request for a linked D1 re-deliberation."""
+
+    packs: list[str] = Field(min_length=1)
+    impact_baseline_packs: list[str] | None = None
+    fulfilled_knowledge_request_keys: list[str] = Field(min_length=1)
+    allow_compatible_packs: bool = False
+
+    model_config = {"extra": "forbid"}
+
+
 _DELIBERATION_HIDDEN_FIELDS = {
     "failure_detail",
     "idempotency_key",
@@ -140,6 +151,7 @@ def _sanitize_deliberation_value(value: object, *, field_name: str = "") -> obje
 def _deliberation_run_payload(run: DeliberationRun) -> dict[str, object]:
     return {
         "id": run.id,
+        "parent_run_id": run.parent_run_id,
         "status": run.status,
         "current_stage": run.current_stage,
         "outcome": run.outcome,
@@ -411,6 +423,12 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 allow_compatible_packs=payload.allow_compatible_packs,
             )
             session.commit()
+        except deliberation.DeliberationContinuationError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
         except Exception:
             session.rollback()
             raise HTTPException(
@@ -421,6 +439,59 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={"code": run.failure_code or "deliberation_input_invalid"},
+            )
+        if run.status == "failed_execution":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={"code": run.failure_code or "deliberation_execution_failed"},
+            )
+        return _deliberation_run_payload(run)
+
+    @application.post(
+        "/v1/deliberations/{run_id}/continue",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def continue_deliberation(
+        run_id: int,
+        payload: DeliberationContinueRequest,
+        idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Create or return a linked D1 re-deliberation after an abstention."""
+        try:
+            run = deliberation.continue_deliberation(
+                session,
+                parent_run_id=run_id,
+                pack_ids=payload.packs,
+                impact_baseline_pack_ids=payload.impact_baseline_packs,
+                fulfilled_knowledge_request_keys=payload.fulfilled_knowledge_request_keys,
+                idempotency_key=idempotency_key,
+                provider=provider_from_settings(runtime_settings),
+                settings=runtime_settings,
+                allow_compatible_packs=payload.allow_compatible_packs,
+            )
+            session.commit()
+        except deliberation.DeliberationContinuationError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
+        except Exception:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "deliberation_execution_failed"},
+            ) from None
+        if run.status == "failed_input":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": run.failure_code or "deliberation_input_invalid"},
+            )
+        if run.status == "failed_execution":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={"code": run.failure_code or "deliberation_execution_failed"},
             )
         return _deliberation_run_payload(run)
 
@@ -508,17 +579,57 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
     )
     def get_deliberation_knowledge_requests(
         run_id: int,
+        format: str | None = None,
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        deliberation_run_or_404(session, run_id)
+        from openoyster.services.knowledge_request_verifiers import (
+            build_knowledge_request_export,
+        )
+
+        run = deliberation_run_or_404(session, run_id)
         artifact = session.scalar(
             select(DeliberationArtifact).where(
                 DeliberationArtifact.run_id == run_id,
                 DeliberationArtifact.kind == "knowledge_requests",
             )
         )
-        payload = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        raw = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        if format == "export":
+            items = raw.get("knowledge_requests") if isinstance(raw, dict) else None
+            mission = run.mission_snapshot_json if isinstance(run.mission_snapshot_json, dict) else {}
+            payload = build_knowledge_request_export(
+                run_id=run.id,
+                parent_run_id=run.parent_run_id,
+                mission_digest=run.mission_digest,
+                decision_question=str(mission.get("decision_question") or ""),
+                knowledge_requests=list(items) if isinstance(items, list) else [],
+            )
+        else:
+            payload = raw
         return _sanitize_deliberation_value(payload)  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/deliberations/{run_id}/transition",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def get_deliberation_transition(
+        run_id: int,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        deliberation_run_or_404(session, run_id)
+        artifact = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run_id,
+                DeliberationArtifact.kind == "cognitive_transition",
+                DeliberationArtifact.local_key == "cognitive_transition",
+            )
+        )
+        if artifact is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "cognitive_transition_not_ready"},
+            )
+        return _sanitize_deliberation_value(artifact.payload_json)  # type: ignore[return-value]
 
     @application.post("/v1/run-cycle", dependencies=[Depends(_write_authorised)])
     def run_cycle() -> dict[str, Any]:

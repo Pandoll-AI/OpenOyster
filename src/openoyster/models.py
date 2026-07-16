@@ -610,6 +610,14 @@ class DeliberationRun(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     idempotency_key: Mapped[str] = mapped_column(String(250))
+    request_fingerprint: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parent_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    # Immutable claim set for continuation runs; empty for root runs.
+    # Replay and fingerprint recomputation read this column — never the
+    # transition artifact's claimed list (avoids circular verification).
+    fulfilled_request_keys_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     mission_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     mission_digest: Mapped[str] = mapped_column(String(128))
     policy_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -824,6 +832,8 @@ class DeliberationCitation(Base):
     quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     json_pointer: Mapped[str | None] = mapped_column(String(500), nullable=True)
     value_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # statement | supporting | opposing — belief role anchors share the statement row.
+    role: Mapped[str] = mapped_column(String(20), server_default="statement", default="statement")
 
     assertion: Mapped[DeliberationAssertion] = relationship(back_populates="citations")
     evidence_snapshot: Mapped[DeliberationEvidenceSnapshot] = relationship(

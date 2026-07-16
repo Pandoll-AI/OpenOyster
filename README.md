@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen.svg)](tests)
 [![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 [![Language](https://img.shields.io/badge/docs-Korean%20%7C%20English-lightgrey.svg)](README-en.md)
 
@@ -103,6 +103,15 @@ Cognitive Impact + Decision Dossier + Audit Replay
 근거가 없으면 모델을 부르지 않고 기권합니다. critic이 통과하지 못하거나 실행 가능한
 대안이 부족해도 억지로 선택하지 않습니다.
 
+완료된 기권 run에 저장된 Knowledge Request를 OpenCrab 또는 사용자가 충족했다고
+주장하면, 명시한 새 Pack ID로 `deliberate continue`를 실행할 수 있습니다. 새로 인용된
+Evidence가 확인돼야 verified fulfilled로 승격됩니다. 자식 run은 부모 Mission을 동결하고
+`parent_run_id`로 연결되며, `cognitive_transition_v2`가
+belief·option·critic·decision·citation scope의 변화를 보여 줍니다. Pack 내용 자체의
+diff를 계산하거나 외부 사실을 발견하지는 않습니다. 자세한 계약은
+[Decision Continuity D2 요구사항](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)을
+참조하세요.
+
 # 근거를 믿는 방법
 
 OpenOyster는 단순한 citation ID만으로 사실을 인정하지 않습니다.
@@ -135,8 +144,21 @@ OpenOyster는 단순한 citation ID만으로 사실을 인정하지 않습니다
 - evidence anchor와 stage/model/effort 정보
 
 `replay`는 LLM을 다시 호출하지 않습니다. 저장된 입력과 산출물을 재검증하고 dossier를
-다시 렌더링해 digest가 같은지 확인합니다. 새로운 모델 호출은 replay가 아니라 별도의
-새 실행이어야 합니다.
+다시 렌더링해 digest가 같은지 확인합니다. Cognitive Impact와 cognitive transition도
+저장된 것을 그대로 믿지 않고 원본 assertion·citation에서 다시 계산해 digest를 대조합니다.
+저장된 방식이 현재 버전과 다르면 거짓 불일치를 만들지 않고 `recompute_skipped`로 정직하게
+표시합니다. 새로운 모델 호출은 replay가 아니라 별도의 새 실행이어야 합니다.
+
+선택적으로 두 번째 critic을 둘 수 있습니다. `OPENOYSTER_CRITIC2_PROVIDER`가 설정되면
+critic stage를 다른 provider로 한 번 더 실행하고, 유효 verdict를 보수적으로 결합합니다
+(둘 다 pass일 때만 pass). 기본값은 off이며, 그때는 추가 호출도 산출물 변화도 없습니다.
+1차 critic 결과는 언제나 불변으로 남고, 2차 결과와 결합 근거는 별도 artifact에
+기록됩니다.
+
+근거가 없어 기권할 때는 원인을 구분합니다. Pack에 evidence가 아예 없으면
+`pack_has_no_evidence`, evidence는 있으나 질문과 매칭되지 않으면
+`no_match_in_pack_evidence`를 Knowledge Request에 남겨, 검색 실패를 실제 지식 부재로
+잘못 기록하지 않습니다.
 
 # 5분 실행
 
@@ -179,6 +201,16 @@ openoyster deliberate dossier RUN_ID --format markdown
 openoyster deliberate impact RUN_ID
 openoyster deliberate knowledge-requests RUN_ID
 openoyster deliberate replay RUN_ID
+```
+
+기권 후 새 Pack으로 이어서 실행하는 예시는 다음과 같습니다.
+
+```bash
+openoyster deliberate continue PARENT_RUN_ID \
+  --packs new-pack-id \
+  --fulfills kr_no_evidence \
+  --idempotency-key demo-d2-001
+openoyster deliberate transition CHILD_RUN_ID
 ```
 
 기본 provider는 `codex`입니다. 실제 로컬 생성에는 Codex CLI와
@@ -236,7 +268,7 @@ openoyster deliberate show RUN_ID
 openoyster deliberate dossier RUN_ID --format json|markdown
 openoyster deliberate replay RUN_ID
 openoyster deliberate impact RUN_ID
-openoyster deliberate knowledge-requests RUN_ID
+openoyster deliberate knowledge-requests RUN_ID [--format default|export]
 
 openoyster serve
 openoyster status
@@ -286,7 +318,7 @@ PATH="$PWD/.venv/bin:$PATH" make check
 현재 검증 범위는 다음을 포함합니다.
 
 - Ruff와 mypy
-- 145개 unit/integration test
+- 204개 unit/integration test
 - Pack source 불변성
 - D1 contract, migration, runtime, CLI/API
 - SQLite migration upgrade/downgrade
@@ -328,6 +360,9 @@ tests/
 # 문서
 
 - [Autonomous Deliberation D1 요구사항](docs/AUTONOMOUS_DELIBERATION_D1_REQUIREMENTS.md)
+- [Decision Continuity D2 요구사항](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)
+- [Flip Condition Monitoring D3 요구사항 (초안)](docs/DELIBERATION_FLIP_MONITORING_D3_REQUIREMENTS.md)
+- [Decision Outcome Ledger 요구사항 (초안)](docs/DECISION_OUTCOME_LEDGER_REQUIREMENTS.md)
 - [한국어 사용자 매뉴얼](docs/USER_MANUAL_KO.md)
 - [English User Manual](docs/USER_MANUAL.md)
 - [API Reference](docs/API_REFERENCE.md)

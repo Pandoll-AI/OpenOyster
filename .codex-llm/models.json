@@ -1,10 +1,11 @@
 {
   "_fetched_from": "https://developers.openai.com/codex/models.md",
   "_fetched_at": "2026-07-10",
-  "_policy": "single-model policy: gpt-5.6-sol, graded by reasoning effort (user HARD rule 2026-07)",
+  "_policy": "graded two-model policy: gpt-5.6-sol for judgement/verification/reasoning stages, gpt-5.6-terra for bounded generative deliberation stages (2026-07-14 D2, experiments/opencrab_pack_decision/RESULTS.md)",
   "chat": "gpt-5.6-sol",
   "fast_complex": "gpt-5.6-sol",
   "code": "gpt-5.6-sol",
+  "deliberation": "gpt-5.6-terra",
   "reasoning": "gpt-5.6-sol",
   "secondary": "gpt-5.6-sol"
 }

@@ -2,6 +2,46 @@
 
 All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility may change between minor releases.
 
+## Unreleased — deliberation integrity hardening
+
+Adversarial review of D1/D2 (two Codex passes) surfaced integrity and disclosure
+defects; this wave closes them and adds bounded features.
+
+### Fixed
+
+- Made the selection gate fail-closed: fabricated belief/option references, incomplete
+  or duplicate constraint coverage, `pass` critic verdicts that contradict their own
+  findings, and viable options lacking expected/adverse scenarios can no longer produce
+  a `select` decision.
+- Persisted every gated assertion and anchor (including opposing evidence, exclusion
+  reasons, and constraint rationales) with a role-tagged citation and a post-persist
+  parity check, so Cognitive Impact and cognitive transition no longer see a subset.
+- Stopped leaking LLM/provider text: Pydantic validation errors record `loc`/`type`
+  only, and provider exceptions record the exception class plus a digest, never raw text.
+- Bound idempotency to a request fingerprint and made run creation atomic against a
+  concurrent unique-key race; mismatched reuse returns `idempotency_request_mismatch`.
+- Recorded the real per-stage model and effort (and duration) instead of a hardcoded
+  default, and added exactly one bounded retry per stage on invalid/gate failures.
+- Preserved unclaimed parent Knowledge Requests in the transition's remaining list and
+  flagged when a child scope drops a Pack the parent had cited.
+- Required continuation to add at least one new Pack (`no_new_pack_scope`) and to match
+  the stored parent Mission digest (`parent_integrity_mismatch`).
+- Split no-evidence abstention into `pack_has_no_evidence` vs `no_match_in_pack_evidence`.
+- Bound Knowledge Request verification to evidence the child actually cited, replaced the
+  dishonest verification method label with a per-gap verifier registry, and made replay
+  recompute Cognitive Impact/transition from source (version-aware, no false mismatch)
+  using an immutable fulfilled-keys column instead of the artifact under audit.
+
+### Added
+
+- Optional second-pass critic (`OPENOYSTER_CRITIC2_PROVIDER`, default off) that runs the
+  critic on another provider and combines verdicts conservatively; the primary critic
+  artifact stays immutable.
+- Machine-readable Knowledge Request export (`--format export` / `?format=export`) for
+  OpenCrab or human consumption as a collection request.
+- Golden replay CI test that pins dossier digests to guard contract drift.
+- Draft requirements for Flip Condition Monitoring (D3) and a Decision Outcome Ledger.
+
 ## 0.4.0 — LLM-first rebuild
 
 ### Removed

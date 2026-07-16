@@ -183,6 +183,7 @@ def _sanitize_deliberation_value(value: object, *, field_name: str = "") -> obje
 def _deliberation_run_payload(run: DeliberationRun) -> dict[str, object]:
     return {
         "id": run.id,
+        "parent_run_id": run.parent_run_id,
         "status": run.status,
         "current_stage": run.current_stage,
         "outcome": run.outcome,
@@ -1074,7 +1075,62 @@ def deliberate_run(
     _print_pack_json(payload)
     if run.status == "failed_input":
         raise typer.Exit(code=2)
-    if run.status in {"failed_database", "indeterminate"}:
+    if run.status in {"failed_database", "failed_execution", "indeterminate"}:
+        raise typer.Exit(code=1)
+
+
+@deliberate_app.command("continue")
+def deliberate_continue(
+    parent_run_id: Annotated[int, typer.Argument(min=1, help="Completed abstaining parent run ID.")],
+    packs: Annotated[str, typer.Option(help="Comma-separated installed Pack IDs.")],
+    fulfills: Annotated[
+        str, typer.Option(help="Comma-separated parent Knowledge Request local keys fulfilled by this run.")
+    ],
+    idempotency_key: Annotated[str, typer.Option(help="Unique key for this continuation execution.")],
+    impact_baseline_packs: Annotated[
+        str | None, typer.Option(help="Comma-separated frozen baseline Pack IDs.")
+    ] = None,
+    allow_compatible_packs: Annotated[
+        bool, typer.Option(help="Allow explicitly installed compatible Packs.")
+    ] = False,
+) -> None:
+    """Continue a completed abstention after fulfilling its knowledge requests."""
+    pack_ids = [item.strip() for item in packs.split(",") if item.strip()]
+    fulfilled_keys = [item.strip() for item in fulfills.split(",") if item.strip()]
+    baseline_ids = [item.strip() for item in (impact_baseline_packs or "").split(",") if item.strip()]
+    if not pack_ids or not fulfilled_keys or not idempotency_key.strip():
+        _print_pack_json({"status": "failed_input", "error": {"code": "scope_or_key_required"}})
+        raise typer.Exit(code=2)
+
+    try:
+        with _runtime() as (settings, _, factory), factory() as session:
+            run = deliberation.continue_deliberation(
+                session,
+                parent_run_id,
+                pack_ids,
+                baseline_ids,
+                fulfilled_keys,
+                idempotency_key,
+                provider_from_settings(settings),
+                settings=settings,
+                allow_compatible_packs=allow_compatible_packs,
+            )
+            session.commit()
+            payload = _deliberation_run_payload(run)
+    except deliberation.DeliberationContinuationError as exc:
+        _print_pack_json({"status": "failed_input", "error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        _print_pack_json({"status": "indeterminate", "error": {"code": "deliberation_failed"}})
+        raise typer.Exit(code=1) from exc
+
+    _print_pack_json(payload)
+    if run.status == "failed_input":
+        raise typer.Exit(code=2)
+    if run.status in {"failed_database", "failed_execution", "indeterminate"}:
         raise typer.Exit(code=1)
 
 
@@ -1135,18 +1191,54 @@ def deliberate_impact(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
     _print_pack_json(payload)
 
 
-@deliberate_app.command("knowledge-requests")
-def deliberate_knowledge_requests(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
-    """Export inert Knowledge Requests; this command never executes them."""
+@deliberate_app.command("transition")
+def deliberate_transition(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show the persisted, sanitized cognitive transition for a continuation run."""
     with _runtime() as (_, _, factory), factory() as session:
         _get_deliberation_run(session, run_id)
+        artifact = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run_id,
+                DeliberationArtifact.kind == "cognitive_transition",
+                DeliberationArtifact.local_key == "cognitive_transition",
+            )
+        )
+        if artifact is None:
+            _print_pack_json({"error": {"code": "cognitive_transition_not_found"}})
+            raise typer.Exit(code=1)
+        payload = _sanitize_deliberation_value(artifact.payload_json)
+    _print_pack_json(payload)
+
+
+@deliberate_app.command("knowledge-requests")
+def deliberate_knowledge_requests(
+    run_id: Annotated[int, typer.Argument(min=1)],
+    format: Annotated[Literal["default", "export"], typer.Option()] = "default",
+) -> None:
+    """Export inert Knowledge Requests; this command never executes them."""
+    from .services.knowledge_request_verifiers import build_knowledge_request_export
+
+    with _runtime() as (_, _, factory), factory() as session:
+        run = _get_deliberation_run(session, run_id)
         artifact = session.scalar(
             select(DeliberationArtifact).where(
                 DeliberationArtifact.run_id == run_id,
                 DeliberationArtifact.kind == "knowledge_requests",
             )
         )
-        payload = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        raw = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        if format == "export":
+            items = raw.get("knowledge_requests") if isinstance(raw, dict) else None
+            mission = run.mission_snapshot_json if isinstance(run.mission_snapshot_json, dict) else {}
+            payload = build_knowledge_request_export(
+                run_id=run.id,
+                parent_run_id=run.parent_run_id,
+                mission_digest=run.mission_digest,
+                decision_question=str(mission.get("decision_question") or ""),
+                knowledge_requests=list(items) if isinstance(items, list) else [],
+            )
+        else:
+            payload = raw
     _print_pack_json(_sanitize_deliberation_value(payload))
 
 

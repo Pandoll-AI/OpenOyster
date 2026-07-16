@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+
 from openoyster.deliberation_contracts import (
+    MIN_QUOTE_CHARS,
     AssertionClass,
     BeliefsStagePayload,
     CitationAnchor,
+    ConstraintJudgement,
     CriticStagePayload,
     DecisionStagePayload,
     Mission,
@@ -20,6 +25,22 @@ from openoyster.deliberation_contracts import (
     validate_stage_payload,
 )
 from openoyster.utils import sha256_text
+
+# Quote anchors must carry enough letter/digit content after NFKC (not just punctuation).
+MIN_QUOTE_ALNUM_CHARS = 6
+
+
+def safe_validation_error_message(exc: ValidationError) -> str:
+    """Compose a ValidationError summary without input values or docs URLs."""
+    parts: list[str] = []
+    for err in exc.errors(include_input=False, include_url=False):
+        loc = err.get("loc") or ()
+        loc_str = ".".join(str(item) for item in loc) if loc else "(root)"
+        err_type = err.get("type") or "validation_error"
+        parts.append(f"{loc_str}: {err_type}")
+    if not parts:
+        return "payload validation failed"
+    return "payload validation failed: " + "; ".join(parts)
 
 
 class StageGateError(ValueError):
@@ -48,7 +69,34 @@ class GateContext:
     option_keys: set[str] = field(default_factory=set)
     viable_option_keys: set[str] = field(default_factory=set)
     scenario_index: dict[str, set[str]] = field(default_factory=dict)
+    # Viable options that have both expected and adverse scenarios (filled after scenarios).
+    scenario_complete_option_keys: set[str] = field(default_factory=set)
     critic_verdict: str | None = None
+
+
+@dataclass(frozen=True)
+class SelectionBlockers:
+    """Shared selection-gate findings used by validate_decision and selection_gate_allows."""
+
+    critic_non_pass: bool = False
+    insufficient_viable_options: bool = False
+    selected_not_viable: bool = False
+    missing_scenarios: bool = False
+
+    def reason_codes(self) -> list[str]:
+        reasons: list[str] = []
+        if self.critic_non_pass:
+            reasons.append("critic_non_pass")
+        if self.insufficient_viable_options:
+            reasons.append("insufficient_viable_options")
+        if self.selected_not_viable:
+            reasons.append("selection_gate_failed")
+        if self.missing_scenarios:
+            reasons.append("missing_scenarios")
+        return reasons
+
+    def any(self) -> bool:
+        return bool(self.reason_codes())
 
 
 def resolve_json_pointer(document: Any, pointer: str) -> Any:
@@ -86,6 +134,114 @@ def validate_mission_pointer(mission: Mission, pointer: str) -> Any:
         raise StageGateError("invalid_mission_pointer", exc.message) from exc
 
 
+def require_known_belief_ref(key: str, belief_keys: set[str]) -> None:
+    """Fail-closed belief key resolution (empty prior set still rejects unknowns)."""
+    if key not in belief_keys:
+        raise StageGateError("unknown_belief_ref", f"unknown belief key: {key}")
+
+
+def require_known_option_ref(key: str, option_keys: set[str]) -> None:
+    """Fail-closed option key resolution (empty prior set still rejects unknowns)."""
+    if key not in option_keys:
+        raise StageGateError("unknown_option_ref", f"unknown option key: {key}")
+
+
+def validate_constraint_coverage(
+    judgements: list[ConstraintJudgement],
+    constraint_count: int,
+    *,
+    option_key: str,
+) -> None:
+    """Require exact coverage of mission.constraints indices (no missing/duplicate/OOB)."""
+    indices: list[int] = []
+    for judgement in judgements:
+        if judgement.constraint_index >= constraint_count:
+            raise StageGateError(
+                "invalid_constraint_index",
+                f"constraint_index {judgement.constraint_index} out of range "
+                f"for option {option_key} (mission has {constraint_count} constraints)",
+            )
+        indices.append(judgement.constraint_index)
+    if len(indices) != len(set(indices)):
+        raise StageGateError(
+            "duplicate_constraint_index",
+            f"option {option_key} has duplicate constraint_index values",
+        )
+    expected = set(range(constraint_count))
+    if set(indices) != expected:
+        raise StageGateError(
+            "constraint_coverage_incomplete",
+            f"option {option_key} constraint_judgements must cover exactly "
+            f"indices {sorted(expected)}; got {sorted(set(indices))}",
+        )
+
+
+def validate_critic_verdict_consistency(payload: CriticStagePayload) -> None:
+    """pass verdict may only carry coverage_ok issues/findings (or none).
+
+    Gap findings without issue_code may coexist with pass. Any finding with a
+    non-coverage_ok issue_code is treated as blocking and rejects pass.
+    """
+    if payload.verdict != "pass":
+        return
+    for issue in payload.issues:
+        if issue.code != "coverage_ok":
+            raise StageGateError(
+                "critic_verdict_inconsistent",
+                f"verdict pass is inconsistent with issue code {issue.code}",
+            )
+    for finding in payload.findings:
+        code = finding.issue_code
+        if code is not None and code != "coverage_ok":
+            raise StageGateError(
+                "critic_verdict_inconsistent",
+                f"verdict pass is inconsistent with finding issue_code {code}",
+            )
+
+
+def _scenario_kinds_complete(kinds: set[str]) -> bool:
+    return "expected" in kinds and "adverse" in kinds
+
+
+def scenario_complete_viable_keys(ctx: GateContext) -> set[str]:
+    """Viable options that carry both expected and adverse scenarios."""
+    if ctx.scenario_complete_option_keys:
+        return set(ctx.scenario_complete_option_keys) & set(ctx.viable_option_keys)
+    complete: set[str] = set()
+    for key in ctx.viable_option_keys:
+        if _scenario_kinds_complete(ctx.scenario_index.get(key, set())):
+            complete.add(key)
+    return complete
+
+
+def evaluate_selection_gate(
+    ctx: GateContext, decision: DecisionStagePayload
+) -> SelectionBlockers:
+    """Shared selection eligibility checks for validate_decision and selection_gate_allows."""
+    if decision.outcome != "select":
+        return SelectionBlockers()
+    kinds = ctx.scenario_index.get(decision.selected_option_key or "", set())
+    scenario_complete = scenario_complete_viable_keys(ctx)
+    return SelectionBlockers(
+        critic_non_pass=ctx.critic_verdict != "pass",
+        # Selection requires at least two *scenario-complete* viable alternatives.
+        insufficient_viable_options=len(scenario_complete) < 2,
+        selected_not_viable=decision.selected_option_key not in ctx.viable_option_keys,
+        missing_scenarios=not _scenario_kinds_complete(kinds),
+    )
+
+
+def _quote_letter_digit_count(quote: str) -> int:
+    """Count Unicode letters/digits after NFKC (punctuation-only quotes fail)."""
+    normalized = unicodedata.normalize("NFKC", quote)
+    count = 0
+    for ch in normalized:
+        category = unicodedata.category(ch)
+        if category.startswith("L") or category.startswith("N"):
+            count += 1
+    return count
+
+
 def validate_anchor(anchor: CitationAnchor, snapshots: dict[str, EvidenceSnapshotView]) -> None:
     snap = snapshots.get(anchor.evidence_snapshot_id)
     if snap is None:
@@ -94,6 +250,14 @@ def validate_anchor(anchor: CitationAnchor, snapshots: dict[str, EvidenceSnapsho
             f"evidence_snapshot_id not in run snapshot: {anchor.evidence_snapshot_id}",
         )
     if anchor.quote is not None:
+        stripped = anchor.quote.strip()
+        if len(stripped) < MIN_QUOTE_CHARS or _quote_letter_digit_count(stripped) < MIN_QUOTE_ALNUM_CHARS:
+            raise StageGateError(
+                "quote_too_short",
+                f"quote must be at least {MIN_QUOTE_CHARS} characters after strip "
+                f"and at least {MIN_QUOTE_ALNUM_CHARS} letters/digits after NFKC "
+                f"for {anchor.evidence_snapshot_id}",
+            )
         if anchor.quote == "" or anchor.quote not in (snap.text or ""):
             raise StageGateError(
                 "quote_mismatch",
@@ -141,20 +305,26 @@ def validate_options_payload(payload: OptionsStagePayload, ctx: GateContext) -> 
             validate_assertion(option.exclusion_reason, ctx)
         for risk in option.risks:
             validate_assertion(risk, ctx)
-        for judgement in option.constraint_judgements:
-            if judgement.constraint_index >= constraint_count and constraint_count > 0:
-                raise StageGateError(
-                    "invalid_constraint_index",
-                    f"constraint_index {judgement.constraint_index} out of range",
-                )
-            validate_assertion(judgement.rationale, ctx)
-        for key in option.supporting_belief_keys + option.opposing_belief_keys:
-            if ctx.belief_keys and key not in ctx.belief_keys:
-                raise StageGateError("unknown_belief_ref", f"unknown belief key: {key}")
-        # Hard constraint violation must exclude.
-        hard_fail = any(
-            not j.satisfied for j in option.constraint_judgements
+        validate_constraint_coverage(
+            option.constraint_judgements,
+            constraint_count,
+            option_key=option.local_key,
         )
+        for judgement in option.constraint_judgements:
+            validate_assertion(judgement.rationale, ctx)
+            if judgement.rationale.classification == AssertionClass.mission_control:
+                expected_pointer = f"/constraints/{judgement.constraint_index}"
+                if judgement.rationale.mission_pointer != expected_pointer:
+                    raise StageGateError(
+                        "constraint_pointer_mismatch",
+                        f"option {option.local_key} constraint_index "
+                        f"{judgement.constraint_index} mission_control rationale "
+                        f"must point at {expected_pointer}",
+                    )
+        for key in option.supporting_belief_keys + option.opposing_belief_keys:
+            require_known_belief_ref(key, ctx.belief_keys)
+        # Hard constraint violation must exclude.
+        hard_fail = any(not j.satisfied for j in option.constraint_judgements)
         if hard_fail and option.viable:
             raise StageGateError(
                 "hard_constraint_violation",
@@ -167,10 +337,7 @@ def validate_options_payload(payload: OptionsStagePayload, ctx: GateContext) -> 
 def validate_scenarios_payload(payload: ScenariosStagePayload, ctx: GateContext) -> None:
     index: dict[str, set[str]] = {}
     for scenario in payload.scenarios:
-        if ctx.option_keys and scenario.option_key not in ctx.option_keys:
-            raise StageGateError(
-                "unknown_option_ref", f"unknown option key: {scenario.option_key}"
-            )
+        require_known_option_ref(scenario.option_key, ctx.option_keys)
         validate_assertion(scenario.projected_outcome, ctx)
         if scenario.projected_outcome.classification != AssertionClass.grounded_inference:
             raise StageGateError(
@@ -181,9 +348,13 @@ def validate_scenarios_payload(payload: ScenariosStagePayload, ctx: GateContext)
             validate_assertion(item, ctx)
         index.setdefault(scenario.option_key, set()).add(scenario.kind)
     ctx.scenario_index = index
+    ctx.scenario_complete_option_keys = {
+        key for key, kinds in index.items() if _scenario_kinds_complete(kinds)
+    }
 
 
 def validate_critic_payload(payload: CriticStagePayload, ctx: GateContext) -> None:
+    validate_critic_verdict_consistency(payload)
     for finding in payload.findings:
         validate_assertion(finding, ctx)
     ctx.critic_verdict = payload.verdict
@@ -193,34 +364,35 @@ def validate_decision_payload(payload: DecisionStagePayload, ctx: GateContext) -
     validate_assertion(payload.rationale, ctx)
     for flip in payload.flip_conditions:
         validate_assertion(flip.condition, ctx)
-    if payload.outcome == "select":
-        if ctx.critic_verdict is not None and ctx.critic_verdict != "pass":
-            raise StageGateError("critic_non_pass", "cannot select when critic did not pass")
-        if len(ctx.viable_option_keys) < 2:
-            raise StageGateError(
-                "insufficient_viable_options", "selection requires at least two viable options"
-            )
-        if payload.selected_option_key not in ctx.viable_option_keys:
-            raise StageGateError(
-                "unknown_selected_option",
-                f"selected option not viable: {payload.selected_option_key}",
-            )
-        kinds = ctx.scenario_index.get(payload.selected_option_key or "", set())
-        if "expected" not in kinds or "adverse" not in kinds:
-            raise StageGateError(
-                "missing_scenarios",
-                "selected option requires expected and adverse scenarios",
-            )
-        if payload.rationale.classification not in {
-            AssertionClass.grounded_fact,
-            AssertionClass.grounded_inference,
-            AssertionClass.mission_control,
-            AssertionClass.proposal,
-        }:
-            raise StageGateError(
-                "invalid_decision_rationale",
-                "decision rationale must be grounded or mission-controlled",
-            )
+    if payload.outcome != "select":
+        return
+    blockers = evaluate_selection_gate(ctx, payload)
+    if blockers.critic_non_pass:
+        raise StageGateError("critic_non_pass", "cannot select when critic did not pass")
+    if blockers.insufficient_viable_options:
+        raise StageGateError(
+            "insufficient_viable_options", "selection requires at least two viable options"
+        )
+    if blockers.selected_not_viable:
+        raise StageGateError(
+            "unknown_selected_option",
+            f"selected option not viable: {payload.selected_option_key}",
+        )
+    if blockers.missing_scenarios:
+        raise StageGateError(
+            "missing_scenarios",
+            "selected option requires expected and adverse scenarios",
+        )
+    if payload.rationale.classification not in {
+        AssertionClass.grounded_fact,
+        AssertionClass.grounded_inference,
+        AssertionClass.mission_control,
+        AssertionClass.proposal,
+    }:
+        raise StageGateError(
+            "invalid_decision_rationale",
+            "decision rationale must be grounded or mission-controlled",
+        )
 
 
 def validate_stage(
@@ -230,6 +402,11 @@ def validate_stage(
 ) -> StrictModel:
     try:
         model = validate_stage_payload(stage, raw_payload)
+    except ValidationError as exc:
+        raise StageGateError(
+            "invalid_stage_payload",
+            safe_validation_error_message(exc),
+        ) from exc
     except Exception as exc:
         raise StageGateError("invalid_stage_payload", str(exc)) from exc
 
@@ -249,16 +426,6 @@ def validate_stage(
 
 
 def selection_gate_allows(ctx: GateContext, decision: DecisionStagePayload) -> tuple[bool, list[str]]:
-    reasons: list[str] = []
-    if decision.outcome != "select":
-        return True, reasons
-    if ctx.critic_verdict != "pass":
-        reasons.append("critic_non_pass")
-    if len(ctx.viable_option_keys) < 2:
-        reasons.append("insufficient_viable_options")
-    if decision.selected_option_key not in ctx.viable_option_keys:
-        reasons.append("selection_gate_failed")
-    kinds = ctx.scenario_index.get(decision.selected_option_key or "", set())
-    if "expected" not in kinds or "adverse" not in kinds:
-        reasons.append("missing_scenarios")
+    blockers = evaluate_selection_gate(ctx, decision)
+    reasons = blockers.reason_codes()
     return (not reasons), reasons
