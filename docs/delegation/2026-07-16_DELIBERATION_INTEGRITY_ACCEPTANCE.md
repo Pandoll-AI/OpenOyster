@@ -62,4 +62,6 @@ verification (#8); gate-error model-text disclosure (#7); atomic fingerprint fil
 
 ## Commit status
 
-commit_push_deploy: **not_performed** — awaiting explicit user approval.
+commit_push_deploy: **committed, pushed, and merged** — six thematic commits on
+`agent/opencrab-decision-continuity`, opened/updated as PR #1, merged to `main`
+on 2026-07-16 with explicit user approval. English README synced in the same wave.

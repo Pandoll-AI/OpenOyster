@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen.svg)](tests)
 [![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 
 > This is the English overview. The Korean-first README is [README.md](README.md).
@@ -59,7 +59,26 @@ Grounded assertions require an exact quote or a resolvable JSON pointer into a f
 snapshot. Unknown, local-only, out-of-scope, or mismatched citations fail closed.
 
 Replay never invokes the LLM. It revalidates stored stage payloads and citation anchors,
-re-renders the dossier, and compares deterministic hashes.
+re-renders the dossier, and compares deterministic hashes. It also recomputes Cognitive Impact
+and the cognitive transition from the source assertions and citations rather than trusting the
+stored artifact, checks stored-payload self-digests first, and reports `recompute_skipped`
+instead of a false mismatch when a stored method or template predates the current version.
+
+An optional second critic (`OPENOYSTER_CRITIC2_PROVIDER`, off by default) reruns the critic on
+another provider and combines verdicts conservatively (pass only if both pass); the primary
+critic artifact stays immutable. No-evidence abstention distinguishes `pack_has_no_evidence`
+from `no_match_in_pack_evidence` so a retrieval miss is not recorded as true absence.
+
+# Decision Continuity D2
+
+A completed abstention can be continued once its Knowledge Requests are claimed fulfilled with a
+newly installed Pack. The child freezes the parent Mission, records `parent_run_id`, and a
+`cognitive_transition_v2` artifact reports belief/option/critic/decision/citation-scope changes.
+A Knowledge Request is verified only when newly added evidence is also cited by a child assertion;
+semantic relevance is not proven. Knowledge Requests can be exported in a machine-readable form
+(`openoyster deliberate knowledge-requests RUN_ID --format export` / `?format=export`) for
+OpenCrab or a human to consume as a collection request. See
+[D2 Requirements](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md).
 
 # Five-minute smoke run
 
@@ -117,9 +136,10 @@ mission charter reference are optional.
 ```text
 openoyster pack validate|install|list|show|query
 openoyster deliberate run|show|dossier|replay|impact|knowledge-requests
+openoyster deliberate continue|transition
 ```
 
-D1 API endpoints:
+D1/D2 API endpoints:
 
 ```text
 POST /v1/deliberations
@@ -128,10 +148,14 @@ GET  /v1/deliberations/{id}/dossier
 POST /v1/deliberations/{id}/replay
 GET  /v1/deliberations/{id}/cognitive-impact
 GET  /v1/deliberations/{id}/knowledge-requests
+POST /v1/deliberations/{id}/continue
+GET  /v1/deliberations/{id}/transition
 ```
 
-Every D1 endpoint requires the configured API key. Create also requires `Idempotency-Key`.
-Responses omit raw Pack bodies, full prompts, filesystem paths, storage URIs, and secrets.
+Every D1/D2 endpoint requires the configured API key. Create and continue also require
+`Idempotency-Key`, which is bound to a request fingerprint (reuse with different inputs returns
+`idempotency_request_mismatch`). Responses omit raw Pack bodies, full prompts, filesystem paths,
+storage URIs, secrets, and raw model/validation error text.
 
 # Local service launcher
 
@@ -149,13 +173,17 @@ Use macOS `launchd`, containers, or a remote deployment path for formal long-run
 PATH="$PWD/.venv/bin:$PATH" make check
 ```
 
-The current gate covers Ruff, mypy, 145 tests, D1 contracts/runtime/migrations/CLI/API,
-Pack-source immutability, and sdist/wheel builds.
+The current gate covers Ruff, mypy, 204 tests, D1/D2 contracts/runtime/migrations/CLI/API,
+adversarial gate and persistence-parity suites, a golden replay test, Pack-source immutability,
+and sdist/wheel builds.
 
 # Documentation
 
 - [Korean README](README.md)
 - [D1 Requirements](docs/AUTONOMOUS_DELIBERATION_D1_REQUIREMENTS.md)
+- [D2 Requirements](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)
+- [Flip Condition Monitoring D3 (draft)](docs/DELIBERATION_FLIP_MONITORING_D3_REQUIREMENTS.md)
+- [Decision Outcome Ledger (draft)](docs/DECISION_OUTCOME_LEDGER_REQUIREMENTS.md)
 - [Korean User Manual](docs/USER_MANUAL_KO.md)
 - [User Manual](docs/USER_MANUAL.md)
 - [API Reference](docs/API_REFERENCE.md)
