@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Collection
 from datetime import timedelta
@@ -22,6 +23,7 @@ from openoyster.deliberation_contracts import (
     STAGE_CRITIC,
     STAGE_DECISION,
     STAGE_OPTIONS,
+    STAGE_RETRIEVAL_QUERY_EXPANSION,
     STAGE_SCENARIOS,
     CriticStagePayload,
     DecisionStagePayload,
@@ -29,6 +31,7 @@ from openoyster.deliberation_contracts import (
     NarrativeAssertion,
     StrictModel,
     mission_digest,
+    parse_retrieval_query_expansion,
     payload_digest,
 )
 from openoyster.llm import LLMProvider, critic2_provider_from_settings
@@ -41,6 +44,7 @@ from openoyster.models import (
     DeliberationRun,
     DeliberationStageCall,
     PackEvidence,
+    PackInstall,
 )
 from openoyster.services.cognitive_impact import compute_cognitive_impact
 from openoyster.services.cognitive_transition import persist_cognitive_transition
@@ -59,7 +63,10 @@ from openoyster.services.deliberation_persistence import (
 )
 from openoyster.services.deliberation_prompts import build_stage_prompt, prompt_digest
 from openoyster.services.deliberation_scope import DeliberationScopeError, freeze_pack_scope
-from openoyster.services.pack_retrieval import search_pack_context
+from openoyster.services.pack_retrieval import (
+    install_retrieval_hints,
+    search_pack_context,
+)
 from openoyster.utils import ensure_utc, sha256_text, utcnow
 
 STAGE_STATUS: dict[str, str] = {
@@ -668,18 +675,225 @@ def _freeze_and_create_run(
     return run
 
 
+def _pack_control_metadata_for_expansion(
+    session: Session, install_ids: list[int]
+) -> list[dict[str, Any]]:
+    """Title/hints only — never Pack evidence body (control input → query terms)."""
+    if not install_ids:
+        return []
+    installs = list(
+        session.scalars(select(PackInstall).where(PackInstall.id.in_(install_ids))).all()
+    )
+    by_id = {row.id: row for row in installs}
+    rows: list[dict[str, Any]] = []
+    for install_id in install_ids:
+        install = by_id.get(install_id)
+        if install is None:
+            continue
+        manifest = install.original_manifest_json or {}
+        title = manifest.get("title")
+        rows.append(
+            {
+                "pack_id": install.pack_id,
+                "title": str(title).strip() if isinstance(title, str) and title.strip() else None,
+                "retrieval_hints": install_retrieval_hints(install),
+            }
+        )
+    return rows
+
+
+def _build_retrieval_expansion_prompt(
+    mission: Mission, pack_metadata: list[dict[str, Any]]
+) -> str:
+    """Control-plane expansion prompt: mission + pack title/hints only."""
+    packs_blob = json.dumps(pack_metadata, ensure_ascii=False, sort_keys=True)
+    return (
+        "You generate alternative lexical search queries for Pack evidence retrieval.\n"
+        "Cross-language failure mode: the original question may not share tokens with "
+        "English Pack evidence. Produce translations and synonyms only.\n"
+        "Return a JSON object: {\"queries\": [\"...\", ...]} with at most 5 strings, "
+        "each at most 200 characters. Queries are search terms only — not answers.\n"
+        "Do not invent Pack evidence text. Do not quote evidence bodies.\n\n"
+        f"decision_question: {mission.decision_question}\n"
+        f"goal: {mission.goal}\n"
+        f"pack_metadata: {packs_blob}\n"
+    )
+
+
+def _attempt_retrieval_query_expansion(
+    session: Session,
+    *,
+    run: DeliberationRun,
+    mission: Mission,
+    install_ids: list[int],
+    provider: LLMProvider,
+    settings: Settings,
+) -> tuple[list[str], DeliberationStageCall | None, dict[str, Any]]:
+    """One optional expansion LLM call. Never kills the run on schema/provider failure."""
+    pack_metadata = _pack_control_metadata_for_expansion(session, install_ids)
+    prompt = _build_retrieval_expansion_prompt(mission, pack_metadata)
+    trace: dict[str, Any] = {
+        "original_query": mission.decision_question,
+        "expanded_queries": [],
+        "used_query": None,
+        "matched_via": None,
+        "safety_code": None,
+        "pack_metadata": pack_metadata,
+    }
+
+    try:
+        profile = provider.stage_profile(STAGE_RETRIEVAL_QUERY_EXPANSION)
+    except Exception as exc:
+        trace["safety_code"] = "expansion_profile_unavailable"
+        trace["safety_detail"] = _safe_provider_error_message(exc)
+        return [], None, trace
+
+    if run.llm_attempt_count >= MAX_LLM_ATTEMPTS:
+        trace["safety_code"] = "expansion_budget_exhausted"
+        return [], None, trace
+
+    call = DeliberationStageCall(
+        run_id=run.id,
+        stage=STAGE_RETRIEVAL_QUERY_EXPANSION,
+        attempt_number=1,
+        status="started",
+        provider=profile.get("provider") or getattr(provider, "name", None),
+        model=profile.get("model"),
+        effort=profile.get("effort"),
+        template_version=PROMPT_TEMPLATE_VERSION,
+        prompt_digest=prompt_digest(prompt),
+        config_digest=run.runtime_config_digest,
+        input_manifest_digest=payload_digest(
+            {
+                "stage": STAGE_RETRIEVAL_QUERY_EXPANSION,
+                "mission_digest": run.mission_digest,
+                "primary_scope_digest": run.primary_scope_digest,
+                "pack_metadata": pack_metadata,
+            }
+        ),
+    )
+    session.add(call)
+    session.flush()
+
+    run.llm_attempt_count += 1
+    run.current_stage = STAGE_RETRIEVAL_QUERY_EXPANSION
+    run.lease_owner = f"deliberation:{run.id}:{STAGE_RETRIEVAL_QUERY_EXPANSION}:{uuid4().hex}"
+    run.lease_until = utcnow() + timedelta(seconds=settings.loop_lease_seconds)
+    run.updated_at = utcnow()
+    session.commit()
+
+    started = time.perf_counter()
+    try:
+        raw = provider.query_json(prompt, STAGE_RETRIEVAL_QUERY_EXPANSION)
+    except Exception as exc:
+        call.duration_ms = (time.perf_counter() - started) * 1000.0
+        call.status = "failed"
+        call.error = _safe_provider_error_message(exc)
+        call.finished_at = utcnow()
+        run.lease_owner = None
+        run.lease_until = None
+        session.commit()
+        trace["safety_code"] = "expansion_provider_error"
+        return [], call, trace
+
+    call.duration_ms = (time.perf_counter() - started) * 1000.0
+    call.response_json = raw if isinstance(raw, dict) else {"value": raw}
+    call.response_digest = payload_digest(call.response_json)
+    call.raw_response_digest = call.response_digest
+    call.raw_response_length = len(str(raw))
+    call.finished_at = utcnow()
+
+    try:
+        parsed = parse_retrieval_query_expansion(raw)
+    except Exception:
+        call.status = "invalid"
+        call.error = "gate_rejected: invalid_expansion_payload"
+        run.lease_owner = None
+        run.lease_until = None
+        session.commit()
+        trace["safety_code"] = "invalid_expansion_payload"
+        return [], call, trace
+
+    call.status = "succeeded"
+    run.lease_owner = None
+    run.lease_until = None
+    session.flush()
+    session.commit()
+    queries = list(parsed.queries)
+    trace["expanded_queries"] = queries
+    return queries, call, trace
+
+
 def _materialize_evidence_snapshots(
     session: Session,
     run: DeliberationRun,
     mission: Mission,
     install_ids: list[int],
+    *,
+    provider: LLMProvider,
+    settings: Settings,
 ) -> list[DeliberationEvidenceSnapshot]:
+    original_query = mission.decision_question
     retrieval = search_pack_context(
         session,
-        mission.decision_question,
+        original_query,
         pack_install_ids=install_ids,
         top_k=MAX_EVIDENCE_SNAPSHOTS,
     )
+    used_query = original_query
+    expansion_call: DeliberationStageCall | None = None
+    retrieval_trace: dict[str, Any] | None = None
+
+    if not retrieval.evidence and install_ids:
+        pack_evidence_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(PackEvidence)
+                .where(PackEvidence.pack_install_id.in_(install_ids))
+            )
+            or 0
+        )
+        if pack_evidence_count > 0:
+            # 2nd defense: conditional LLM query expansion (one call max).
+            expanded_queries, expansion_call, retrieval_trace = (
+                _attempt_retrieval_query_expansion(
+                    session,
+                    run=run,
+                    mission=mission,
+                    install_ids=install_ids,
+                    provider=provider,
+                    settings=settings,
+                )
+            )
+            retrieval_trace["primary_diagnostics"] = dict(retrieval.diagnostics)
+            for alt_query in expanded_queries:
+                alt = search_pack_context(
+                    session,
+                    alt_query,
+                    pack_install_ids=install_ids,
+                    top_k=MAX_EVIDENCE_SNAPSHOTS,
+                )
+                if alt.evidence:
+                    retrieval = alt
+                    used_query = alt_query
+                    retrieval_trace["used_query"] = alt_query
+                    retrieval_trace["matched_via"] = "query_expansion"
+                    retrieval_trace["match_diagnostics"] = dict(alt.diagnostics)
+                    break
+            else:
+                retrieval_trace["used_query"] = None
+                if expanded_queries and retrieval_trace.get("safety_code") is None:
+                    retrieval_trace["safety_code"] = "expansion_no_match"
+
+            _store_artifact(
+                session,
+                run=run,
+                stage_call=expansion_call,
+                kind="retrieval_trace",
+                local_key="retrieval_trace",
+                payload=retrieval_trace,
+            )
+
     evidence_rows = list(retrieval.evidence)[:MAX_EVIDENCE_SNAPSHOTS]
     # Rank by hits when available.
     score_by_global = {
@@ -714,6 +928,11 @@ def _materialize_evidence_snapshots(
         snapshots.append(snap)
     session.flush()
     run.status = "context_ready"
+    # Keep used_query visible on run degraded_json only when expansion ran.
+    if retrieval_trace is not None:
+        degraded = dict(run.degraded_json or {})
+        degraded["retrieval_used_query"] = used_query
+        run.degraded_json = degraded
     session.flush()
     return snapshots
 
@@ -1144,7 +1363,14 @@ def run_deliberation(
             )
         ).all()
     ]
-    snapshots = _materialize_evidence_snapshots(session, run, mission, install_ids)
+    snapshots = _materialize_evidence_snapshots(
+        session,
+        run,
+        mission,
+        install_ids,
+        provider=provider,
+        settings=settings,
+    )
     # Freeze scope and prompt-visible evidence before the first LLM call.
     session.commit()
     snap_ids = _snapshot_db_id_by_key(snapshots)

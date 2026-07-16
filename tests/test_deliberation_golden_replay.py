@@ -38,11 +38,13 @@ MISSION_PATH = PROJECT_ROOT / "tests/fixtures/deliberation_d1/mission_happy.json
 # Update rule: when the dossier contract intentionally changes, re-run this
 # module, print the new digests from a failing assertion, and commit the new
 # constants only after confirming the delta is intentional.
+# 2026-07-16: rebased for the intentional `retrieval_trace` dossier key (W-A1
+# query-expansion provenance); verified the payload delta was exactly that key.
 GOLDEN_SELECT_DOSSIER_JSON_DIGEST = (
-    "d28478664de3883c21409f64a1a9688031702ac31116d6af5922a8e4addb214d"
+    "46cc4f93f39652198834885e0e732c78420ec20ebbc9bbf633880a2a9f450c93"
 )
 GOLDEN_NO_EVIDENCE_DOSSIER_JSON_DIGEST = (
-    "fb109e40d9f7644022c468178f1b25e012f854afd3b15cbbfdf4f909d71518da"
+    "c781fc6fd3c723e94e9d4e79054c146538cc26aaff34e917f99ab46c6b9e9a88"
 )
 
 

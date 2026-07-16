@@ -205,6 +205,7 @@ def test_repository_codex_config_uses_graded_two_model_policy():
         "merge_judge": "medium",
         "gold_label": "xhigh",
         "pack_answer": "medium",
+        "retrieval_query_expansion": "low",
         "deliberation_beliefs": "high",
         "deliberation_options": "high",
         "deliberation_scenarios": "high",

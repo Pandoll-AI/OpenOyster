@@ -20,12 +20,15 @@ MAX_EVIDENCE_SNAPSHOTS: Final = 24
 MAX_PROMPT_CHARS: Final = 100_000
 MAX_LLM_ATTEMPTS: Final = 10
 MIN_QUOTE_CHARS: Final = 12
+MAX_RETRIEVAL_EXPANSION_QUERIES: Final = 5
+MAX_RETRIEVAL_EXPANSION_QUERY_CHARS: Final = 200
 
 STAGE_BELIEFS: Final = "deliberation_beliefs"
 STAGE_OPTIONS: Final = "deliberation_options"
 STAGE_SCENARIOS: Final = "deliberation_scenarios"
 STAGE_CRITIC: Final = "deliberation_critic"
 STAGE_DECISION: Final = "deliberation_decision"
+STAGE_RETRIEVAL_QUERY_EXPANSION: Final = "retrieval_query_expansion"
 
 DELIBERATION_STAGES: Final[tuple[str, ...]] = (
     STAGE_BELIEFS,
@@ -45,6 +48,7 @@ ARTIFACT_KINDS: Final[frozenset[str]] = frozenset(
         "flip_conditions",
         "knowledge_requests",
         "cognitive_transition",
+        "retrieval_trace",
     }
 )
 
@@ -360,6 +364,33 @@ class DecisionStagePayload(StrictModel):
         return self
 
 
+class RetrievalQueryExpansionPayload(StrictModel):
+    """LLM-generated alternative lexical queries (search terms only)."""
+
+    queries: list[str] = Field(default_factory=list, max_length=MAX_RETRIEVAL_EXPANSION_QUERIES)
+
+    @field_validator("queries")
+    @classmethod
+    def _query_bounds(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_RETRIEVAL_EXPANSION_QUERIES:
+            raise ValueError(
+                f"at most {MAX_RETRIEVAL_EXPANSION_QUERIES} expansion queries allowed"
+            )
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("expansion queries must be strings")
+            text = item.strip()
+            if not text:
+                continue
+            if len(text) > MAX_RETRIEVAL_EXPANSION_QUERY_CHARS:
+                raise ValueError(
+                    f"expansion query exceeds {MAX_RETRIEVAL_EXPANSION_QUERY_CHARS} chars"
+                )
+            cleaned.append(text)
+        return cleaned
+
+
 STAGE_PAYLOAD_TYPES: Final[dict[str, type[StrictModel]]] = {
     STAGE_BELIEFS: BeliefsStagePayload,
     STAGE_OPTIONS: OptionsStagePayload,
@@ -367,6 +398,13 @@ STAGE_PAYLOAD_TYPES: Final[dict[str, type[StrictModel]]] = {
     STAGE_CRITIC: CriticStagePayload,
     STAGE_DECISION: DecisionStagePayload,
 }
+
+
+def parse_retrieval_query_expansion(payload: Any) -> RetrievalQueryExpansionPayload:
+    """Validate expansion response; raises ValueError on schema violations."""
+    if not isinstance(payload, dict):
+        raise ValueError("retrieval_query_expansion response must be a JSON object")
+    return RetrievalQueryExpansionPayload.model_validate(payload)
 
 
 def canonical_json(value: Any) -> str:

@@ -1,0 +1,12 @@
+{
+  "format_version": "opencrab-pack-v1",
+  "pack_id": "p0-f8-korean-hints",
+  "title": "P0-F8 Korean Retrieval Hints Fixture",
+  "retrieval_hints": [
+    "이 주장을 받아들여야 하는가",
+    "근거",
+    "지원하는 주장",
+    "소스 근거",
+    "이 소스는 이 주장을 지지한다"
+  ]
+}

@@ -1,0 +1,2 @@
+{"id":"edge:contains:1","from_id":"resource:doc:1","to_id":"evidence:1","from_space":"resource","to_space":"evidence","relation":"contains","confidence":1.0,"evidence_refs":["evidence:1"]}
+{"id":"edge:supports:1","from_id":"evidence:1","to_id":"claim:1","from_space":"evidence","to_space":"claim","relation":"supports","confidence":0.9,"evidence_refs":["evidence:1"]}

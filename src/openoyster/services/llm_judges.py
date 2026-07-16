@@ -108,6 +108,8 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_gold_label(prompt)
         case "pack_answer":
             return _stub_pack_answer(prompt)
+        case "retrieval_query_expansion":
+            return _stub_retrieval_query_expansion(prompt)
         case "deliberation_beliefs":
             return _stub_deliberation_beliefs(prompt)
         case "deliberation_options":
@@ -120,6 +122,49 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_deliberation_decision(prompt)
         case _:
             raise ExtractionUnavailable(f"stub does not implement JSON stage: {stage}")
+
+
+def _stub_retrieval_query_expansion(prompt: str) -> dict[str, Any]:
+    """Deterministic expansion: question whitespace tokens + pack title tokens.
+
+    No fixed bilingual dictionary. Useful for tests that inject matchable terms
+    via the expansion provider override; default path stays conservative.
+    """
+    queries: list[str] = []
+    # decision_question line (control input).
+    dq_match = re.search(r"decision_question:\s*(.+)", prompt)
+    if dq_match:
+        question = dq_match.group(1).strip()
+        if question:
+            queries.append(question)
+            # Whitespace split into shorter alternate queries (cap later).
+            for token in question.split():
+                token = token.strip()
+                if len(token) > 1:
+                    queries.append(token)
+    # pack title tokens from pack_metadata JSON blob in the prompt.
+    for title_match in re.finditer(r'"title"\s*:\s*"(?P<title>(?:\\.|[^"\\])*)"', prompt):
+        title = title_match.group("title").encode("utf-8").decode("unicode_escape")
+        if title.strip():
+            queries.append(title.strip())
+            for token in title.split():
+                token = token.strip()
+                if len(token) > 1:
+                    queries.append(token)
+    # De-dupe while preserving order; hard-cap at 5.
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in queries:
+        text = item.strip()
+        if not text or text in seen:
+            continue
+        if len(text) > 200:
+            text = text[:200]
+        seen.add(text)
+        deduped.append(text)
+        if len(deduped) >= 5:
+            break
+    return {"queries": deduped}
 
 
 def _stub_deliberation_anchor(prompt: str) -> dict[str, str]:

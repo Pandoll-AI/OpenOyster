@@ -137,6 +137,49 @@ def _issue(
     return payload
 
 
+def _diagnose_retrieval_hints(manifest: dict[str, Any], issues: list[dict[str, Any]]) -> list[str]:
+    """Accept optional manifest.retrieval_hints as a string array (lenient).
+
+    Invalid shapes/elements are ignored with a non-error diagnostic; admission
+    is never rejected for this field. Hints are search routing aids only.
+    """
+    if "retrieval_hints" not in manifest:
+        return []
+    raw = manifest.get("retrieval_hints")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        issues.append(
+            _issue(
+                "ignored_retrieval_hints",
+                "info",
+                "manifest.retrieval_hints ignored: expected a string array",
+                path="manifest.json",
+            )
+        )
+        return []
+    accepted: list[str] = []
+    ignored_elements = False
+    for item in raw:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                accepted.append(text)
+            # empty strings are silently dropped
+        else:
+            ignored_elements = True
+    if ignored_elements:
+        issues.append(
+            _issue(
+                "ignored_retrieval_hints_elements",
+                "info",
+                "manifest.retrieval_hints non-string elements ignored",
+                path="manifest.json",
+            )
+        )
+    return accepted
+
+
 def _iter_pack_files(root: Path) -> list[Path]:
     return sorted((path for path in root.rglob("*") if path.is_file()), key=lambda p: p.relative_to(root).as_posix())
 
@@ -371,6 +414,9 @@ def validate_pack_directory(
     grammar_version = (
         str(manifest["grammar_version"]) if manifest.get("grammar_version") is not None else None
     )
+
+    # Optional multi-language retrieval aliases. Lenient: never fail admission.
+    _diagnose_retrieval_hints(manifest, issues)
 
     node_ids: dict[str, dict[str, Any]] = {}
     for node in nodes:

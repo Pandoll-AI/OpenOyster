@@ -1,0 +1,3 @@
+{"id":"resource:doc:1","label":"Source Document","space":"resource","node_type":"Document","properties":{"title":"Source Document","status":"validated"},"evidence_refs":["evidence:1"]}
+{"id":"evidence:1","label":"Evidence 1","space":"evidence","node_type":"Evidence","properties":{"status":"validated"},"evidence_refs":["evidence:1"]}
+{"id":"claim:1","label":"Supported claim","space":"claim","node_type":"Claim","properties":{"statement":"The source supports this claim.","status":"validated","confidence":0.9},"evidence_refs":["evidence:1"]}
