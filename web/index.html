@@ -25,14 +25,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <!-- Auto-orbiting mock Pack galaxy (network-galaxy scene, chrome-less) -->
-    <iframe id="galaxy" src="/galaxy.html" title="OpenCrab Pack universe (mock visual)" tabindex="-1" aria-hidden="true"></iframe>
+    <!-- Static mock Pack galaxy: a chrome-less network-galaxy frame captured to WebP.
+         Replaces the live three.js iframe — same look, no per-frame WebGL cost. -->
+    <div id="galaxy" aria-hidden="true"></div>
     <div id="veil"></div>
 
     <!-- Intro video popup -->
     <div id="intro" class="intro" hidden>
       <div class="intro__box">
-        <video id="introVideo" class="intro__video" playsinline muted preload="auto" poster="/intro-poster.svg">
+        <video id="introVideo" class="intro__video" playsinline muted preload="none" poster="/intro-poster.svg">
           <source src="/intro.mp4" type="video/mp4" />
         </video>
         <div class="intro__bar">

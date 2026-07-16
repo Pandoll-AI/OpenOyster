@@ -32,14 +32,17 @@ b { font-weight: 600; color: var(--amber-bright); }
 .mono { font-family: var(--mono); letter-spacing: 0; }
 
 /* ---- galaxy background + legibility veil ---- */
+/* Static chrome-less galaxy frame (public/galaxy-bg.webp). main.ts still nudges
+   its transform/opacity on scroll for the parallax, so keep will-change hints. */
 #galaxy {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
-  border: 0;
   z-index: -2;
   pointer-events: none;
+  background: var(--bg) url("/galaxy-bg.webp") center center / cover no-repeat;
+  will-change: transform, opacity;
 }
 #veil {
   position: fixed;
@@ -225,6 +228,9 @@ main { position: relative; z-index: 1; }
 .homage__body p { color: var(--dim); font-size: 17px; margin-bottom: 20px; line-height: 1.7; }
 .homage__body a { color: var(--amber); text-underline-offset: 3px; }
 .homage__links { display: flex; gap: 14px; margin-top: 30px; flex-wrap: wrap; }
+/* Amber buttons keep dark text — otherwise `.homage__body a` above (higher
+   specificity than `.btn--amber`) tints the label amber-on-amber. */
+.homage__links .btn--amber { color: #1a0f03; }
 
 /* ---- footer ---- */
 .foot {

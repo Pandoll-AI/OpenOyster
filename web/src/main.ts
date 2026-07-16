@@ -61,6 +61,9 @@ async function openIntro() {
   }
   intro.hidden = false;
   video.muted = true;
+  // preload="none" keeps intro.mp4 off the initial critical path — start fetching
+  // only now, right before we play it.
+  video.load();
   try {
     await video.play();
   } catch {

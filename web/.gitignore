@@ -2,6 +2,7 @@ node_modules
 dist
 .galaxy.json
 .shot-*.png
+galaxy-bg.png
 .DS_Store
 .vercel
 .nodes.json
