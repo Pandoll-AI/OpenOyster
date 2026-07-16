@@ -11,7 +11,9 @@
     {"name": "deliberation_options", "purpose": "Mission 제약을 만족하는 선택지 구성", "tier": "D1", "model_type": "deliberation", "effort": "high"},
     {"name": "deliberation_scenarios", "purpose": "선택지별 기대·불리 시나리오 구성", "tier": "D1", "model_type": "deliberation", "effort": "high"},
     {"name": "deliberation_critic", "purpose": "근거·제약·대안 누락을 상위 모델로 비판", "tier": "D1", "model_type": "reasoning", "effort": "high"},
-    {"name": "deliberation_decision", "purpose": "검증된 결과로 선택 또는 기권 결정", "tier": "D1", "model_type": "reasoning", "effort": "high"}
+    {"name": "deliberation_decision", "purpose": "검증된 결과로 선택 또는 기권 결정", "tier": "D1", "model_type": "reasoning", "effort": "high"},
+    {"name": "flip_confirm", "purpose": "flip 촉발 후보가 flip condition과 의미상 관련되는지 유계 판정", "tier": "D1", "model_type": "reasoning", "effort": "high"},
+    {"name": "kr_semantic", "purpose": "새 인용 evidence가 KR 질문에 실제로 답하는지 유계 판정", "tier": "D1", "model_type": "reasoning", "effort": "high"}
   ],
   "prod_connector": "openai-compatible"
 }

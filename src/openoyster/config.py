@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     flip_confirm_provider: Literal["none", "codex", "stub", "claude-cli"] = Field(
         default="none"
     )
-    flip_confirm_timeout_seconds: float = Field(default=20.0, ge=1.0, le=300.0)
+    # 10s floor matches codex/claude subprocess timeout minimum (Field ge=10.0).
+    flip_confirm_timeout_seconds: float = Field(default=20.0, ge=10.0, le=300.0)
     llm_api_key: str | None = Field(default=None)
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4.1-mini")

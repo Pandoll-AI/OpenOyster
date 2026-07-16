@@ -900,8 +900,9 @@ def scan_installed_pack(
 
     1. ``safe_scan_pack_install`` — deterministic trigger create only
     2. ``session.commit()`` — triggers become durable
-    3. ``confirm_pending_triggers`` — optional LLM confirm (isolated; may
-       commit per trigger). Confirm failure never undoes install or triggers.
+    3. ``confirm_pending_triggers`` — optional LLM confirm on a dedicated
+       session (per-trigger commit; never flushes caller pending). Confirm
+       failure never undoes install or triggers.
 
     Pass the caller's runtime ``settings`` so flip_confirm_provider is not
     re-resolved from the global ``get_settings()`` cache.

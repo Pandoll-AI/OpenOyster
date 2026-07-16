@@ -1031,6 +1031,218 @@ def test_confirm_provider_timeouts_match_flip_confirm_budget(
         _ = real_factory
 
 
+def test_flip_confirm_timeout_seconds_rejects_below_provider_floor(
+    temp_settings: Settings,
+) -> None:
+    """#2: flip_confirm_timeout_seconds < 10 is rejected (subprocess floor)."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(
+            db_url=temp_settings.db_url,
+            workspace=temp_settings.workspace,
+            flip_confirm_timeout_seconds=5.0,
+        )
+    with pytest.raises(ValidationError):
+        Settings(
+            db_url=temp_settings.db_url,
+            workspace=temp_settings.workspace,
+            flip_confirm_timeout_seconds=1.0,
+        )
+    # Floor (10s) is accepted and equals the provider subprocess timeout floor.
+    at_floor = Settings(
+        db_url=temp_settings.db_url,
+        workspace=temp_settings.workspace,
+        flip_confirm_timeout_seconds=10.0,
+    )
+    assert at_floor.flip_confirm_timeout_seconds == 10.0
+    bounded = flip_monitoring._settings_for_confirm_provider(at_floor)
+    assert bounded.codex_timeout_seconds == 10.0
+    assert bounded.claude_timeout_seconds == 10.0
+
+
+def test_confirm_pending_skips_when_caller_holds_open_transaction(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """RW-E major: open caller tx → guard skips (no writer-lock stall).
+
+    Isolation intent is stronger under the post-commit contract: confirm never
+    runs while the caller holds pending/open-tx work, so unrelated pending
+    cannot be committed by a fresh-session confirm path.
+    """
+    import logging
+    import time
+
+    from openoyster.models import SystemState
+
+    temp_settings.flip_confirm_provider = "stub"
+    pack_install_id: int
+    trigger_id: int
+    watch_id: int
+
+    with session_factory() as session:
+        watch = _setup_watching(session, temp_settings, tmp_path, key="txiso")
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "txiso-match")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.txiso-match"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        evidence_path = pack_dir / "evidence" / "index.jsonl"
+        row = json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])
+        row["text"] = EVIDENCE_BODY
+        evidence_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        created = flip_monitoring.scan_pack_install(
+            session, result.pack_install_id, settings=temp_settings
+        )
+        session.commit()
+        assert len(created) == 1
+        assert created[0].confirmation == "none"
+        pack_install_id = result.pack_install_id
+        trigger_id = created[0].id
+        watch_id = watch.id
+
+        # Unrelated write holding the SQLite writer lock (contract violation).
+        marker = SystemState(
+            key="flip_confirm_txiso_marker", value_json={"unrelated": True}
+        )
+        session.add(marker)
+        session.flush()
+        assert session.in_transaction() is True
+
+        with caplog.at_level(
+            logging.WARNING, logger="openoyster.services.flip_monitoring"
+        ):
+            t0 = time.monotonic()
+            flip_monitoring.confirm_pending_triggers(
+                session, pack_install_id, settings=temp_settings
+            )
+            elapsed = time.monotonic() - t0
+
+        # Guard must return immediately — no multi-second writer-lock wait.
+        assert elapsed < 3.0, f"confirm stalled under open caller tx: {elapsed:.2f}s"
+        assert any(
+            "post-commit contract" in rec.getMessage() for rec in caplog.records
+        ), "open-tx violation must surface as a warning (not silent)"
+
+        session.rollback()
+
+    with session_factory() as session:
+        assert session.get(SystemState, "flip_confirm_txiso_marker") is None
+        trigger = session.get(DeliberationFlipTrigger, trigger_id)
+        assert trigger is not None
+        # Confirm skipped: deterministic candidate preserved, still unconfirmed.
+        assert trigger.confirmation == "none"
+        watch_row = session.get(DeliberationFlipWatch, watch_id)
+        assert watch_row is not None
+        assert watch_row.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+
+
+def test_confirm_pending_skips_uncommitted_triggers_with_warning(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """RW-E minor: uncommitted caller work → guard warns (no silent miss)."""
+    import logging
+
+    temp_settings.flip_confirm_provider = "stub"
+
+    with session_factory() as session:
+        watch = _setup_watching(session, temp_settings, tmp_path, key="silent")
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "silent-match")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.silent-match"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        evidence_path = pack_dir / "evidence" / "index.jsonl"
+        row = json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])
+        row["text"] = EVIDENCE_BODY
+        evidence_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        # Deterministic scan flushes triggers but caller does NOT commit —
+        # post-commit contract violation (silent-miss without the guard).
+        created = flip_monitoring.scan_pack_install(
+            session, result.pack_install_id, settings=temp_settings
+        )
+        assert len(created) == 1
+        assert session.in_transaction() is True
+
+        with caplog.at_level(
+            logging.WARNING, logger="openoyster.services.flip_monitoring"
+        ):
+            flip_monitoring.confirm_pending_triggers(
+                session, result.pack_install_id, settings=temp_settings
+            )
+
+        assert any(
+            "post-commit contract" in rec.getMessage() for rec in caplog.records
+        )
+        session.refresh(created[0])
+        assert created[0].confirmation == "none"
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+        # Leave the open tx clean for session teardown.
+        session.rollback()
+
+
+def test_confirm_pending_after_commit_still_confirms(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """RW-E GREEN: committed caller session still reaches llm_supported."""
+    temp_settings.flip_confirm_provider = "stub"
+
+    with session_factory() as session:
+        _setup_watching(session, temp_settings, tmp_path, key="postok")
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "postok-match")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.postok-match"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        evidence_path = pack_dir / "evidence" / "index.jsonl"
+        row = json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])
+        row["text"] = EVIDENCE_BODY
+        evidence_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        created = flip_monitoring.scan_pack_install(
+            session, result.pack_install_id, settings=temp_settings
+        )
+        session.commit()
+        assert session.in_transaction() is False
+        assert len(created) == 1
+        assert created[0].confirmation == "none"
+
+        flip_monitoring.confirm_pending_triggers(
+            session, result.pack_install_id, settings=temp_settings
+        )
+        session.refresh(created[0])
+        assert created[0].confirmation == "llm_supported"
+
+
 def test_claim_serializes_error_reentry_via_confirming(
     session_factory: sessionmaker[Session],
     temp_settings: Settings,

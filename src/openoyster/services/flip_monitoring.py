@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session, load_only, sessionmaker
 
 from openoyster.deliberation_contracts import (
     MAX_ACTIVE_FLIP_WATCHES,
@@ -481,29 +481,34 @@ def confirm_pending_triggers(
     """LLM-confirm pending triggers for one Pack install (post-commit only).
 
     Must run AFTER deterministic triggers from ``scan_pack_install`` are
-    committed. Failures are isolated: they never undo install or trigger rows.
-    Each successful claim/judgement is flushed; the caller may commit per
-    confirm or once after the batch (``scan_installed_pack`` commits the batch).
+    committed and the caller holds **no open transaction**
+    (``session.in_transaction()`` is False). An open caller transaction is a
+    contract violation: on SQLite it can stall the dedicated confirm Session
+    behind the writer lock, and uncommitted triggers are invisible to that
+    Session (silent miss). The entry guard logs a warning and returns without
+    confirming.
+
+    Confirm + commit run on a **dedicated Session** bound to the same engine so
+    per-trigger commits never flush unrelated pending rows from the caller's
+    unit-of-work. Failures are isolated: they never undo install or
+    deterministic trigger rows. The caller's session is not committed here.
     """
     if not _confirm_enabled(settings):
+        return
+
+    if session.in_transaction():
+        logger.warning(
+            "confirm_pending_triggers requires a committed caller session "
+            "(post-commit contract); caller holds an open transaction, skipping "
+            "confirm to avoid a writer-lock stall and a silent miss. "
+            "pack_install_id=%s",
+            pack_install_id,
+        )
         return
 
     timeout_s = _confirm_timeout_seconds(settings)
     confirm_deadline = time.monotonic() + timeout_s
     confirm_budget = CONFIRM_MAX_TRIGGERS
-
-    triggers = list(
-        session.scalars(
-            select(DeliberationFlipTrigger)
-            .where(
-                DeliberationFlipTrigger.pack_install_id == pack_install_id,
-                DeliberationFlipTrigger.confirmation.in_(list(CLAIMABLE_CONFIRMATIONS)),
-            )
-            .order_by(DeliberationFlipTrigger.id.asc())
-        ).all()
-    )
-    if not triggers:
-        return
 
     confirm_provider: LLMProvider | None = None
     try:
@@ -518,44 +523,73 @@ def confirm_pending_triggers(
     if confirm_provider is None:
         return
 
-    for trigger in triggers:
-        if confirm_budget <= 0:
-            logger.warning(
-                "flip_confirm call cap reached; leaving confirmation=none "
-                "pack_install_id=%s trigger_id=%s max=%s",
-                pack_install_id,
-                trigger.id,
-                CONFIRM_MAX_TRIGGERS,
-            )
-            break
-        if time.monotonic() >= confirm_deadline:
-            logger.warning(
-                "flip_confirm stage budget exhausted; leaving confirmation as-is "
-                "pack_install_id=%s trigger_id=%s",
-                pack_install_id,
-                trigger.id,
-            )
-            break
-        try:
-            confirm_trigger(session, trigger, confirm_provider)
-            confirm_budget -= 1
-            session.commit()
-        except Exception:
-            logger.exception(
-                "flip_confirm phase failed; deterministic trigger preserved "
-                "pack_install_id=%s trigger_id=%s",
-                pack_install_id,
-                getattr(trigger, "id", None),
-            )
+    # Fresh session: per-trigger commit must not touch the caller's UoW.
+    ConfirmSession = sessionmaker(
+        bind=session.get_bind(),
+        autoflush=False,
+        autocommit=False,
+        expire_on_commit=False,
+    )
+    with ConfirmSession() as confirm_session:
+        trigger_ids = list(
+            confirm_session.scalars(
+                select(DeliberationFlipTrigger.id)
+                .where(
+                    DeliberationFlipTrigger.pack_install_id == pack_install_id,
+                    DeliberationFlipTrigger.confirmation.in_(
+                        list(CLAIMABLE_CONFIRMATIONS)
+                    ),
+                )
+                .order_by(DeliberationFlipTrigger.id.asc())
+            ).all()
+        )
+        if not trigger_ids:
+            return
+
+        for trigger_id in trigger_ids:
+            if confirm_budget <= 0:
+                logger.warning(
+                    "flip_confirm call cap reached; leaving confirmation=none "
+                    "pack_install_id=%s trigger_id=%s max=%s",
+                    pack_install_id,
+                    trigger_id,
+                    CONFIRM_MAX_TRIGGERS,
+                )
+                break
+            if time.monotonic() >= confirm_deadline:
+                logger.warning(
+                    "flip_confirm stage budget exhausted; leaving confirmation as-is "
+                    "pack_install_id=%s trigger_id=%s",
+                    pack_install_id,
+                    trigger_id,
+                )
+                break
             try:
-                session.rollback()
+                trigger = confirm_session.get(DeliberationFlipTrigger, trigger_id)
+                if trigger is None:
+                    continue
+                if trigger.confirmation not in CLAIMABLE_CONFIRMATIONS:
+                    continue
+                confirm_trigger(confirm_session, trigger, confirm_provider)
+                confirm_budget -= 1
+                confirm_session.commit()
             except Exception:
                 logger.exception(
-                    "flip_confirm rollback after failure failed pack_install_id=%s",
+                    "flip_confirm phase failed; deterministic trigger preserved "
+                    "pack_install_id=%s trigger_id=%s",
                     pack_install_id,
+                    trigger_id,
                 )
-            # Stop further confirms this pass if the session/provider is toxic.
-            break
+                try:
+                    confirm_session.rollback()
+                except Exception:
+                    logger.exception(
+                        "flip_confirm rollback after failure failed "
+                        "pack_install_id=%s",
+                        pack_install_id,
+                    )
+                # Stop further confirms this pass if the session/provider is toxic.
+                break
 
 
 def safe_scan_pack_install(
@@ -628,7 +662,8 @@ def _settings_for_confirm_provider(settings: Settings | None) -> Settings:
 
     resolved = settings if settings is not None else get_settings()
     timeout_s = float(getattr(resolved, "flip_confirm_timeout_seconds", 20.0) or 20.0)
-    # codex/claude Field(ge=10.0); clamp so model_copy validation always succeeds.
+    # flip_confirm_timeout_seconds Field(ge=10.0) matches subprocess timeout floor;
+    # clamp still guards model_copy if a non-Settings object is passed.
     provider_timeout = min(max(timeout_s, 10.0), 1800.0)
     return resolved.model_copy(
         update={

@@ -211,13 +211,28 @@ def test_repository_codex_config_uses_graded_two_model_policy():
         "deliberation_scenarios": "high",
         "deliberation_critic": "high",
         "deliberation_decision": "high",
+        "flip_confirm": "high",
+        "kr_semantic": "high",
     }
     assert next(stage for stage in pipeline["stages"] if stage["name"] == "pack_answer")[
         "model_type"
     ] == "reasoning"
-    for name in ("deliberation_critic", "deliberation_decision"):
+    for name in (
+        "deliberation_critic",
+        "deliberation_decision",
+        "flip_confirm",
+        "kr_semantic",
+    ):
         stage = next(item for item in pipeline["stages"] if item["name"] == name)
         assert stage["model_type"] == "reasoning", f"{name} must stay on the sol judgement tier"
+
+    # CodexProvider.query_json loads these stages; missing config crashes codex path.
+    from openoyster.services.codex_config import load_codex_stage_config
+
+    for name in ("flip_confirm", "kr_semantic"):
+        cfg = load_codex_stage_config(root / ".codex-llm", name)
+        assert cfg.model == "gpt-5.6-sol"
+        assert cfg.effort == "high"
 
 
 def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):
