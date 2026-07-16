@@ -704,9 +704,11 @@ def test_0010_decision_outcome_ledger_upgrade_and_downgrade(temp_settings: Setti
             for idx in inspector.get_indexes("deliberation_outcomes")
             if idx.get("unique")
         }
-        assert ("run_id", "idempotency_key") in uniques or any(
+        # Global unique on idempotency_key (not compound with run_id).
+        assert ("idempotency_key",) in uniques or any(
             name and "idempotency" in name for name in unique_indexes
         )
+        assert ("run_id", "idempotency_key") not in uniques
 
         config = _alembic_config(temp_settings.db_url)
         command.downgrade(config, "0009_flip_monitoring_d3")

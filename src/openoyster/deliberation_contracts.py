@@ -25,8 +25,15 @@ MAX_OPTIONS: Final = 5
 MAX_SCENARIOS_PER_OPTION: Final = 3
 MAX_EVIDENCE_SNAPSHOTS: Final = 24
 MAX_PROMPT_CHARS: Final = 100_000
-# Expansion (1) + 5 stages x 2 attempts + critic2 headroom.
-MAX_LLM_ATTEMPTS: Final = 12
+# Core 5-stage budget (beliefs/options/scenarios/critic/decision x up to 2 attempts).
+# Expansion and secondary critic use a separate auxiliary budget so they cannot
+# starve the core path when every stage needs a retry.
+CORE_STAGE_MAX_ATTEMPTS: Final = 10  # 5 stages x 2
+# Expansion (1) + secondary critic x 2 attempts + small headroom.
+AUXILIARY_LLM_MAX_ATTEMPTS: Final = 4
+# Total call ceiling for policy/docs accounting (core + auxiliary). Not used as
+# the core-stage budget gate — see CORE_STAGE_MAX_ATTEMPTS / AUXILIARY_*.
+MAX_LLM_ATTEMPTS: Final = CORE_STAGE_MAX_ATTEMPTS + AUXILIARY_LLM_MAX_ATTEMPTS
 MIN_QUOTE_CHARS: Final = 12
 MAX_RETRIEVAL_EXPANSION_QUERIES: Final = 5
 MAX_RETRIEVAL_EXPANSION_QUERY_CHARS: Final = 200

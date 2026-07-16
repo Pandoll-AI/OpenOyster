@@ -221,15 +221,16 @@ def render_dossier_markdown(payload: dict[str, Any]) -> str:
     retrieval_trace = payload.get("retrieval_trace")
     if isinstance(retrieval_trace, dict):
         lines.extend(["", "## Retrieval trace"])
-        lines.append(f"- Original query: {retrieval_trace.get('original_query', '')}")
-        used = retrieval_trace.get("used_query")
-        if used:
-            lines.append(f"- Used expanded query: {used}")
-        expanded = retrieval_trace.get("expanded_queries") or []
-        if expanded:
-            lines.append(f"- Expanded queries ({len(expanded)}):")
-            for item in expanded:
-                lines.append(f"  - {item}")
+        # Digest/count schema only — never render raw query strings.
+        original_digest = retrieval_trace.get("original_query_digest")
+        if original_digest:
+            lines.append(f"- Original query digest: `{original_digest}`")
+        expanded_count = retrieval_trace.get("expanded_query_count")
+        if expanded_count is not None:
+            lines.append(f"- Expanded query count: {expanded_count}")
+        used_digest = retrieval_trace.get("used_query_digest")
+        if used_digest:
+            lines.append(f"- Used query digest: `{used_digest}`")
         safety = retrieval_trace.get("safety_code")
         if safety:
             lines.append(f"- Safety code: `{safety}`")

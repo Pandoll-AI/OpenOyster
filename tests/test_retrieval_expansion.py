@@ -24,7 +24,10 @@ from openoyster.models import (
 )
 from openoyster.schemas import TextAnalysis
 from openoyster.services import deliberation, opencrab_packs, pack_retrieval
-from openoyster.services.deliberation_dossier import build_dossier_payload
+from openoyster.services.deliberation_dossier import (
+    build_dossier_payload,
+    render_dossier_markdown,
+)
 from openoyster.services.deliberation_gates import (
     EvidenceSnapshotView,
     StageGateError,
@@ -359,7 +362,7 @@ def test_expansion_plus_stage_retries_does_not_stuck_run(
             allow_compatible_packs=True,
         )
         session.commit()
-        # 1 expansion + 5 stages x 2 attempts = 11; MAX_LLM_ATTEMPTS=12 leaves headroom.
+        # 1 expansion (aux) + 5 stages x 2 attempts (core) = 11 total recorded.
         assert run.status == "completed"
         assert run.failure_code is None
         assert run.lease_owner is None
@@ -374,8 +377,9 @@ def test_llm_attempt_budget_exhausted_is_handled_terminal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#1: budget exhaustion → failed_execution + llm_attempt_budget_exhausted."""
-    monkeypatch.setattr(deliberation, "MAX_LLM_ATTEMPTS", 1)
+    """#1: core budget exhaustion → failed_execution + llm_attempt_budget_exhausted."""
+    # Expansion uses the auxiliary budget; core gate is independent.
+    monkeypatch.setattr(deliberation, "CORE_STAGE_MAX_ATTEMPTS", 0)
     provider = ExpandingProvider()
     mission = _korean_mission()
     with session_factory() as session:
@@ -391,12 +395,77 @@ def test_llm_attempt_budget_exhausted_is_handled_terminal(
             allow_compatible_packs=True,
         )
         session.commit()
-        # Expansion consumes the only attempt; first stage hits budget gate.
+        # Expansion may succeed on aux budget; first core stage hits core gate.
         assert run.status == "failed_execution"
         assert run.failure_code == "llm_attempt_budget_exhausted"
         assert run.lease_owner is None
         assert run.lease_until is None
         assert run.completed_at is not None
+
+
+class Critic2RejectOnceProvider(LLMProvider):
+    """Secondary critic rejects gate once, then passes (uses auxiliary budget)."""
+
+    name = "stub"
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    def analyse_batch(
+        self, texts: list[str], policy: dict[str, Any] | None = None
+    ) -> list[TextAnalysis]:
+        del texts, policy
+        raise AssertionError("unused")
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        self.attempts += 1
+        if self.attempts == 1:
+            return {"not": "a-valid-critic-payload"}
+        return stub_query_json(prompt, stage)
+
+
+def test_critic2_plus_expansion_and_stage_retries_does_not_starve_core(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B: expansion + all core stages 1 reject + critic2 reject must complete.
+
+    Worst-case: 1 expansion + 5x2 core + 2 critic2 = 13 total calls. With a single
+    shared MAX_LLM_ATTEMPTS=12 this starved decision; separated budgets finish.
+    """
+    temp_settings.critic2_provider = "stub"
+    critic2 = Critic2RejectOnceProvider()
+    monkeypatch.setattr(
+        deliberation,
+        "critic2_provider_from_settings",
+        lambda _settings: critic2,
+    )
+    provider = RejectOncePerStageProvider()
+    mission = _korean_mission()
+    with session_factory() as session:
+        install = _install_fixture(session, temp_settings, tmp_path, MINIMAL_FIXTURE)
+        run = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[install.pack_id],
+            impact_baseline_pack_ids=[install.pack_id],
+            idempotency_key="budget-critic2-reject-1",
+            provider=provider,
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        session.commit()
+        assert run.status == "completed"
+        assert run.failure_code is None
+        assert run.lease_owner is None
+        assert run.completed_at is not None
+        # Total recorded calls: 1 aux expansion + 10 core + 2 aux critic2 = 13.
+        assert run.llm_attempt_count == 13
+        assert provider.calls[0] == "retrieval_query_expansion"
+        assert critic2.attempts == 2
+        assert "deliberation_decision" in provider.calls
 
 
 def test_manifest_hints_are_not_citable_quote_anchors(
@@ -566,6 +635,20 @@ def test_retrieval_trace_exposes_digests_not_raw_queries_or_hints(
         assert KOREAN_DECISION_QUESTION not in sanitized_blob
         assert secret_hint not in sanitized_blob
         assert json.dumps(expansion_query, ensure_ascii=False) not in sanitized_blob
+
+        # D: markdown renderer uses digest/count fields only — no empty raw labels.
+        md = render_dossier_markdown(dossier)
+        assert "## Retrieval trace" in md
+        assert "Original query digest:" in md
+        assert "Expanded query count:" in md
+        assert "Used query digest:" in md
+        assert "Original query:" not in md
+        assert "Used expanded query:" not in md
+        assert "Expanded queries (" not in md
+        # Raw query plaintext must not appear in the retrieval-trace markdown section.
+        rt_section = md.split("## Retrieval trace", 1)[1].split("## ", 1)[0]
+        assert KOREAN_DECISION_QUESTION not in rt_section
+        assert expansion_query not in rt_section
 
 
 def test_retrieval_hints_capped_at_count_and_length() -> None:

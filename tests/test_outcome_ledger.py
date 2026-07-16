@@ -290,6 +290,64 @@ def test_idempotency_key_conflict_across_runs(
         assert outcome_ledger.list_outcomes(session, run2.id) == []
 
 
+def test_idempotency_integrity_error_path_cross_run_and_same_run(
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A: concurrent race settles via IntegrityError re-lookup (DB authority).
+
+    Pre-check is forced to miss once so INSERT hits the global unique constraint;
+    re-lookup then returns same-run existing or raises cross-run conflict.
+    """
+    real_lookup = outcome_ledger._lookup_by_idempotency_key
+    state = {"miss_precheck": True}
+
+    def flaky_lookup(session: Session, key: str) -> DeliberationOutcome | None:
+        if state["miss_precheck"]:
+            state["miss_precheck"] = False
+            return None
+        return real_lookup(session, key)
+
+    with session_factory() as session:
+        run1 = _seed_run(session, idempotency_key="idemp-race-1")
+        run2 = _seed_run(session, idempotency_key="idemp-race-2")
+        session.commit()
+        first = outcome_ledger.record_outcome(
+            session,
+            run1.id,
+            outcome_label="adopted",
+            note="race-owner",
+            idempotency_key="race-key",
+        )
+        session.commit()
+
+        # Cross-run: pre-check miss → IntegrityError → conflict.
+        state["miss_precheck"] = True
+        monkeypatch.setattr(outcome_ledger, "_lookup_by_idempotency_key", flaky_lookup)
+        with pytest.raises(outcome_ledger.OutcomeLedgerError) as exc_info:
+            outcome_ledger.record_outcome(
+                session,
+                run2.id,
+                outcome_label="reversed",
+                note="should-conflict-via-ie",
+                idempotency_key="race-key",
+            )
+        assert exc_info.value.code == outcome_ledger.ERROR_IDEMPOTENCY_KEY_CONFLICT
+
+        # Same-run: pre-check miss → IntegrityError → return existing.
+        state["miss_precheck"] = True
+        again = outcome_ledger.record_outcome(
+            session,
+            run1.id,
+            outcome_label="reversed",
+            note="should-return-existing-via-ie",
+            idempotency_key="race-key",
+        )
+        assert again.id == first.id
+        assert again.note == "race-owner"
+        assert outcome_ledger.list_outcomes(session, run2.id) == []
+
+
 def test_calibration_uses_latest_outcome_only(
     session_factory: sessionmaker[Session],
 ) -> None:

@@ -9,7 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from openoyster.deliberation_contracts import (
+    AUXILIARY_LLM_MAX_ATTEMPTS,
     CONTRACT_VERSION,
+    CORE_STAGE_MAX_ATTEMPTS,
     MAX_BELIEFS,
     MAX_EVIDENCE_SNAPSHOTS,
     MAX_LLM_ATTEMPTS,
@@ -55,8 +57,11 @@ def test_contract_version_constants_are_frozen() -> None:
     assert MAX_SCENARIOS_PER_OPTION == 3
     assert MAX_EVIDENCE_SNAPSHOTS == 24
     assert MIN_QUOTE_CHARS == 12
-    # expansion(1) + 5 stagesx2 + critic2 headroom
-    assert MAX_LLM_ATTEMPTS == 12
+    # Core five-stage retries and auxiliary (expansion/critic2) calls use separate
+    # budgets so auxiliary calls can never starve a core-stage retry.
+    assert CORE_STAGE_MAX_ATTEMPTS == 10  # 5 stages x 2
+    assert AUXILIARY_LLM_MAX_ATTEMPTS == 4
+    assert MAX_LLM_ATTEMPTS == CORE_STAGE_MAX_ATTEMPTS + AUXILIARY_LLM_MAX_ATTEMPTS
 
 
 def test_mission_requires_goal_and_decision_question() -> None:

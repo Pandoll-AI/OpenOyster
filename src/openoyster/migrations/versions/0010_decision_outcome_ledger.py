@@ -36,10 +36,11 @@ def upgrade() -> None:
         sa.Column("idempotency_key", sa.String(length=250), nullable=True),
         sa.ForeignKeyConstraint(["run_id"], ["deliberation_runs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        # Global unique: same key cannot be reused across runs. NULL keys are
+        # exempt from the unique constraint (SQL standard / SQLite / Postgres).
         sa.UniqueConstraint(
-            "run_id",
             "idempotency_key",
-            name="uq_deliberation_outcomes_run_idempotency_key",
+            name="uq_deliberation_outcomes_idempotency_key",
         ),
     )
     with op.batch_alter_table("deliberation_outcomes", schema=None) as batch_op:

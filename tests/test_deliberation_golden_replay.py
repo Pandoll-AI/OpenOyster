@@ -40,13 +40,14 @@ MISSION_PATH = PROJECT_ROOT / "tests/fixtures/deliberation_d1/mission_happy.json
 # constants only after confirming the delta is intentional.
 # 2026-07-16: rebased for the intentional `retrieval_trace` dossier key (W-A1
 # query-expansion provenance), then the D3 flip-condition `predicate` field and
-# prompt template v9, then MAX_LLM_ATTEMPTS 10->12 in the policy snapshot digest
-# (expansion/critic2 headroom); each delta verified as intentional contract growth.
+# prompt template v9, then the policy-snapshot max_llm_attempts change as the core
+# (10) and auxiliary (4) budgets were split; each delta verified as intentional
+# contract growth.
 GOLDEN_SELECT_DOSSIER_JSON_DIGEST = (
-    "6f3dc42414f2895d38b45459320a64c3d62d5d0affbd57c9ce270f6cc9c96fe7"
+    "5baf4fefa82054d72335ad21040ec7b608b3e1aae52177fa072d8b1047086873"
 )
 GOLDEN_NO_EVIDENCE_DOSSIER_JSON_DIGEST = (
-    "acf37c710a8e11557c67ad32922a4e5d35df598101f4c16124ce0774e9cb3797"
+    "b9313d0573f4b9632242d67d1fd6e671c1476caed8798502e51aa3a8fcd3f1a1"
 )
 
 

@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 from openoyster.config import Settings, get_settings
 from openoyster.deliberation_contracts import (
+    AUXILIARY_LLM_MAX_ATTEMPTS,
     CONTRACT_VERSION,
+    CORE_STAGE_MAX_ATTEMPTS,
     MAX_EVIDENCE_SNAPSHOTS,
     MAX_LLM_ATTEMPTS,
     PROMPT_TEMPLATE_VERSION,
@@ -194,8 +196,39 @@ def _policy_snapshot(*, allow_compatible_packs: bool) -> dict[str, Any]:
         "allow_compatible_packs": allow_compatible_packs,
         "max_evidence_snapshots": MAX_EVIDENCE_SNAPSHOTS,
         "max_llm_attempts": MAX_LLM_ATTEMPTS,
+        "core_stage_max_attempts": CORE_STAGE_MAX_ATTEMPTS,
+        "auxiliary_llm_max_attempts": AUXILIARY_LLM_MAX_ATTEMPTS,
         "contract_version": CONTRACT_VERSION,
     }
+
+
+def _init_llm_attempt_counters(run: DeliberationRun) -> None:
+    """In-memory counters for budget gates (not persisted columns).
+
+    ``run.llm_attempt_count`` remains the durable total call counter; core and
+    auxiliary budgets are judged separately so expansion/critic2 cannot starve
+    the 5-stage path.
+    """
+    run._core_stage_attempt_count = 0  # type: ignore[attr-defined]
+    run._auxiliary_llm_attempt_count = 0  # type: ignore[attr-defined]
+
+
+def _core_attempts(run: DeliberationRun) -> int:
+    return int(getattr(run, "_core_stage_attempt_count", 0) or 0)
+
+
+def _aux_attempts(run: DeliberationRun) -> int:
+    return int(getattr(run, "_auxiliary_llm_attempt_count", 0) or 0)
+
+
+def _bump_core_attempt(run: DeliberationRun) -> None:
+    run._core_stage_attempt_count = _core_attempts(run) + 1  # type: ignore[attr-defined]
+    run.llm_attempt_count += 1
+
+
+def _bump_aux_attempt(run: DeliberationRun) -> None:
+    run._auxiliary_llm_attempt_count = _aux_attempts(run) + 1  # type: ignore[attr-defined]
+    run.llm_attempt_count += 1
 
 
 def _runtime_config(provider: LLMProvider, settings: Settings) -> dict[str, Any]:
@@ -782,7 +815,7 @@ def _attempt_retrieval_query_expansion(
         trace["safety_detail"] = _safe_provider_error_message(exc)
         return [], None, trace
 
-    if run.llm_attempt_count >= MAX_LLM_ATTEMPTS:
+    if _aux_attempts(run) >= AUXILIARY_LLM_MAX_ATTEMPTS:
         trace["safety_code"] = "expansion_budget_exhausted"
         return [], None, trace
 
@@ -809,7 +842,7 @@ def _attempt_retrieval_query_expansion(
     session.add(call)
     session.flush()
 
-    run.llm_attempt_count += 1
+    _bump_aux_attempt(run)
     run.current_stage = STAGE_RETRIEVAL_QUERY_EXPANSION
     run.lease_owner = f"deliberation:{run.id}:{STAGE_RETRIEVAL_QUERY_EXPANSION}:{uuid4().hex}"
     run.lease_until = utcnow() + timedelta(seconds=settings.loop_lease_seconds)
@@ -995,13 +1028,20 @@ def _run_stage(
     ctx: GateContext,
     recorded_stage: str | None = None,
     provider_stage: str | None = None,
+    attempt_budget: str = "core",
 ) -> tuple[StrictModel | None, DeliberationStageCall | None, StageGateError | None]:
     # Prompt + gate validation use ``stage`` (contract stage).
     # Provider config/query use ``provider_stage`` (defaults to stage) so secondary
     # critic can reuse the primary critic pipeline profile.
     # Durable stage_call.stage uses ``recorded_stage`` when set (audit name).
+    # attempt_budget: "core" uses CORE_STAGE_MAX_ATTEMPTS; "auxiliary" uses
+    # AUXILIARY_LLM_MAX_ATTEMPTS (expansion/critic2) so aux cannot starve core.
     call_stage = recorded_stage or stage
     provider_call_stage = provider_stage or stage
+    use_aux_budget = attempt_budget == "auxiliary"
+    budget_limit = (
+        AUXILIARY_LLM_MAX_ATTEMPTS if use_aux_budget else CORE_STAGE_MAX_ATTEMPTS
+    )
     try:
         base_prompt = build_stage_prompt(
             stage,
@@ -1025,8 +1065,9 @@ def _run_stage(
 
     # Exactly one retry for non-provider invalid/gate failures (attempt_number=2).
     for attempt_number in (1, 2):
-        if run.llm_attempt_count >= MAX_LLM_ATTEMPTS:
-            # Handled terminal: never raise uncaught RuntimeError (run stuck).
+        used = _aux_attempts(run) if use_aux_budget else _core_attempts(run)
+        if used >= budget_limit:
+            # Handled terminal for core; for auxiliary the caller may soften.
             return (
                 None,
                 last_call,
@@ -1072,7 +1113,10 @@ def _run_stage(
         session.flush()
         last_call = call
 
-        run.llm_attempt_count += 1
+        if use_aux_budget:
+            _bump_aux_attempt(run)
+        else:
+            _bump_core_attempt(run)
         run.current_stage = call_stage
         run.lease_owner = lease_owner
         run.lease_until = utcnow() + timedelta(seconds=settings.loop_lease_seconds)
@@ -1211,6 +1255,8 @@ def _maybe_run_secondary_critic(
             # deliberation_critic_secondary entry); only the durable stage name differs.
             provider_stage=STAGE_CRITIC,
             recorded_stage=STAGE_CRITIC_SECONDARY,
+            # Secondary critic must not consume the core 5-stage attempt budget.
+            attempt_budget="auxiliary",
         )
 
         effective_payload: dict[str, Any]
@@ -1411,6 +1457,7 @@ def run_deliberation(
             )
         ).all()
     ]
+    _init_llm_attempt_counters(run)
     snapshots = _materialize_evidence_snapshots(
         session,
         run,

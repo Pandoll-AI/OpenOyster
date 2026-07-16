@@ -561,7 +561,7 @@ def test_install_pack_succeeds_when_flip_scan_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#6 RED/GREEN: scan exception must not abort Pack admission."""
+    """#6 RED/GREEN: scan exception must not abort Pack admission (post-commit)."""
 
     def _boom(*_args: Any, **_kwargs: Any) -> list[Any]:
         raise RuntimeError("simulated flip scan failure")
@@ -581,12 +581,79 @@ def test_install_pack_succeeds_when_flip_scan_raises(
             workspace=temp_settings.workspace,
             profile="compatible",
         )
-        session.commit()
+        # install_pack commits admission before scan; install is durable even if
+        # the outer session later rolls back.
+        session.rollback()
         assert result.noop is False
         assert result.pack_install_id is not None
         install = session.get(PackInstall, result.pack_install_id)
         assert install is not None
         assert install.status == "active"
+
+
+def test_load_evidence_bounded_uses_sql_limit(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """C: evidence load is SQL-limited (max_rows+1), not full-table .all()."""
+    from sqlalchemy import event
+
+    with session_factory() as session:
+        matching = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="limit-obs",
+            pack_id="pack.limit-obs",
+            evidence_text="noise only",
+        )
+        from openoyster.models import PackEvidence
+
+        for i in range(5):
+            session.add(
+                PackEvidence(
+                    pack_install_id=matching.id,
+                    local_evidence_id=f"e-extra-{i}",
+                    global_evidence_id=f"{matching.pack_id}://e-extra-{i}",
+                    kind="note",
+                    source_json={},
+                    parser_json={},
+                    location_json={},
+                    links_json={},
+                    text=f"extra row {i}",
+                    raw_record_json={"bulky": "x" * 100},
+                    record_hash=("c" * 63) + str(i),
+                )
+            )
+        session.commit()
+
+        statements: list[str] = []
+        engine = session.get_bind()
+
+        def _capture(conn: Any, cursor: Any, statement: str, *args: Any, **kwargs: Any) -> None:
+            del conn, cursor, args, kwargs
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            rows, truncated = flip_monitoring._load_evidence_bounded(
+                session,
+                matching.id,
+                max_evidence_rows=2,
+                max_evidence_chars=2_000_000,
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert truncated is True
+        assert len(rows) == 2
+        pack_selects = [s for s in statements if "pack_evidence" in s.lower()]
+        assert pack_selects, f"expected pack_evidence SELECT, got {statements!r}"
+        assert any("limit" in s.lower() for s in pack_selects)
+        # Projection: do not SELECT raw_record_json for the scan path.
+        assert all("raw_record_json" not in s.lower() for s in pack_selects)
 
 
 def test_scan_pack_install_respects_evidence_row_bound(

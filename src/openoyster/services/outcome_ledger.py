@@ -114,25 +114,24 @@ def _normalize_scenario_assessments(
     )
 
 
-def _lookup_by_run_and_key(
-    session: Session, run_id: int, key: str
+def _lookup_by_idempotency_key(
+    session: Session, key: str
 ) -> DeliberationOutcome | None:
+    """Global lookup: idempotency_key is unique across all runs when non-NULL."""
     return session.scalar(
-        select(DeliberationOutcome).where(
-            DeliberationOutcome.run_id == run_id,
-            DeliberationOutcome.idempotency_key == key,
-        )
+        select(DeliberationOutcome).where(DeliberationOutcome.idempotency_key == key)
     )
 
 
-def _lookup_key_on_other_run(
-    session: Session, run_id: int, key: str
-) -> DeliberationOutcome | None:
-    return session.scalar(
-        select(DeliberationOutcome).where(
-            DeliberationOutcome.idempotency_key == key,
-            DeliberationOutcome.run_id != run_id,
-        )
+def _resolve_idempotency_hit(
+    existing: DeliberationOutcome, run_id: int, key: str
+) -> DeliberationOutcome:
+    """Same run → return existing; other run → conflict."""
+    if existing.run_id == run_id:
+        return existing
+    raise OutcomeLedgerError(
+        ERROR_IDEMPOTENCY_KEY_CONFLICT,
+        f"idempotency_key already used by run {existing.run_id}",
     )
 
 
@@ -149,22 +148,19 @@ def record_outcome(
 ) -> DeliberationOutcome:
     """Append one outcome row for a completed run.
 
-    Idempotency is bound to (run_id, idempotency_key):
+    Idempotency is global on non-NULL ``idempotency_key`` (DB unique constraint):
     - same run + key → return existing row
     - different run + same key → outcome_idempotency_key_conflict
+
+    Pre-check is a fast path; concurrent races are settled by INSERT + IntegrityError
+    re-lookup (DB atomicity is authoritative).
     """
     key: str | None = None
     if idempotency_key is not None and idempotency_key.strip():
         key = idempotency_key.strip()
-        existing = _lookup_by_run_and_key(session, run_id, key)
+        existing = _lookup_by_idempotency_key(session, key)
         if existing is not None:
-            return existing
-        conflict = _lookup_key_on_other_run(session, run_id, key)
-        if conflict is not None:
-            raise OutcomeLedgerError(
-                ERROR_IDEMPOTENCY_KEY_CONFLICT,
-                f"idempotency_key already used by run {conflict.run_id}",
-            )
+            return _resolve_idempotency_hit(existing, run_id, key)
 
     run = session.get(DeliberationRun, run_id)
     if run is None:
@@ -209,15 +205,10 @@ def record_outcome(
     except IntegrityError:
         if key is None:
             raise
-        existing = _lookup_by_run_and_key(session, run_id, key)
+        # Concurrent insert won the global unique race — re-query is authoritative.
+        existing = _lookup_by_idempotency_key(session, key)
         if existing is not None:
-            return existing
-        conflict = _lookup_key_on_other_run(session, run_id, key)
-        if conflict is not None:
-            raise OutcomeLedgerError(
-                ERROR_IDEMPOTENCY_KEY_CONFLICT,
-                f"idempotency_key already used by run {conflict.run_id}",
-            ) from None
+            return _resolve_idempotency_hit(existing, run_id, key)
         raise
     return row
 

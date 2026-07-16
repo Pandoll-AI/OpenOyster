@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -19,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from openoyster.models import PackEdge, PackEvidence, PackFile, PackInstall, PackNode, utcnow
 from openoyster.utils import stable_hash
+
+logger = logging.getLogger(__name__)
 
 AdmissionProfile = Literal["compatible", "strict"]
 SUPPORTED_FORMAT_VERSION: Final = "opencrab-pack-v1"
@@ -865,19 +868,38 @@ def install_pack(
         )
 
     session.flush()
-    # Install admission is complete at this point. Flip scan is post-admission:
-    # bounded + isolated so scan failures/latency never abort Pack install.
+    # Install admission is complete. Commit first so flip scan is post-commit:
+    # scan runs in a separate transaction and cannot roll back install rows.
+    install_id = install.id
+    install_status = install.status
+    install_pack_id = install.pack_id
+    install_declared = install.declared_version
+    install_digest = install.source_digest
+    install_uri = install.storage_uri
+    session.commit()
+
+    # Post-commit, hard-bounded scan: failures/latency never affect install result.
     from openoyster.services.flip_monitoring import safe_scan_pack_install
 
-    safe_scan_pack_install(session, install.id)
+    safe_scan_pack_install(session, install_id)
+    # Persist scan side-effects (triggers/events) when present; install is already durable.
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        # Install remains committed; scan side-effects are best-effort.
+        logger.exception(
+            "flip scan commit failed after install pack_install_id=%s", install_id
+        )
+
     return PackInstallResult(
-        status=install.status,
-        pack_id=install.pack_id,
-        declared_version=install.declared_version,
-        source_digest=install.source_digest,
-        pack_install_id=install.id,
+        status=install_status,
+        pack_id=install_pack_id,
+        declared_version=install_declared,
+        source_digest=install_digest,
+        pack_install_id=install_id,
         noop=False,
-        storage_uri=install.storage_uri,
+        storage_uri=install_uri,
         admission_report=admission_report,
     )
 

@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from openoyster.deliberation_contracts import (
     MAX_ACTIVE_FLIP_WATCHES,
@@ -238,40 +238,62 @@ def _load_evidence_bounded(
     max_evidence_rows: int,
     max_evidence_chars: int,
 ) -> tuple[list[PackEvidence], bool]:
-    """Load evidence rows with hard row/char caps; return (rows, truncated)."""
+    """Load evidence with SQL LIMIT + column projection; return (rows, truncated).
+
+    Fetches at most ``max_evidence_rows + 1`` rows (the extra row detects row-cap
+    truncation) and only the columns needed for predicate matching. Full-table
+    ``.all()`` + Python post-cap is intentionally avoided so large packs cannot
+    inflate install-time scan memory/transaction footprint.
+    """
+    if max_evidence_rows < 1:
+        return [], True
+
+    # LIMIT max+1: if we get the extra row, the pack exceeds the hard row bound.
+    fetch_limit = max_evidence_rows + 1
     rows = list(
         session.scalars(
             select(PackEvidence)
+            .options(
+                load_only(
+                    PackEvidence.id,
+                    PackEvidence.pack_install_id,
+                    PackEvidence.local_evidence_id,
+                    PackEvidence.global_evidence_id,
+                    PackEvidence.text,
+                )
+            )
             .where(PackEvidence.pack_install_id == pack_install_id)
             .order_by(PackEvidence.id.asc())
+            .limit(fetch_limit)
         ).all()
     )
     if not rows:
         return [], False
 
+    row_truncated = len(rows) > max_evidence_rows
+    candidate_rows = rows[:max_evidence_rows]
+
     bounded: list[PackEvidence] = []
     char_total = 0
-    truncated = False
-    for row in rows:
-        if len(bounded) >= max_evidence_rows:
-            truncated = True
-            break
+    char_truncated = False
+    for row in candidate_rows:
         text_len = len(row.text or "")
         if char_total + text_len > max_evidence_chars and bounded:
-            truncated = True
+            char_truncated = True
             break
         if char_total + text_len > max_evidence_chars and not bounded:
             # Single oversized first row: still include it so tiny installs work,
             # but mark truncated so callers know further rows were skipped.
             bounded.append(row)
             char_total += text_len
-            if len(rows) > 1:
-                truncated = True
+            if len(candidate_rows) > 1 or row_truncated:
+                char_truncated = True
             break
         bounded.append(row)
         char_total += text_len
-    if len(bounded) < len(rows):
-        truncated = True
+    if len(bounded) < len(candidate_rows):
+        char_truncated = True
+    truncated = row_truncated or char_truncated
     return bounded, truncated
 
 
