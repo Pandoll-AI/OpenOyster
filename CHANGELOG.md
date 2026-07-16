@@ -33,6 +33,16 @@ outcome → calibrate. Reframes the goal roadmap around that lifecycle.
   to living decisions; recommended freezing/handing off the legacy signal/hypothesis
   collection runtime to OpenCrab.
 
+### Hardened
+
+Three rounds of Codex adversarial verification drove the rework that made the above
+production-safe: separate core/auxiliary LLM budgets so expansion and the second
+critic cannot starve a stage retry; globally-unique outcome idempotency with atomic
+cross-run conflict; phrase-and-body-only flip matching; a post-commit, hard-bounded
+install scan that never holds the admission transaction; an isolated, tool-free
+Claude CLI critic; a strict positive `mission_charter_id`; and a restored flush-only
+`install_pack` contract so admission never commits a caller's unrelated pending rows.
+
 ## Unreleased — deliberation integrity hardening
 
 Adversarial review of D1/D2 (two Codex passes) surfaced integrity and disclosure

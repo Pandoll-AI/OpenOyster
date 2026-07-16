@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-282%20passing-brightgreen.svg)](tests)
 [![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 [![Language](https://img.shields.io/badge/docs-Korean%20%7C%20English-lightgrey.svg)](README-en.md)
 
@@ -328,7 +328,7 @@ PATH="$PWD/.venv/bin:$PATH" make check
 현재 검증 범위는 다음을 포함합니다.
 
 - Ruff와 mypy
-- 204개 unit/integration test
+- 282개 unit/integration test
 - Pack source 불변성
 - D1 contract, migration, runtime, CLI/API
 - SQLite migration upgrade/downgrade
