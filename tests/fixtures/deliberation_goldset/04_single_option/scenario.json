@@ -1,0 +1,8 @@
+{
+  "scenario_id": "04_single_option",
+  "description": "Evidence and mission leave only one conceptually viable path; selection must abstain with insufficient_viable_options (needs at least two scenario-complete viable alternatives).",
+  "expected_outcome": "abstain",
+  "expected_abstention_reasons": ["insufficient_viable_options"],
+  "planted_flaws": [],
+  "expected_critic_issue_codes": []
+}

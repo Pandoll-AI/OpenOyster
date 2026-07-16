@@ -1,0 +1,5 @@
+{"id":"resource:doc:pro","label":"Launch success memo","space":"resource","node_type":"Document","properties":{"title":"Launch success memo","status":"validated"},"evidence_refs":["evidence:pro"]}
+{"id":"resource:doc:con","label":"Launch failure memo","space":"resource","node_type":"Document","properties":{"title":"Launch failure memo","status":"validated"},"evidence_refs":["evidence:con"]}
+{"id":"evidence:pro","label":"Pro evidence","space":"evidence","node_type":"Evidence","properties":{"status":"validated"},"evidence_refs":["evidence:pro"]}
+{"id":"evidence:con","label":"Con evidence","space":"evidence","node_type":"Evidence","properties":{"status":"validated"},"evidence_refs":["evidence:con"]}
+{"id":"claim:1","label":"Launch succeeded","space":"claim","node_type":"Claim","properties":{"statement":"The product launch succeeded.","status":"contested","confidence":0.5},"evidence_refs":["evidence:pro","evidence:con"]}

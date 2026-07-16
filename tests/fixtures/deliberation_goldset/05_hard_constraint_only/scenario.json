@@ -1,0 +1,8 @@
+{
+  "scenario_id": "05_hard_constraint_only",
+  "description": "Mission hard constraint forbids every evidence-supported alternative; must abstain rather than select a violating option.",
+  "expected_outcome": "abstain",
+  "expected_abstention_reasons": ["hard_constraint_violation", "insufficient_viable_options"],
+  "planted_flaws": [],
+  "expected_critic_issue_codes": []
+}

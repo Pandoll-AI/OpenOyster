@@ -1,0 +1,12 @@
+{
+  "goal": "Decide whether to accept a contested claim with contradictory Pack evidence",
+  "decision_question": "Should we accept the claim that the product launch succeeded?",
+  "constraints": [
+    "Do not invent facts outside Pack evidence",
+    "Do not ignore opposing evidence when present"
+  ],
+  "preferences": [
+    "Prefer reversible options when evidence conflicts"
+  ],
+  "context": "Contradiction fixture; control text only."
+}

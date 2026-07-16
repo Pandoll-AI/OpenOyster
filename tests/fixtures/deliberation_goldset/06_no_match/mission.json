@@ -1,0 +1,11 @@
+{
+  "goal": "Decide a topic that has no lexical overlap with installed pack evidence",
+  "decision_question": "zzz qqq xxx unmatched lexical query about quantum governance treaties",
+  "constraints": [
+    "Do not invent facts outside Pack evidence"
+  ],
+  "preferences": [
+    "Prefer abstention over guessing when retrieval finds nothing"
+  ],
+  "context": "No-match fixture; pack content is intentionally unrelated."
+}

@@ -1,0 +1,9 @@
+{
+  "scenario_id": "02_no_evidence",
+  "description": "Installed pack has zero evidence rows; must abstain with no_evidence (pack_has_no_evidence).",
+  "expected_outcome": "abstain",
+  "expected_abstention_reasons": ["no_evidence"],
+  "expected_retrieval_status": "pack_has_no_evidence",
+  "planted_flaws": [],
+  "expected_critic_issue_codes": []
+}

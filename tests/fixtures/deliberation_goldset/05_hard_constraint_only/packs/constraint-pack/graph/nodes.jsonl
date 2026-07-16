@@ -1,0 +1,3 @@
+{"id":"resource:doc:1","label":"Expansion readiness","space":"resource","node_type":"Document","properties":{"title":"Expansion readiness","status":"validated"},"evidence_refs":["evidence:1"]}
+{"id":"evidence:1","label":"Evidence 1","space":"evidence","node_type":"Evidence","properties":{"status":"validated"},"evidence_refs":["evidence:1"]}
+{"id":"claim:1","label":"Expansion ready","space":"claim","node_type":"Claim","properties":{"statement":"Expansion is ready.","status":"validated","confidence":0.9},"evidence_refs":["evidence:1"]}

@@ -1,0 +1,12 @@
+{
+  "goal": "Choose among options when only one path has Pack support",
+  "decision_question": "Should we accept the single supported path as the only decision basis?",
+  "constraints": [
+    "Do not invent facts outside Pack evidence",
+    "Do not invent a second unsupported alternative as viable"
+  ],
+  "preferences": [
+    "Prefer honesty about option scarcity over forced binary framing"
+  ],
+  "context": "Only one supported alternative exists in the pack evidence."
+}
