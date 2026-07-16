@@ -236,7 +236,7 @@ The response is safe run metadata: run ID, status/outcome, frozen-input digests,
 - `GET /v1/deliberations/{id}/dossier?format=json|markdown` — persisted dossier. The default is `json`.
 - `POST /v1/deliberations/{id}/replay` — deterministic audit revalidation. It does not call the LLM.
 - `GET /v1/deliberations/{id}/cognitive-impact` — citation-scope projection only; it is not a Pack diff or baseline rerun.
-- `GET /v1/deliberations/{id}/knowledge-requests` — inert persisted requests. This endpoint never executes retrieval or Pack updates.
+- `GET /v1/deliberations/{id}/knowledge-requests` — inert persisted requests. This endpoint never executes retrieval or Pack updates. Add `?format=export` for a machine-readable `openoyster.knowledge_request_export/v1` payload (run/parent IDs, mission digest, decision question, and each request's `local_key`, `question`, `gap_ref`, `priority`, and `retrieval_status`) intended for OpenCrab or a human to consume as a collection request. OpenOyster still never fulfills the request itself.
 
 All D1 responses sanitize raw Pack bodies, full prompts, filesystem paths, storage URIs, runtime/secret fields, and raw model responses. Citation anchors, Pack identities/digests, assertions, decision data, and replay digest results remain available for audit.
 
@@ -261,16 +261,19 @@ curl -X POST http://127.0.0.1:8080/v1/deliberations/PARENT_RUN_ID/continue \
   }'
 ```
 
-Request fields are `packs` (at least one installed Pack ID), `fulfilled_knowledge_request_keys` (claimed fulfilled keys persisted on the parent), optional `impact_baseline_packs`, and optional `allow_compatible_packs` (default `false`). A claim is verified only by the transition verifier; `evidence:no_evidence` currently requires newly cited evidence. The child keeps the parent Mission snapshot and records `parent_run_id`.
+Request fields are `packs` (at least one installed Pack ID), `fulfilled_knowledge_request_keys` (claimed fulfilled keys persisted on the parent), optional `impact_baseline_packs`, and optional `allow_compatible_packs` (default `false`). The child scope must add at least one Pack install absent from the parent primary scope. A claim is verified only by the transition verifier registry; an `evidence:no_evidence` request is promoted to `verified_fulfilled` only when newly added evidence is also actually cited by a child assertion, and only that intersection is recorded as the verifying evidence. Semantic relevance to the question is not proven — see the D2 requirements' verification-limits section. The child keeps the parent Mission snapshot and records `parent_run_id`.
 
 The continuation-specific stable error codes are:
 
 - `idempotency_key_conflict` — key belongs to a different parent.
+- `idempotency_request_mismatch` — key reused with a different request fingerprint (packs, baseline, fulfilled keys, or scope).
 - `parent_run_not_found` — parent ID does not exist.
 - `parent_run_not_completed_abstain` — parent is not a completed abstention.
+- `parent_integrity_mismatch` — the parent Mission snapshot no longer matches its stored digest.
 - `parent_knowledge_requests_missing` — parent has no persisted Knowledge Request artifact.
 - `fulfilled_knowledge_request_keys_empty` — no fulfilled key was supplied.
 - `fulfilled_knowledge_request_keys_unknown` — a supplied key is not on the parent.
+- `no_new_pack_scope` — the child scope adds no Pack install beyond the parent.
 
 These input/continuation errors return HTTP `422` with `{"detail":{"code":"..."}}`. A child that completes with `failed_execution` because of a provider/runtime failure returns HTTP `502`; this is an execution failure, not an epistemic abstention. An unexpected continuation exception returns HTTP `500` with code `deliberation_execution_failed`. Pack-scope/profile failures are surfaced as the normal failed-input response and code.
 
