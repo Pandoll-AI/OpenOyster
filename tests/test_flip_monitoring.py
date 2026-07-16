@@ -474,3 +474,410 @@ def test_flip_predicate_contract_rejects_empty_and_oversized_terms() -> None:
     }
     flip = FlipCondition.model_validate({"local_key": "flip1", "condition": condition})
     assert flip.predicate is None
+
+
+# ---------------------------------------------------------------------------
+# #5 predicate matching: full-phrase + body-only (not any-token / not provenance)
+# ---------------------------------------------------------------------------
+
+
+def _fake_evidence(
+    *,
+    text: str | None,
+    local_id: str = "e1",
+    source_path: str | None = None,
+) -> Any:
+    """Minimal PackEvidence stand-in for pure matcher unit tests."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        text=text,
+        local_evidence_id=local_id,
+        global_evidence_id=f"pack://{local_id}",
+        source_json={"path": source_path} if source_path else {},
+        location_json={},
+        kind=None,
+    )
+
+
+def test_predicate_requires_full_phrase_not_any_token() -> None:
+    """#5 RED/GREEN: query_terms=['recovery time'] must not match body with only 'time'."""
+    rows = [_fake_evidence(text="Estimated time remaining is two hours.")]
+    matched = flip_monitoring._match_predicate_against_evidence(
+        {"query_terms": ["recovery time"]},
+        rows,  # type: ignore[arg-type]
+    )
+    assert matched == []
+
+
+def test_predicate_ignores_source_path_provenance() -> None:
+    """#5 RED/GREEN: source path 'recovery-time' must not trigger without body phrase."""
+    rows = [
+        _fake_evidence(
+            text="Unrelated operational notes about staffing and budget.",
+            source_path="docs/recovery-time-slo.md",
+        )
+    ]
+    matched = flip_monitoring._match_predicate_against_evidence(
+        {"query_terms": ["recovery time"]},
+        rows,  # type: ignore[arg-type]
+    )
+    assert matched == []
+
+
+def test_predicate_matches_full_phrase_in_body() -> None:
+    """#5 RED/GREEN: full phrase in evidence body triggers."""
+    rows = [
+        _fake_evidence(
+            text="Estimated recovery time is under two hours for the primary path.",
+            source_path="docs/other.md",
+        )
+    ]
+    matched = flip_monitoring._match_predicate_against_evidence(
+        {"query_terms": ["recovery time"]},
+        rows,  # type: ignore[arg-type]
+    )
+    assert matched == ["pack://e1"]
+
+
+def test_predicate_or_of_full_phrases() -> None:
+    """#5: any one full query_term phrase is enough (OR of phrases, not tokens)."""
+    rows = [_fake_evidence(text="현장 복구 시간이 2시간 이내입니다.")]
+    matched = flip_monitoring._match_predicate_against_evidence(
+        {"query_terms": ["recovery time", "복구 시간"]},
+        rows,  # type: ignore[arg-type]
+    )
+    assert matched == ["pack://e1"]
+
+
+# ---------------------------------------------------------------------------
+# #6 install scan isolation + bounds
+# ---------------------------------------------------------------------------
+
+
+def test_install_pack_succeeds_when_flip_scan_raises(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6 RED/GREEN: scan exception must not abort Pack admission."""
+
+    def _boom(*_args: Any, **_kwargs: Any) -> list[Any]:
+        raise RuntimeError("simulated flip scan failure")
+
+    monkeypatch.setattr(flip_monitoring, "scan_pack_install", _boom)
+
+    with session_factory() as session:
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "install-scan-iso")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.install-scan-iso"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        assert result.noop is False
+        assert result.pack_install_id is not None
+        install = session.get(PackInstall, result.pack_install_id)
+        assert install is not None
+        assert install.status == "active"
+
+
+def test_scan_pack_install_respects_evidence_row_bound(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#6 RED/GREEN: evidence beyond row cap is skipped with a warning."""
+    import logging
+
+    with session_factory() as session:
+        base = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="bound-base",
+            pack_id="pack.bound-base",
+        )
+        run_id = _run_completed(
+            session,
+            temp_settings,
+            pack_id=base.pack_id,
+            idempotency_key="flip-bound-1",
+            provider=PredicateDecisionProvider(query_terms=["unique-bound-phrase-xyz"]),
+        )
+        watch = session.scalar(
+            select(DeliberationFlipWatch).where(DeliberationFlipWatch.run_id == run_id)
+        )
+        assert watch is not None
+
+        # Install a matching pack, then inject extra evidence rows beyond the cap.
+        matching = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="bound-match",
+            pack_id="pack.bound-match",
+            evidence_text="noise only — no bound phrase here",
+        )
+        # The first install already ran scan (no match). Reset watch + drop triggers.
+        watch.status = flip_monitoring.WATCH_STATUS_WATCHING
+        for t in session.scalars(
+            select(DeliberationFlipTrigger).where(
+                DeliberationFlipTrigger.pack_install_id == matching.id
+            )
+        ).all():
+            session.delete(t)
+        # Add a second evidence row that WOULD match, but only if scan reads past row 1.
+        from openoyster.models import PackEvidence
+
+        existing = session.scalars(
+            select(PackEvidence)
+            .where(PackEvidence.pack_install_id == matching.id)
+            .order_by(PackEvidence.id.asc())
+        ).all()
+        assert len(existing) >= 1
+        # Ensure the first row (by id) is non-matching noise; second has the phrase.
+        existing[0].text = "noise only — no bound phrase here"
+        session.add(
+            PackEvidence(
+                pack_install_id=matching.id,
+                local_evidence_id="e-late-match",
+                global_evidence_id=f"{matching.pack_id}://e-late-match",
+                kind="note",
+                source_json={},
+                parser_json={},
+                location_json={},
+                links_json={},
+                text="contains unique-bound-phrase-xyz in the late row",
+                raw_record_json={},
+                record_hash="b" * 64,
+            )
+        )
+        session.commit()
+
+        with caplog.at_level(logging.WARNING, logger="openoyster.services.flip_monitoring"):
+            triggers = flip_monitoring.scan_pack_install(
+                session,
+                matching.id,
+                max_evidence_rows=1,
+                max_evidence_chars=2_000_000,
+            )
+            session.commit()
+
+        # Cap stops at first row → no match, watch stays watching, warning logged.
+        assert triggers == []
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_WATCHING
+        assert any("flip scan bounded" in rec.message for rec in caplog.records)
+
+        # Unbounded (or higher) scan would find the late phrase.
+        triggers2 = flip_monitoring.scan_pack_install(
+            session,
+            matching.id,
+            max_evidence_rows=10,
+        )
+        session.commit()
+        assert len(triggers2) == 1
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+
+
+# ---------------------------------------------------------------------------
+# #7 atomic claim + idempotent double scan
+# ---------------------------------------------------------------------------
+
+
+def test_double_scan_same_watch_install_is_idempotent(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """#7 RED/GREEN: two scans → one trigger, no exception."""
+    with session_factory() as session:
+        base = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="idem-base",
+            pack_id="pack.idem-base",
+        )
+        run_id = _run_completed(
+            session,
+            temp_settings,
+            pack_id=base.pack_id,
+            idempotency_key="flip-idem-1",
+            provider=PredicateDecisionProvider(query_terms=["idempotent recovery phrase"]),
+        )
+        watch = session.scalar(
+            select(DeliberationFlipWatch).where(DeliberationFlipWatch.run_id == run_id)
+        )
+        assert watch is not None
+
+        matching = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="idem-match",
+            pack_id="pack.idem-match",
+            evidence_text="See the idempotent recovery phrase in this note.",
+        )
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+
+        # Second manual scan must be a no-op (already claimed).
+        again = flip_monitoring.scan_pack_install(session, matching.id)
+        session.commit()
+        assert again == []
+        triggers = session.scalars(
+            select(DeliberationFlipTrigger).where(
+                DeliberationFlipTrigger.watch_id == watch.id,
+                DeliberationFlipTrigger.pack_install_id == matching.id,
+            )
+        ).all()
+        assert len(triggers) == 1
+
+
+def test_scan_skips_already_candidate_without_retrigger(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """#7: watch already triggered_candidate is not re-scanned into a second trigger."""
+    with session_factory() as session:
+        base = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="claim-base",
+            pack_id="pack.claim-base",
+        )
+        run_id = _run_completed(
+            session,
+            temp_settings,
+            pack_id=base.pack_id,
+            idempotency_key="flip-claim-1",
+            provider=PredicateDecisionProvider(query_terms=["claim once phrase"]),
+        )
+        watch = session.scalar(
+            select(DeliberationFlipWatch).where(DeliberationFlipWatch.run_id == run_id)
+        )
+        assert watch is not None
+        # Force candidate without a trigger for this install, then scan a new install.
+        watch.status = flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+        session.commit()
+
+        matching = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="claim-match",
+            pack_id="pack.claim-match",
+            evidence_text="claim once phrase appears here",
+        )
+        triggers = session.scalars(
+            select(DeliberationFlipTrigger).where(DeliberationFlipTrigger.watch_id == watch.id)
+        ).all()
+        assert triggers == []
+        # Manual scan still must not create a trigger (not watching).
+        again = flip_monitoring.scan_pack_install(session, matching.id)
+        session.commit()
+        assert again == []
+
+
+# ---------------------------------------------------------------------------
+# #10 dismiss transition map
+# ---------------------------------------------------------------------------
+
+
+def test_dismiss_rejects_confirmed_watch(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """#10 RED/GREEN: dismiss must not overwrite confirmed."""
+    with session_factory() as session:
+        install = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="dismiss-confirmed",
+            pack_id="pack.dismiss-confirmed",
+        )
+        run_id = _run_completed(
+            session,
+            temp_settings,
+            pack_id=install.pack_id,
+            idempotency_key="flip-dismiss-confirmed-1",
+            provider=PredicateDecisionProvider(),
+        )
+        watch = session.scalar(
+            select(DeliberationFlipWatch).where(DeliberationFlipWatch.run_id == run_id)
+        )
+        assert watch is not None
+        watch.status = flip_monitoring.WATCH_STATUS_CONFIRMED
+        session.commit()
+
+        with pytest.raises(flip_monitoring.FlipWatchError) as exc_info:
+            flip_monitoring.dismiss_watch(session, watch.id, reason="should be rejected")
+        assert exc_info.value.code == "invalid_watch_transition"
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_CONFIRMED
+        assert watch.dismiss_reason is None
+
+
+def test_dismiss_rejects_expired_and_dismissed(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """#10: expired/dismissed also reject dismiss with invalid_watch_transition."""
+    with session_factory() as session:
+        install = _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="dismiss-terminal",
+            pack_id="pack.dismiss-terminal",
+        )
+        run_id = _run_completed(
+            session,
+            temp_settings,
+            pack_id=install.pack_id,
+            idempotency_key="flip-dismiss-terminal-1",
+            provider=PredicateDecisionProvider(),
+        )
+        watch = session.scalar(
+            select(DeliberationFlipWatch).where(DeliberationFlipWatch.run_id == run_id)
+        )
+        assert watch is not None
+
+        watch.status = flip_monitoring.WATCH_STATUS_EXPIRED
+        session.commit()
+        with pytest.raises(flip_monitoring.FlipWatchError) as exc_info:
+            flip_monitoring.dismiss_watch(session, watch.id, reason="nope")
+        assert exc_info.value.code == "invalid_watch_transition"
+
+        watch.status = flip_monitoring.WATCH_STATUS_DISMISSED
+        watch.dismiss_reason = "already"
+        session.commit()
+        with pytest.raises(flip_monitoring.FlipWatchError) as exc_info:
+            flip_monitoring.dismiss_watch(session, watch.id, reason="again")
+        assert exc_info.value.code == "invalid_watch_transition"
+        session.refresh(watch)
+        assert watch.dismiss_reason == "already"

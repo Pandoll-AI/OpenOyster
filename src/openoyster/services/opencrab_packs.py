@@ -838,12 +838,11 @@ def install_pack(
         )
 
     session.flush()
-    # D3: deterministic flip-condition scan against newly installed evidence.
-    # Never re-runs deliberation; candidate triggers + events only.
-    from openoyster.services.flip_monitoring import scan_pack_install
+    # Install admission is complete at this point. Flip scan is post-admission:
+    # bounded + isolated so scan failures/latency never abort Pack install.
+    from openoyster.services.flip_monitoring import safe_scan_pack_install
 
-    scan_pack_install(session, install.id)
-    session.flush()
+    safe_scan_pack_install(session, install.id)
     return PackInstallResult(
         status=install.status,
         pack_id=install.pack_id,

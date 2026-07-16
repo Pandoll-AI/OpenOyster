@@ -8,9 +8,11 @@ Never re-runs deliberation; never calls an LLM in this module.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openoyster.deliberation_contracts import (
@@ -27,7 +29,6 @@ from openoyster.models import (
     PackInstall,
     utcnow,
 )
-from openoyster.services.pack_retrieval import _evidence_surface, _lexical_score
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,25 @@ WATCH_STATUSES = frozenset(
     }
 )
 
+# dismiss is only legal from these statuses (confirmed must not be overwritten).
+DISMISSABLE_STATUSES = frozenset(
+    {
+        WATCH_STATUS_WATCHING,
+        WATCH_STATUS_TRIGGERED_CANDIDATE,
+    }
+)
+
 EVENT_FLIP_TRIGGER_CANDIDATE = "flip_trigger_candidate"
 EVENT_FLIP_WATCH_DISMISSED = "flip_watch_dismissed"
 EVENT_FLIP_WATCHES_EXPIRED = "flip_watches_expired"
+EVENT_FLIP_SCAN_FAILED = "flip_scan_failed"
+EVENT_FLIP_SCAN_BOUNDED = "flip_scan_bounded"
+
+# Bounded install-time scan defaults (DoS / install latency guard).
+DEFAULT_SCAN_MAX_EVIDENCE_ROWS = 2000
+DEFAULT_SCAN_MAX_EVIDENCE_CHARS = 2_000_000
+
+_WS_RE = re.compile(r"\s+")
 
 
 class FlipWatchError(Exception):
@@ -167,23 +184,43 @@ def expire_excess_watches(session: Session, *, limit: int = MAX_ACTIVE_FLIP_WATC
     return len(expired_ids)
 
 
+def _normalize_phrase_surface(text: str) -> str:
+    """Casefold + collapse whitespace for deterministic full-phrase matching."""
+    return _WS_RE.sub(" ", text.casefold()).strip()
+
+
+def _phrase_in_body(phrase: str, body: str) -> bool:
+    """True iff the full phrase matches as a normalised substring of body text."""
+    norm_phrase = _normalize_phrase_surface(phrase)
+    if not norm_phrase:
+        return False
+    return norm_phrase in _normalize_phrase_surface(body)
+
+
 def _match_predicate_against_evidence(
     predicate: dict[str, Any],
     evidence_rows: list[PackEvidence],
 ) -> list[str]:
+    """Match query_terms against evidence *body text only*.
+
+    Semantics: OR of full-phrase matches (not OR of individual tokens).
+    A multi-word query_term must appear as a contiguous normalised phrase in
+    ``PackEvidence.text``. Source/location provenance metadata is never searched.
+    """
     terms = predicate.get("query_terms")
     if not isinstance(terms, list) or not terms:
         return []
     matched: list[str] = []
     seen: set[str] = set()
     for row in evidence_rows:
-        surface = _evidence_surface(row)
+        body = row.text or ""
+        if not body.strip():
+            continue
         hit = False
         for term in terms:
             if not isinstance(term, str) or not term.strip():
                 continue
-            score, _matched_tokens = _lexical_score(term, surface)
-            if score > 0.0:
+            if _phrase_in_body(term, body):
                 hit = True
                 break
         if hit:
@@ -194,14 +231,65 @@ def _match_predicate_against_evidence(
     return matched
 
 
+def _load_evidence_bounded(
+    session: Session,
+    pack_install_id: int,
+    *,
+    max_evidence_rows: int,
+    max_evidence_chars: int,
+) -> tuple[list[PackEvidence], bool]:
+    """Load evidence rows with hard row/char caps; return (rows, truncated)."""
+    rows = list(
+        session.scalars(
+            select(PackEvidence)
+            .where(PackEvidence.pack_install_id == pack_install_id)
+            .order_by(PackEvidence.id.asc())
+        ).all()
+    )
+    if not rows:
+        return [], False
+
+    bounded: list[PackEvidence] = []
+    char_total = 0
+    truncated = False
+    for row in rows:
+        if len(bounded) >= max_evidence_rows:
+            truncated = True
+            break
+        text_len = len(row.text or "")
+        if char_total + text_len > max_evidence_chars and bounded:
+            truncated = True
+            break
+        if char_total + text_len > max_evidence_chars and not bounded:
+            # Single oversized first row: still include it so tiny installs work,
+            # but mark truncated so callers know further rows were skipped.
+            bounded.append(row)
+            char_total += text_len
+            if len(rows) > 1:
+                truncated = True
+            break
+        bounded.append(row)
+        char_total += text_len
+    if len(bounded) < len(rows):
+        truncated = True
+    return bounded, truncated
+
+
 def scan_pack_install(
     session: Session,
     pack_install_id: int,
+    *,
+    max_evidence_rows: int = DEFAULT_SCAN_MAX_EVIDENCE_ROWS,
+    max_evidence_chars: int = DEFAULT_SCAN_MAX_EVIDENCE_CHARS,
 ) -> list[DeliberationFlipTrigger]:
     """Scan all watching predicates against evidence from one Pack install.
 
-    On match: append a trigger row, transition watch to triggered_candidate,
+    On match: atomically claim the watch (watching → triggered_candidate),
+    append a trigger row (unique on watch+install; IntegrityError is idempotent),
     and emit ``flip_trigger_candidate``. LLM confirmation is out of this scope.
+
+    Evidence scan is hard-bounded by row count and total text chars so install-time
+    scans cannot unbounded-walk large packs.
     """
     install = session.get(PackInstall, pack_install_id)
     if install is None:
@@ -209,13 +297,33 @@ def scan_pack_install(
 
     expire_excess_watches(session)
 
-    evidence_rows = list(
-        session.scalars(
-            select(PackEvidence)
-            .where(PackEvidence.pack_install_id == pack_install_id)
-            .order_by(PackEvidence.id.asc())
-        ).all()
+    evidence_rows, truncated = _load_evidence_bounded(
+        session,
+        pack_install_id,
+        max_evidence_rows=max_evidence_rows,
+        max_evidence_chars=max_evidence_chars,
     )
+    if truncated:
+        logger.warning(
+            "flip scan bounded: pack_install_id=%s max_rows=%s max_chars=%s scanned_rows=%s",
+            pack_install_id,
+            max_evidence_rows,
+            max_evidence_chars,
+            len(evidence_rows),
+        )
+        bus.emit(
+            session,
+            EVENT_FLIP_SCAN_BOUNDED,
+            {
+                "pack_install_id": pack_install_id,
+                "max_evidence_rows": max_evidence_rows,
+                "max_evidence_chars": max_evidence_chars,
+                "scanned_rows": len(evidence_rows),
+            },
+            source_loop="flip_monitoring",
+            idempotency_key=f"flip-scan-bounded:{pack_install_id}:{max_evidence_rows}:{max_evidence_chars}",
+        )
+
     watches = list(
         session.scalars(
             select(DeliberationFlipWatch)
@@ -229,27 +337,48 @@ def scan_pack_install(
     created: list[DeliberationFlipTrigger] = []
     now = utcnow()
     for watch in watches:
-        existing = session.scalar(
-            select(DeliberationFlipTrigger).where(
-                DeliberationFlipTrigger.watch_id == watch.id,
-                DeliberationFlipTrigger.pack_install_id == pack_install_id,
-            )
-        )
-        if existing is not None:
-            continue
         matched_ids = _match_predicate_against_evidence(watch.predicate_json or {}, evidence_rows)
         if not matched_ids:
             continue
-        trigger = DeliberationFlipTrigger(
-            watch_id=watch.id,
-            pack_install_id=pack_install_id,
-            matched_evidence_ids=matched_ids,
-            created_at=now,
+
+        # Atomic claim: only one scanner may move watching → triggered_candidate.
+        claim = session.execute(
+            update(DeliberationFlipWatch)
+            .where(
+                DeliberationFlipWatch.id == watch.id,
+                DeliberationFlipWatch.status == WATCH_STATUS_WATCHING,
+            )
+            .values(status=WATCH_STATUS_TRIGGERED_CANDIDATE, updated_at=now)
         )
-        session.add(trigger)
-        watch.status = WATCH_STATUS_TRIGGERED_CANDIDATE
-        watch.updated_at = now
-        session.flush()
+        if int(getattr(claim, "rowcount", 0) or 0) != 1:
+            # Lost race or already not watching — do not re-trigger.
+            continue
+
+        trigger: DeliberationFlipTrigger | None = None
+        try:
+            with session.begin_nested():
+                trigger = DeliberationFlipTrigger(
+                    watch_id=watch.id,
+                    pack_install_id=pack_install_id,
+                    matched_evidence_ids=matched_ids,
+                    created_at=now,
+                )
+                session.add(trigger)
+                session.flush()
+        except IntegrityError:
+            # Concurrent insert for same (watch_id, pack_install_id): idempotent success.
+            existing = session.scalar(
+                select(DeliberationFlipTrigger).where(
+                    DeliberationFlipTrigger.watch_id == watch.id,
+                    DeliberationFlipTrigger.pack_install_id == pack_install_id,
+                )
+            )
+            if existing is not None:
+                session.refresh(watch)
+                continue
+            raise
+
+        session.refresh(watch)
         bus.emit(
             session,
             EVENT_FLIP_TRIGGER_CANDIDATE,
@@ -266,6 +395,48 @@ def scan_pack_install(
         )
         created.append(trigger)
     return created
+
+
+def safe_scan_pack_install(
+    session: Session,
+    pack_install_id: int,
+    *,
+    max_evidence_rows: int = DEFAULT_SCAN_MAX_EVIDENCE_ROWS,
+    max_evidence_chars: int = DEFAULT_SCAN_MAX_EVIDENCE_CHARS,
+) -> list[DeliberationFlipTrigger]:
+    """Run ``scan_pack_install`` without ever aborting the caller's transaction.
+
+    Used by Pack install admission: scan failures are logged + evented; the
+    install result is unchanged. A savepoint isolates scan side-effects on error.
+    """
+    try:
+        with session.begin_nested():
+            return scan_pack_install(
+                session,
+                pack_install_id,
+                max_evidence_rows=max_evidence_rows,
+                max_evidence_chars=max_evidence_chars,
+            )
+    except Exception:
+        logger.exception(
+            "flip monitoring scan failed; pack install preserved pack_install_id=%s",
+            pack_install_id,
+        )
+        try:
+            bus.emit(
+                session,
+                EVENT_FLIP_SCAN_FAILED,
+                {"pack_install_id": pack_install_id},
+                source_loop="flip_monitoring",
+                idempotency_key=f"flip-scan-failed:{pack_install_id}",
+            )
+        except Exception:
+            logger.exception(
+                "failed to emit %s for pack_install_id=%s",
+                EVENT_FLIP_SCAN_FAILED,
+                pack_install_id,
+            )
+        return []
 
 
 def list_watches(
@@ -360,16 +531,33 @@ def dismiss_watch(session: Session, watch_id: int, *, reason: str) -> Deliberati
     watch = session.get(DeliberationFlipWatch, watch_id)
     if watch is None:
         raise FlipWatchError("watch_not_found", f"watch_id={watch_id}")
-    if watch.status == WATCH_STATUS_DISMISSED:
-        return watch
-    if watch.status == WATCH_STATUS_EXPIRED:
-        raise FlipWatchError("watch_expired", f"watch_id={watch_id}")
+    if watch.status not in DISMISSABLE_STATUSES:
+        raise FlipWatchError(
+            "invalid_watch_transition",
+            f"cannot dismiss watch in status={watch.status}",
+        )
     now = utcnow()
     previous = watch.status
-    watch.status = WATCH_STATUS_DISMISSED
-    watch.dismiss_reason = reason_text
-    watch.updated_at = now
-    session.flush()
+    # Conditional update so concurrent transitions cannot silently overwrite.
+    result = session.execute(
+        update(DeliberationFlipWatch)
+        .where(
+            DeliberationFlipWatch.id == watch_id,
+            DeliberationFlipWatch.status.in_(tuple(DISMISSABLE_STATUSES)),
+        )
+        .values(
+            status=WATCH_STATUS_DISMISSED,
+            dismiss_reason=reason_text,
+            updated_at=now,
+        )
+    )
+    if int(getattr(result, "rowcount", 0) or 0) != 1:
+        session.refresh(watch)
+        raise FlipWatchError(
+            "invalid_watch_transition",
+            f"cannot dismiss watch in status={watch.status}",
+        )
+    session.refresh(watch)
     bus.emit(
         session,
         EVENT_FLIP_WATCH_DISMISSED,

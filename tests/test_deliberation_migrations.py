@@ -717,3 +717,117 @@ def test_0010_decision_outcome_ledger_upgrade_and_downgrade(temp_settings: Setti
         assert "deliberation_runs" in downgraded
     finally:
         engine.dispose()
+
+
+def test_0011_deliberation_charters_upgrade_and_downgrade(temp_settings: Settings) -> None:
+    """#12: 0010→0011→0010 round-trip for deliberation_charters (cols/indexes/data)."""
+    engine = make_engine(temp_settings)
+    try:
+        upgrade_database(temp_settings, revision="0010_decision_outcome_ledger")
+        inspector = inspect(engine)
+        before = set(inspector.get_table_names())
+        assert "deliberation_charters" not in before
+        assert "deliberation_outcomes" in before
+        assert "deliberation_flip_watches" in before
+
+        # Seed pre-upgrade data that must survive 0011 up/down.
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO pack_installs (
+                        pack_id, declared_version, format_version, source_digest,
+                        source_type, source_location, storage_uri, admission_profile,
+                        status, original_manifest_json, admission_report_json, created_at
+                    ) VALUES (
+                        'charter-mig-pack', '0.0.1', 'opencrab-pack-v1', :digest,
+                        'directory', '/tmp', '/tmp', 'compatible',
+                        'active', '{}', '{}', CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"digest": "k" * 64},
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO deliberation_runs (
+                        idempotency_key, mission_snapshot_json, mission_digest,
+                        policy_snapshot_json, runtime_config_json, policy_digest,
+                        runtime_config_digest, contract_version, prompt_template_version,
+                        primary_scope_digest, impact_baseline_scope_digest, status,
+                        degraded_json, llm_attempt_count, created_at, updated_at
+                    ) VALUES (
+                        'mig-0011-seed', '{}', :d, '{}', '{}', :d, :d,
+                        'deliberation-d1-v1', 'deliberation-prompts-d1-v1',
+                        :d, :d, 'completed',
+                        '{}', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"d": "d" * 64},
+            )
+
+        upgrade_database(temp_settings, revision="0011_deliberation_charters")
+        inspector = inspect(engine)
+        after = set(inspector.get_table_names())
+        assert "deliberation_charters" in after
+
+        cols = {column["name"] for column in inspector.get_columns("deliberation_charters")}
+        assert {
+            "id",
+            "title",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+        } <= cols
+        index_names = {idx["name"] for idx in inspector.get_indexes("deliberation_charters")}
+        assert any(name and "status" in name for name in index_names)
+        assert any(name and "created_at" in name for name in index_names)
+
+        # Insert a charter row and prove seed data still present.
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO deliberation_charters (
+                        title, description, status, created_at, updated_at
+                    ) VALUES (
+                        'Sustained concern A', 'seed charter', 'active',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            charter_id = conn.execute(
+                text("SELECT id FROM deliberation_charters WHERE title = 'Sustained concern A'")
+            ).scalar_one()
+            assert charter_id is not None
+            seed_key = conn.execute(
+                text(
+                    "SELECT idempotency_key FROM deliberation_runs "
+                    "WHERE idempotency_key = 'mig-0011-seed'"
+                )
+            ).scalar_one()
+            assert seed_key == "mig-0011-seed"
+
+        config = _alembic_config(temp_settings.db_url)
+        command.downgrade(config, "0010_decision_outcome_ledger")
+        inspector = inspect(engine)
+        downgraded = set(inspector.get_table_names())
+        assert "deliberation_charters" not in downgraded
+        assert "deliberation_outcomes" in downgraded
+        assert "deliberation_flip_watches" in downgraded
+        assert "deliberation_runs" in downgraded
+
+        with engine.connect() as conn:
+            seed_key = conn.execute(
+                text(
+                    "SELECT idempotency_key FROM deliberation_runs "
+                    "WHERE idempotency_key = 'mig-0011-seed'"
+                )
+            ).scalar_one()
+            assert seed_key == "mig-0011-seed"
+    finally:
+        engine.dispose()
