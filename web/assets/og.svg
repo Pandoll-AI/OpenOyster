@@ -1,0 +1,45 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sky" cx="72%" cy="18%" r="90%">
+      <stop offset="0%" stop-color="#1a1206"/>
+      <stop offset="42%" stop-color="#0b0a0f"/>
+      <stop offset="100%" stop-color="#05070d"/>
+    </radialGradient>
+    <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff2d6"/>
+      <stop offset="35%" stop-color="#ffb765"/>
+      <stop offset="100%" stop-color="#e8873a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffd7a0"/>
+      <stop offset="100%" stop-color="#ffb765"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#sky)"/>
+  <!-- constellation lines -->
+  <g stroke="#ffb765" stroke-width="1" opacity="0.16">
+    <path d="M980 120 L640 300 L300 210 M980 120 L840 360 M640 300 L520 470 M300 210 L150 360 M840 360 L1050 470"/>
+  </g>
+  <!-- pack particles -->
+  <g fill="#ffb765" opacity="0.9">
+    <circle cx="300" cy="210" r="4"/><circle cx="640" cy="300" r="5"/>
+    <circle cx="840" cy="360" r="4"/><circle cx="520" cy="470" r="3.5"/>
+    <circle cx="150" cy="360" r="3"/><circle cx="1050" cy="470" r="3.5"/>
+  </g>
+  <!-- hub sun -->
+  <circle cx="980" cy="120" r="140" fill="url(#sun)" opacity="0.9"/>
+  <circle cx="980" cy="120" r="6" fill="#fff2d6"/>
+  <!-- wordmark -->
+  <text x="72" y="112" font-family="'IBM Plex Mono', monospace" font-size="20" letter-spacing="6" fill="#a2937b">EVIDENCE-TO-DECISION · ALPHA</text>
+  <text x="70" y="250" font-family="'Space Grotesk','Helvetica Neue',sans-serif" font-size="74" font-weight="700" fill="#f4ead6" letter-spacing="-3">OpenOyster</text>
+  <text x="72" y="330" font-family="'Space Grotesk','Helvetica Neue',sans-serif" font-size="40" font-weight="600" fill="url(#amber)" letter-spacing="-1">지식으로 생각하고 결정한다.</text>
+  <text x="72" y="392" font-family="'Space Grotesk','Helvetica Neue',sans-serif" font-size="24" fill="#a2937b">OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 결정한다.</text>
+  <!-- mark -->
+  <g transform="translate(72,470)">
+    <g stroke="#ffb765" stroke-width="6" stroke-linecap="round" opacity="0.9" fill="none">
+      <path d="M40 78 L40 20"/><path d="M40 78 L14 30"/><path d="M40 78 L66 30"/>
+    </g>
+    <circle cx="40" cy="86" r="16" fill="#ffd7a0"/>
+  </g>
+  <text x="128" y="540" font-family="'IBM Plex Mono', monospace" font-size="18" fill="#6f6552">PACKS · EVIDENCE · DECISION DOSSIER — an OpenCrab fan project</text>
+</svg>

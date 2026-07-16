@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenOyster — Galaxy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+<style>
+:root{
+--bg:#000;--panel:rgba(10,11,14,.92);--stroke:rgba(255,255,255,.08);--stroke2:rgba(255,255,255,.14);
+--txt:#e8ecf1;--dim:#8a93a3;--dim2:#5b6472;--pos:#35e0c2;--posB:#52f2b8;--neg:#ff5c7f;--green:#4ade80;--amber:#f5b74e;
+--sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;--disp:'Space Grotesk',sans-serif;
+--mono:'JetBrains Mono',ui-monospace,monospace;--serif:'Newsreader',Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;background:none;border:0;color:inherit;cursor:pointer}
+#stage{position:fixed;inset:0}
+canvas{display:block}
+
+/* top nav */
+#topnav{position:fixed;top:0;left:0;right:0;height:38px;z-index:40;display:flex;align-items:center;gap:14px;
+padding:0 12px;background:rgba(4,5,7,.86);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.05)}
+.logo{display:flex;align-items:baseline;gap:6px;margin-right:6px;white-space:nowrap}
+.logo .mark{color:var(--pos);font-size:13px}
+.logo b{font-family:var(--disp);font-weight:700;font-size:14.5px;letter-spacing:-.01em}
+.logo .beta{font-size:8.5px;letter-spacing:.14em;color:var(--dim2);font-family:var(--mono)}
+#tabs{display:flex;align-items:center;gap:2px;flex:0 1 auto;overflow-x:auto;scrollbar-width:none}
+#tabs::-webkit-scrollbar{display:none}
+#tabs .tab{font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--dim2);padding:5px 9px;border-radius:6px;white-space:nowrap;text-transform:uppercase}
+#tabs .tab:hover{color:var(--dim)}
+#tabs .tab.on{color:#fff}
+#navright{margin-left:auto;display:flex;align-items:center;gap:10px}
+#search{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.07);
+border-radius:8px;padding:4px 9px;min-width:150px}
+#search svg{opacity:.5}
+#search input{background:none;border:0;outline:none;color:var(--txt);font-size:11px;width:110px;font-family:var(--mono)}
+#search input::placeholder{color:var(--dim2);font-family:var(--sans)}
+#search kbd{font-size:8.5px;color:var(--dim2);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 4px;font-family:var(--mono)}
+.livechip{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim);white-space:nowrap}
+.livechip .dot{width:6px;height:6px;border-radius:50%;background:#f0a441;box-shadow:0 0 8px #f0a441}
+
+/* control bar */
+#sublabel{position:fixed;top:44px;left:14px;z-index:38;font-size:11px;color:var(--dim2)}
+#controls{position:fixed;top:64px;left:14px;right:14px;z-index:38;display:flex;align-items:center;gap:18px;font-size:10.5px}
+.toggle{display:flex;align-items:center;gap:6px;color:var(--dim);cursor:pointer;user-select:none;white-space:nowrap}
+.toggle .tdot{width:5px;height:5px;border-radius:50%;background:var(--dim2);transition:all .2s}
+.toggle.on .tdot{background:var(--pos);box-shadow:0 0 7px var(--pos)}
+.toggle .state{font-size:8.5px;letter-spacing:.1em;color:var(--dim2);font-family:var(--mono)}
+.toggle.on .state{color:var(--pos)}
+#playgroup{display:flex;align-items:center;gap:9px}
+#playbtn{width:24px;height:24px;border-radius:50%;border:1px solid var(--stroke2);display:flex;align-items:center;justify-content:center;color:var(--txt)}
+#playbtn:hover{border-color:rgba(255,255,255,.3)}
+.speed{font-size:9.5px;color:var(--dim2);padding:2px 6px;border-radius:5px;font-family:var(--mono)}
+.speed.on{color:var(--txt);background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12)}
+#timeline{position:relative;width:min(220px,24vw);height:16px;display:flex;align-items:center;cursor:pointer}
+#timeline .track{width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+#timeline .fill{height:100%;width:100%;background:linear-gradient(90deg,rgba(53,224,194,.5),rgba(53,224,194,.9));border-radius:2px}
+#timeline .knob{position:absolute;top:50%;width:11px;height:11px;border-radius:50%;background:#dfe6ee;transform:translate(-50%,-50%);box-shadow:0 0 6px rgba(255,255,255,.5)}
+#livestat{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;letter-spacing:.06em;white-space:nowrap}
+#livestat .ldot{width:6px;height:6px;border-radius:50%;background:var(--pos);box-shadow:0 0 9px var(--pos);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+#livestat.scrub .ldot{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:none}
+#stats{margin-left:auto;display:flex;align-items:center;gap:14px;white-space:nowrap}
+#stats .stat b{color:var(--txt);font-weight:600;font-family:var(--mono);font-size:10.5px}
+#stats .stat span{color:var(--dim2);margin-left:4px;font-size:10px}
+
+/* legend */
+#legend{position:fixed;top:96px;left:14px;z-index:37;display:flex;gap:22px;font-size:9.5px;color:var(--dim2)}
+#legend b{color:var(--dim);font-weight:500}
+#legend .up{color:var(--pos)}#legend .dn{color:var(--neg)}
+
+/* 3D HTML overlays */
+#overlay{position:fixed;inset:0;z-index:10;pointer-events:none;overflow:hidden}
+.clabel{position:absolute;transform:translate(-50%,-50%);font-family:var(--disp);font-weight:700;letter-spacing:.3em;
+color:rgba(236,242,248,.85);text-shadow:0 0 22px rgba(190,215,255,.75),0 0 60px rgba(150,190,255,.4);
+white-space:nowrap;text-transform:uppercase;text-align:center}
+.clabel .rule{margin:6px auto 0;height:1px;width:78%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent)}
+.plabel{position:absolute;transform:translate(-50%,0);text-align:center;white-space:nowrap}
+.plabel .gauge{display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:6px}
+.plabel .pct{font-family:var(--disp);font-weight:700;color:#fff;text-shadow:0 0 14px rgba(255,255,255,.8);letter-spacing:.02em}
+.plabel .pct span{font-size:.62em;font-weight:600;color:rgba(255,255,255,.82);margin-left:5px;letter-spacing:.08em}
+.plabel .bar{height:3.5px;border-radius:2px;background:rgba(255,255,255,.16);overflow:hidden}
+.plabel .bar i{display:block;height:100%;background:linear-gradient(90deg,#e8f4ff,#fff);border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,.7)}
+.plabel .nm{font-size:11px;color:rgba(255,255,255,.86);text-shadow:0 1px 8px rgba(0,0,0,.9),0 0 12px rgba(140,170,220,.35)}
+.plabel .nm .code{font-family:var(--mono);font-weight:600}
+
+/* hover card */
+.hovercard{position:fixed;z-index:45;pointer-events:none;background:rgba(9,10,13,.94);border:1px solid rgba(255,255,255,.09);
+border-radius:10px;padding:11px 13px;min-width:196px;max-width:250px;backdrop-filter:blur(14px);
+box-shadow:0 14px 50px rgba(0,0,0,.7);display:none}
+.hovercard.show{display:block}
+.hovercard .kind{font-size:8.5px;letter-spacing:.16em;color:var(--dim2);font-family:var(--mono);text-transform:uppercase}
+.hovercard .name{font-size:12px;font-weight:600;color:#fff;margin:3px 0 8px;font-family:var(--mono)}
+.hovercard .row{display:flex;justify-content:space-between;gap:16px;font-size:10.5px;padding:2.5px 0;color:var(--dim)}
+.hovercard .row b{color:var(--txt);font-weight:500;font-family:var(--mono);font-size:10.5px}
+.hovercard .row b.pos{color:var(--green)}.hovercard .row b.neg{color:var(--neg)}
+.hovercard .sect{margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}
+.hovercard .sect .sh{display:flex;justify-content:space-between;font-size:8.5px;letter-spacing:.13em;color:var(--dim2);font-family:var(--mono);margin-bottom:6px;text-transform:uppercase}
+.hovercard .item{display:flex;align-items:center;gap:7px;padding:3.5px 0;font-size:10px}
+.hovercard .item .thumb{width:15px;height:15px;border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center;
+font-size:7px;font-weight:700;font-family:var(--mono);color:#08090c}
+.hovercard .item .t{flex:1;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.hovercard .item .val{color:var(--green);font-family:var(--mono);font-size:9.5px}
+
+/* right slide-over panel */
+#dimmer{position:fixed;inset:0;z-index:48;background:rgba(0,0,0,.45);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s}
+#dimmer.show{opacity:1;pointer-events:auto}
+#rpanel{position:fixed;top:0;right:-420px;bottom:0;width:400px;max-width:92vw;z-index:50;background:rgba(9,10,13,.97);
+border-left:1px solid rgba(255,255,255,.08);transition:right .3s cubic-bezier(.22,.8,.3,1);overflow-y:auto;
+scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent}
+#rpanel.show{right:0}
+#rpanel .close{position:absolute;top:10px;right:12px;color:var(--dim2);font-size:15px;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+#rpanel .close:hover{color:#fff;background:rgba(255,255,255,.07)}
+#rpanel .inner{padding:18px 20px 30px}
+.rp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.rp-badges{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.rp-badge{font-size:8.5px;font-weight:700;letter-spacing:.1em;padding:2.5px 7px;border-radius:5px;border:1px solid var(--stroke2);color:var(--dim);font-family:var(--mono)}
+.rp-badge.hi{color:var(--pos);border-color:rgba(53,224,194,.4)}
+.rp-tag{font-size:9px;color:var(--dim2);display:flex;align-items:center;gap:4px}
+.rp-id{font-family:var(--mono);font-size:14.5px;font-weight:600;color:#fff;display:flex;align-items:center;gap:8px}
+.rp-sub{font-size:10px;color:var(--pos);margin-top:5px;opacity:.85}
+.rp-status{font-size:10px;color:var(--dim);margin-top:7px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.rp-status .gd{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.rp-score{text-align:right;flex:none}
+.rp-score b{font-family:var(--disp);font-size:30px;font-weight:700;color:#fff;line-height:1}
+.rp-score span{display:block;font-size:7.5px;letter-spacing:.18em;color:var(--dim2);font-family:var(--mono);margin-top:3px}
+.rp-trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:16px 0 4px}
+.rp-trio .cell .l{font-size:7.5px;letter-spacing:.14em;color:var(--dim2);font-family:var(--mono);text-transform:uppercase}
+.rp-trio .cell .v{font-size:15.5px;font-weight:600;margin-top:3px;font-family:var(--mono)}
+.rp-trio .cell .v.teal{color:var(--pos)}
+.rp-pill{display:inline-flex;align-items:center;gap:5px;font-size:8.5px;letter-spacing:.1em;font-family:var(--mono);
+color:var(--pos);border:1px solid rgba(53,224,194,.35);background:rgba(53,224,194,.07);padding:3px 8px;border-radius:6px;margin:10px 0 2px;text-transform:uppercase}
+.rp-pill .pd{width:4px;height:4px;border-radius:50%;background:var(--pos)}
+.rp-big{margin:14px 0 4px}
+.rp-big .l{font-size:8px;letter-spacing:.15em;color:var(--dim2);font-family:var(--mono);display:flex;align-items:center;gap:5px;text-transform:uppercase}
+.rp-big .n{font-family:var(--serif);font-size:38px;font-weight:600;color:var(--posB);text-shadow:0 0 26px rgba(82,242,184,.45);letter-spacing:-.01em;margin-top:2px}
+.rp-sect{margin-top:18px}
+.rp-sect .sh{display:flex;justify-content:space-between;align-items:center;font-size:8.5px;letter-spacing:.14em;color:var(--dim2);font-family:var(--mono);text-transform:uppercase}
+.rp-sect .sh .warn{color:var(--amber)}
+.rp-list{margin-top:8px}
+.rp-item{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.045);font-size:11px;width:100%;text-align:left}
+.rp-item .av{width:22px;height:22px;border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;
+font-size:8.5px;font-weight:700;font-family:var(--mono);color:#0a0b0e}
+.rp-item .nm{flex:1;color:var(--dim);font-family:var(--mono);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-item .r{color:var(--txt);font-family:var(--mono);font-size:10.5px}
+.rp-item .r.g{color:var(--green)}
+.rp-note{font-size:9.5px;color:var(--dim2);margin-top:12px;display:flex;align-items:center;gap:6px}
+
+/* footer */
+#footr{position:fixed;right:14px;bottom:10px;z-index:36;display:flex;align-items:center;gap:14px;font-size:9.5px;color:var(--dim2)}
+
+/* boot */
+#boot{position:fixed;inset:0;z-index:60;background:#000;display:flex;align-items:center;justify-content:center;transition:opacity .8s;flex-direction:column;gap:14px}
+#boot.hide{opacity:0;pointer-events:none}
+#boot .bl{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.05em}
+#boot .bl span{color:var(--pos)}
+#boot .bs{font-size:9.5px;letter-spacing:.24em;color:var(--dim2);font-family:var(--mono);text-transform:uppercase}
+@media (max-width:900px){#stats .stat span{display:none}#legend{display:none}#timeline{width:16vw}}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="overlay"></div>
+
+<nav id="topnav">
+<div class="logo"><span class="mark">◈</span><b id="brand">Galaxy</b><span class="beta" id="brandTag">BETA</span></div>
+<div id="tabs"></div>
+<div id="navright">
+<div id="search">
+<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.4"/><path d="M9.4 9.4L13 13"/></svg>
+<input id="searchInput" placeholder="Search" spellcheck="false" />
+<kbd>⌘K</kbd>
+</div>
+<div class="livechip"><span class="dot"></span>Live</div>
+</div>
+</nav>
+
+<div id="sublabel">Network</div>
+
+<div id="controls">
+<div class="toggle" id="tgCore"><span class="tdot"></span><span id="tgCoreLabel">Core</span><span class="state">OFF</span></div>
+<div class="toggle" id="tgClusters"><span class="tdot"></span>Clusters only<span class="state">OFF</span></div>
+<div id="playgroup">
+<button id="playbtn" title="tour"><svg id="playIco" width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M2 1l7 4-7 4z"/></svg></button>
+<button class="speed" data-s="0.5">0.5×</button>
+<button class="speed on" data-s="1">1×</button>
+<button class="speed" data-s="2">2×</button>
+</div>
+<div id="timeline"><div class="track"><div class="fill" id="tlFill"></div></div><div class="knob" id="tlKnob" style="left:100%"></div></div>
+<div id="livestat"><span class="ldot"></span><span id="liveTxt">LIVE</span></div>
+<div id="stats"></div>
+</div>
+
+<div id="legend"></div>
+<div class="hovercard" id="hover"></div>
+<div id="dimmer"></div>
+<aside id="rpanel"><button class="close" id="rpClose">✕</button><div class="inner" id="rpInner"></div></aside>
+<div id="footr"><span id="ftMeta"></span></div>
+<div id="boot"><div class="bl" id="bootTitle">◈ Galaxy</div><div class="bs">Loading network…</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* Galaxy Network — generalized from ERPIntel/CrowdIntel-style galaxy view.
+ * Data contract: window.GALAXY = { config, groups, hubs, nodes } — see data-format.md.
+ * Visual grammar:
+ *   groups → S-curve galactic band segments with projected display labels
+ *   hubs   → canvas-textured "planets" with glow halo + particle ring, sized by hub.size
+ *   nodes  → GPU shader particles orbiting their hub; y>0 = flagged "above" semantic,
+ *            orphans (hub -1) scattered below the band; color = node flag (pos/neg)
+ *   value  → particle size (sqrt), echo-particle density, CORE score percentile
+ */
+window.GALAXY = {"config":{"title":"OpenOyster","tag":"PACK UNIVERSE","subtitle":"Evidence Galaxy","nodeLabel":"EVIDENCE","hubLabel":"PACK","orphanLabel":"KNOWLEDGE REQUEST","otherLabel":"PENDING","valueLabel":"Citations","subValueLabel":"Beliefs","flagLabel":"Verified quote","flagTrueText":"verified","flagFalseText":"unverified","positive":"#ffb765","negative":"#6b5a3a","coreToggleLabel":"Core packs","coreThreshold":6,"stats":[{"label":"packs","value":18},{"label":"evidence","value":847},{"label":"domains","value":7}],"footer":"MOCK · OpenCrab Pack universe — visual only, not real data","seed":20260716,"groupColors":["#f0a24e","#ffb765","#e88a3c","#f5c07a","#ff9d52","#d4762e","#ffcf8a"]},"groups":[{"id":"policy","name":"정책·법령 · POLICY & LAW","color":"#f0a24e","hubs":["KOREA_CARD_BENEFIT","WELFARE_PROJECT_INDEX","POLICY_DRIFT"]},{"id":"market","name":"시장·공시 · MARKET","color":"#ffb765","hubs":["ECOMMERCE_SALES","SOCIAL_MEDIA_TRENDS"]},{"id":"science","name":"과학·논문 · SCIENCE","color":"#e88a3c","hubs":["EARTHQUAKE_INSIGHTS","NEMOTRON_PERSONAS"]},{"id":"medical","name":"의료·가이드 · MEDICAL","color":"#f5c07a","hubs":["CLINICAL_GUIDELINE","INSURANCE_CLAIM"]},{"id":"culture","name":"문화·K · CULTURE","color":"#ff9d52","hubs":["MICHELIN_2026","KPOP_IDOL","K_BEAUTY"]},{"id":"engineering","name":"엔지니어링 · ENGINEERING","color":"#d4762e","hubs":["MULTICLASS_DRONE","3D_MODELING","REVIT_2026_SDK"]},{"id":"standards","name":"표준·규격 · STANDARDS","color":"#ffcf8a","hubs":["OPENCRAB_GLOBAL","SEMICONDUCTOR_STD","OWN_ONTOLOGY"]}],"hubs":[{"id":"KOREA_CARD_BENEFIT","name":"KOREA_CARD_BENEFIT ONTOLOGY PACK","size":483,"gaugePct":82.8,"metrics":{"Evidence":483,"Verified":"400 (83%)","Neo4j nodes":679,"Provenance":"crawl+parse"},"top":[],"deps":[]},{"id":"WELFARE_PROJECT_INDEX","name":"복지 프로젝트 인덱스 PACK","size":610,"gaugePct":73.8,"metrics":{"Evidence":610,"Verified":"450 (74%)","Neo4j nodes":181,"Provenance":"OCR+CLIP"},"top":[],"deps":[]},{"id":"EARTHQUAKE_INSIGHTS","name":"EARTHQUAKE_INSIGHTS SUBSTACK PACK","size":485,"gaugePct":84.9,"metrics":{"Evidence":485,"Verified":"412 (85%)","Neo4j nodes":515,"Provenance":"OCR+CLIP"},"top":[],"deps":[]},{"id":"MICHELIN_2026","name":"MICHELIN_2026 ONTOLOGY PACK","size":205,"gaugePct":72.7,"metrics":{"Evidence":205,"Verified":"149 (73%)","Neo4j nodes":454,"Provenance":"crawl+parse"},"top":[],"deps":[]},{"id":"KPOP_IDOL","name":"KPOP_IDOL ONTOLOGY PACK","size":316,"gaugePct":92.4,"metrics":{"Evidence":316,"Verified":"292 (92%)","Neo4j nodes":838,"Provenance":"promotion pkg"},"top":[],"deps":[]},{"id":"K_BEAUTY","name":"K-뷰티 성분·제품 PACK","size":467,"gaugePct":88,"metrics":{"Evidence":467,"Verified":"411 (88%)","Neo4j nodes":174,"Provenance":"promotion pkg"},"top":[],"deps":[]},{"id":"ECOMMERCE_SALES","name":"E-COMMERCE SALES ANALYTICS PACK","size":420,"gaugePct":73.1,"metrics":{"Evidence":420,"Verified":"307 (73%)","Neo4j nodes":186,"Provenance":"human-reviewed"},"top":[],"deps":[]},{"id":"SOCIAL_MEDIA_TRENDS","name":"SOCIAL_MEDIA TRENDS PACK","size":286,"gaugePct":61.2,"metrics":{"Evidence":286,"Verified":"175 (61%)","Neo4j nodes":929,"Provenance":"OCR+CLIP"},"top":[],"deps":[]},{"id":"MULTICLASS_DRONE","name":"MULTI-CLASS DRONE DETECTION PACK","size":193,"gaugePct":90.7,"metrics":{"Evidence":193,"Verified":"175 (91%)","Neo4j nodes":802,"Provenance":"crawl+parse"},"top":[],"deps":[]},{"id":"3D_MODELING","name":"3D 모델링 온톨로지 PACK","size":313,"gaugePct":88.8,"metrics":{"Evidence":313,"Verified":"278 (89%)","Neo4j nodes":841,"Provenance":"human-reviewed"},"top":[],"deps":[]},{"id":"NEMOTRON_PERSONAS","name":"NEMOTRON_PERSONAS KOREA PACK","size":400,"gaugePct":66.8,"metrics":{"Evidence":400,"Verified":"267 (67%)","Neo4j nodes":465,"Provenance":"promotion pkg"},"top":[],"deps":[]},{"id":"REVIT_2026_SDK","name":"REVIT_2026 SDK ONTOLOGY PACK","size":469,"gaugePct":85.3,"metrics":{"Evidence":469,"Verified":"400 (85%)","Neo4j nodes":356,"Provenance":"human-reviewed"},"top":[],"deps":[]},{"id":"OPENCRAB_GLOBAL","name":"오픈크랩 글로벌 리포트 PACK","size":455,"gaugePct":73.4,"metrics":{"Evidence":455,"Verified":"334 (73%)","Neo4j nodes":682,"Provenance":"promotion pkg"},"top":[],"deps":[]},{"id":"CLINICAL_GUIDELINE","name":"임상 가이드라인 v3 PACK","size":272,"gaugePct":66.2,"metrics":{"Evidence":272,"Verified":"180 (66%)","Neo4j nodes":526,"Provenance":"promotion pkg"},"top":[],"deps":[]},{"id":"INSURANCE_CLAIM","name":"보험 급여기준 온톨로지 PACK","size":489,"gaugePct":84.3,"metrics":{"Evidence":489,"Verified":"412 (84%)","Neo4j nodes":766,"Provenance":"crawl+parse"},"top":[],"deps":[]},{"id":"POLICY_DRIFT","name":"정책 변화 감시 PACK","size":582,"gaugePct":84.5,"metrics":{"Evidence":582,"Verified":"492 (85%)","Neo4j nodes":373,"Provenance":"OCR+CLIP"},"top":[],"deps":[]},{"id":"SEMICONDUCTOR_STD","name":"반도체 공정 표준 PACK","size":314,"gaugePct":83.4,"metrics":{"Evidence":314,"Verified":"262 (83%)","Neo4j nodes":735,"Provenance":"human-reviewed"},"top":[],"deps":[]},{"id":"OWN_ONTOLOGY","name":"OWN ONTOLOGY PACK","size":605,"gaugePct":61.8,"metrics":{"Evidence":605,"Verified":"374 (62%)","Neo4j nodes":912,"Provenance":"OCR+CLIP"},"top":[],"deps":[]}],"nodes":[["ev_korea_card_benefit_0",0,92,6,0],["ev_korea_card_benefit_1",0,4,13,0],["ev_korea_card_benefit_2",0,21,30,1],["ev_korea_card_benefit_3",0,231,35,0],["ev_korea_card_benefit_4",0,215,38,1],["ev_korea_card_benefit_5",0,117,16,0],["ev_korea_card_benefit_6",0,54,30,1],["ev_korea_card_benefit_7",0,17,20,1],["ev_korea_card_benefit_8",0,122,2,1],["ev_korea_card_benefit_9",0,13,20,1],["ev_korea_card_benefit_10",0,53,23,1],["ev_korea_card_benefit_11",0,52,26,1],["ev_korea_card_benefit_12",0,121,8,1],["ev_korea_card_benefit_13",0,135,38,1],["ev_korea_card_benefit_14",0,112,15,1],["ev_korea_card_benefit_15",0,28,16,1],["ev_korea_card_benefit_16",0,7,1,0],["ev_korea_card_benefit_17",0,9,11,1],["ev_korea_card_benefit_18",0,115,5,0],["ev_korea_card_benefit_19",0,46,12,1],["ev_korea_card_benefit_20",0,52,24,1],["ev_korea_card_benefit_21",0,59,27,1],["ev_korea_card_benefit_22",0,7,15,0],["ev_korea_card_benefit_23",0,9,12,1],["ev_korea_card_benefit_24",0,36,38,1],["ev_korea_card_benefit_25",0,15,31,1],["ev_korea_card_benefit_26",0,88,21,0],["ev_korea_card_benefit_27",0,15,6,1],["ev_korea_card_benefit_28",0,46,8,1],["ev_korea_card_benefit_29",0,126,23,0],["ev_korea_card_benefit_30",0,0,29,1],["ev_korea_card_benefit_31",0,42,21,1],["ev_korea_card_benefit_32",0,162,21,0],["ev_korea_card_benefit_33",0,61,9,1],["ev_korea_card_benefit_34",0,45,34,1],["ev_korea_card_benefit_35",0,27,20,0],["ev_korea_card_benefit_36",0,0,16,1],["ev_korea_card_benefit_37",0,113,12,1],["ev_korea_card_benefit_38",0,4,38,1],["ev_korea_card_benefit_39",0,128,20,1],["ev_korea_card_benefit_40",0,176,4,1],["ev_korea_card_benefit_41",0,105,11,1],["ev_korea_card_benefit_42",0,148,18,1],["ev_korea_card_benefit_43",0,121,1,1],["ev_korea_card_benefit_44",0,1,30,0],["ev_korea_card_benefit_45",0,38,33,1],["ev_welfare_project_index_0",1,5,35,1],["ev_welfare_project_index_1",1,19,15,1],["ev_welfare_project_index_2",1,111,33,1],["ev_welfare_project_index_3",1,113,28,1],["ev_welfare_project_index_4",1,27,16,1],["ev_welfare_project_index_5",1,46,24,0],["ev_welfare_project_index_6",1,18,7,1],["ev_welfare_project_index_7",1,61,11,1],["ev_welfare_project_index_8",1,100,7,0],["ev_welfare_project_index_9",1,46,0,1],["ev_welfare_project_index_10",1,26,3,0],["ev_welfare_project_index_11",1,54,34,1],["ev_welfare_project_index_12",1,6,21,1],["ev_welfare_project_index_13",1,127,17,0],["ev_welfare_project_index_14",1,99,4,1],["ev_welfare_project_index_15",1,110,0,1],["ev_welfare_project_index_16",1,1,21,1],["ev_welfare_project_index_17",1,97,16,0],["ev_welfare_project_index_18",1,14,10,0],["ev_welfare_project_index_19",1,25,20,0],["ev_welfare_project_index_20",1,31,36,0],["ev_welfare_project_index_21",1,118,35,1],["ev_welfare_project_index_22",1,118,16,1],["ev_welfare_project_index_23",1,79,19,1],["ev_welfare_project_index_24",1,96,8,0],["ev_welfare_project_index_25",1,4,8,1],["ev_welfare_project_index_26",1,49,8,1],["ev_welfare_project_index_27",1,121,14,1],["ev_welfare_project_index_28",1,55,12,1],["ev_welfare_project_index_29",1,1,7,0],["ev_welfare_project_index_30",1,5,6,1],["ev_welfare_project_index_31",1,61,34,1],["ev_welfare_project_index_32",1,15,35,1],["ev_welfare_project_index_33",1,26,35,1],["ev_welfare_project_index_34",1,114,25,0],["ev_welfare_project_index_35",1,11,29,1],["ev_welfare_project_index_36",1,39,1,1],["ev_welfare_project_index_37",1,7,34,0],["ev_welfare_project_index_38",1,34,28,1],["ev_welfare_project_index_39",1,33,3,1],["ev_welfare_project_index_40",1,62,17,1],["ev_welfare_project_index_41",1,22,31,1],["ev_welfare_project_index_42",1,120,34,1],["ev_welfare_project_index_43",1,75,4,1],["ev_welfare_project_index_44",1,0,11,1],["ev_welfare_project_index_45",1,9,28,1],["ev_welfare_project_index_46",1,1,4,1],["ev_welfare_project_index_47",1,190,4,1],["ev_welfare_project_index_48",1,18,27,1],["ev_welfare_project_index_49",1,75,16,1],["ev_welfare_project_index_50",1,44,14,0],["ev_welfare_project_index_51",1,47,19,1],["ev_welfare_project_index_52",1,29,8,0],["ev_welfare_project_index_53",1,200,7,1],["ev_welfare_project_index_54",1,19,0,0],["ev_welfare_project_index_55",1,6,14,1],["ev_welfare_project_index_56",1,1,33,1],["ev_welfare_project_index_57",1,143,7,0],["ev_welfare_project_index_58",1,64,4,1],["ev_earthquake_insights_0",2,119,38,0],["ev_earthquake_insights_1",2,217,13,0],["ev_earthquake_insights_2",2,30,38,1],["ev_earthquake_insights_3",2,194,27,1],["ev_earthquake_insights_4",2,176,18,1],["ev_earthquake_insights_5",2,11,28,0],["ev_earthquake_insights_6",2,36,17,1],["ev_earthquake_insights_7",2,122,29,1],["ev_earthquake_insights_8",2,1,4,1],["ev_earthquake_insights_9",2,101,10,0],["ev_earthquake_insights_10",2,4,16,1],["ev_earthquake_insights_11",2,1,7,1],["ev_earthquake_insights_12",2,15,11,0],["ev_earthquake_insights_13",2,243,25,1],["ev_earthquake_insights_14",2,113,4,0],["ev_earthquake_insights_15",2,115,35,1],["ev_earthquake_insights_16",2,100,14,1],["ev_earthquake_insights_17",2,4,29,1],["ev_earthquake_insights_18",2,61,1,1],["ev_earthquake_insights_19",2,8,4,1],["ev_earthquake_insights_20",2,26,31,0],["ev_earthquake_insights_21",2,19,19,1],["ev_earthquake_insights_22",2,50,32,1],["ev_michelin_2026_0",3,104,1,0],["ev_michelin_2026_1",3,14,9,1],["ev_michelin_2026_2",3,41,21,0],["ev_michelin_2026_3",3,178,9,1],["ev_michelin_2026_4",3,43,38,0],["ev_michelin_2026_5",3,151,11,0],["ev_michelin_2026_6",3,19,11,1],["ev_michelin_2026_7",3,110,0,0],["ev_michelin_2026_8",3,45,24,1],["ev_michelin_2026_9",3,51,32,1],["ev_michelin_2026_10",3,3,19,0],["ev_michelin_2026_11",3,81,29,1],["ev_michelin_2026_12",3,77,39,1],["ev_michelin_2026_13",3,122,29,0],["ev_michelin_2026_14",3,231,28,1],["ev_michelin_2026_15",3,172,37,1],["ev_michelin_2026_16",3,6,37,1],["ev_michelin_2026_17",3,98,9,0],["ev_michelin_2026_18",3,189,26,0],["ev_michelin_2026_19",3,20,8,0],["ev_michelin_2026_20",3,50,28,1],["ev_michelin_2026_21",3,18,34,0],["ev_michelin_2026_22",3,36,7,0],["ev_michelin_2026_23",3,108,9,1],["ev_michelin_2026_24",3,50,29,0],["ev_michelin_2026_25",3,3,39,1],["ev_michelin_2026_26",3,63,2,1],["ev_michelin_2026_27",3,87,20,1],["ev_michelin_2026_28",3,1,6,1],["ev_michelin_2026_29",3,10,5,0],["ev_michelin_2026_30",3,74,38,1],["ev_michelin_2026_31",3,76,8,1],["ev_michelin_2026_32",3,65,36,1],["ev_michelin_2026_33",3,18,25,1],["ev_kpop_idol_0",4,112,12,1],["ev_kpop_idol_1",4,125,21,1],["ev_kpop_idol_2",4,30,23,0],["ev_kpop_idol_3",4,74,39,0],["ev_kpop_idol_4",4,62,5,1],["ev_kpop_idol_5",4,84,12,1],["ev_kpop_idol_6",4,5,35,1],["ev_kpop_idol_7",4,151,12,1],["ev_kpop_idol_8",4,128,39,1],["ev_kpop_idol_9",4,1,35,1],["ev_kpop_idol_10",4,147,16,1],["ev_kpop_idol_11",4,34,14,1],["ev_kpop_idol_12",4,59,17,1],["ev_kpop_idol_13",4,8,3,1],["ev_kpop_idol_14",4,5,35,0],["ev_kpop_idol_15",4,16,16,1],["ev_kpop_idol_16",4,2,27,1],["ev_kpop_idol_17",4,12,26,1],["ev_kpop_idol_18",4,49,5,1],["ev_kpop_idol_19",4,91,16,1],["ev_kpop_idol_20",4,28,14,1],["ev_kpop_idol_21",4,66,20,1],["ev_kpop_idol_22",4,7,27,1],["ev_k_beauty_0",5,51,0,1],["ev_k_beauty_1",5,5,18,0],["ev_k_beauty_2",5,119,20,1],["ev_k_beauty_3",5,80,0,1],["ev_k_beauty_4",5,29,38,1],["ev_k_beauty_5",5,60,12,1],["ev_k_beauty_6",5,209,33,1],["ev_k_beauty_7",5,30,15,0],["ev_k_beauty_8",5,119,1,0],["ev_k_beauty_9",5,3,12,1],["ev_k_beauty_10",5,51,24,1],["ev_k_beauty_11",5,26,8,0],["ev_k_beauty_12",5,58,34,0],["ev_k_beauty_13",5,53,25,1],["ev_k_beauty_14",5,48,14,0],["ev_k_beauty_15",5,31,25,1],["ev_k_beauty_16",5,13,19,1],["ev_k_beauty_17",5,41,31,1],["ev_k_beauty_18",5,40,24,0],["ev_k_beauty_19",5,13,16,1],["ev_k_beauty_20",5,74,39,1],["ev_k_beauty_21",5,195,30,1],["ev_k_beauty_22",5,99,22,1],["ev_k_beauty_23",5,105,30,1],["ev_k_beauty_24",5,193,1,1],["ev_k_beauty_25",5,60,26,0],["ev_k_beauty_26",5,149,17,0],["ev_k_beauty_27",5,8,36,1],["ev_ecommerce_sales_0",6,14,37,0],["ev_ecommerce_sales_1",6,7,2,1],["ev_ecommerce_sales_2",6,103,37,1],["ev_ecommerce_sales_3",6,7,10,1],["ev_ecommerce_sales_4",6,38,10,1],["ev_ecommerce_sales_5",6,132,5,1],["ev_ecommerce_sales_6",6,73,37,0],["ev_ecommerce_sales_7",6,187,13,1],["ev_ecommerce_sales_8",6,37,20,1],["ev_ecommerce_sales_9",6,20,24,1],["ev_ecommerce_sales_10",6,115,34,1],["ev_ecommerce_sales_11",6,36,7,1],["ev_ecommerce_sales_12",6,35,33,0],["ev_ecommerce_sales_13",6,113,10,0],["ev_ecommerce_sales_14",6,6,0,0],["ev_ecommerce_sales_15",6,82,12,0],["ev_ecommerce_sales_16",6,101,16,1],["ev_ecommerce_sales_17",6,10,19,1],["ev_ecommerce_sales_18",6,66,10,1],["ev_ecommerce_sales_19",6,90,4,1],["ev_ecommerce_sales_20",6,56,12,1],["ev_ecommerce_sales_21",6,186,2,1],["ev_ecommerce_sales_22",6,3,7,1],["ev_ecommerce_sales_23",6,2,29,1],["ev_ecommerce_sales_24",6,102,10,1],["ev_ecommerce_sales_25",6,29,34,1],["ev_ecommerce_sales_26",6,68,17,0],["ev_ecommerce_sales_27",6,22,10,1],["ev_ecommerce_sales_28",6,67,5,1],["ev_ecommerce_sales_29",6,12,15,0],["ev_ecommerce_sales_30",6,71,16,1],["ev_ecommerce_sales_31",6,29,35,1],["ev_ecommerce_sales_32",6,40,14,1],["ev_ecommerce_sales_33",6,44,10,1],["ev_ecommerce_sales_34",6,104,13,1],["ev_ecommerce_sales_35",6,42,18,1],["ev_ecommerce_sales_36",6,43,35,0],["ev_ecommerce_sales_37",6,77,5,1],["ev_ecommerce_sales_38",6,83,23,1],["ev_ecommerce_sales_39",6,35,12,1],["ev_ecommerce_sales_40",6,82,25,1],["ev_social_media_trends_0",7,97,4,0],["ev_social_media_trends_1",7,16,38,1],["ev_social_media_trends_2",7,4,20,1],["ev_social_media_trends_3",7,129,2,1],["ev_social_media_trends_4",7,26,29,0],["ev_social_media_trends_5",7,72,14,0],["ev_social_media_trends_6",7,28,1,1],["ev_social_media_trends_7",7,88,32,1],["ev_social_media_trends_8",7,63,24,1],["ev_social_media_trends_9",7,89,29,1],["ev_social_media_trends_10",7,47,0,1],["ev_social_media_trends_11",7,90,20,1],["ev_social_media_trends_12",7,19,8,0],["ev_social_media_trends_13",7,32,17,0],["ev_social_media_trends_14",7,88,31,0],["ev_social_media_trends_15",7,63,2,1],["ev_social_media_trends_16",7,188,14,1],["ev_social_media_trends_17",7,232,33,1],["ev_social_media_trends_18",7,7,12,1],["ev_social_media_trends_19",7,89,34,1],["ev_social_media_trends_20",7,12,10,0],["ev_multiclass_drone_0",8,99,35,1],["ev_multiclass_drone_1",8,103,35,1],["ev_multiclass_drone_2",8,32,20,1],["ev_multiclass_drone_3",8,34,14,1],["ev_multiclass_drone_4",8,177,14,0],["ev_multiclass_drone_5",8,51,18,1],["ev_multiclass_drone_6",8,11,21,1],["ev_multiclass_drone_7",8,169,10,1],["ev_multiclass_drone_8",8,0,6,1],["ev_multiclass_drone_9",8,24,28,1],["ev_multiclass_drone_10",8,2,5,1],["ev_multiclass_drone_11",8,75,23,1],["ev_multiclass_drone_12",8,40,39,1],["ev_multiclass_drone_13",8,6,38,0],["ev_multiclass_drone_14",8,4,1,1],["ev_multiclass_drone_15",8,37,31,0],["ev_multiclass_drone_16",8,60,38,1],["ev_multiclass_drone_17",8,5,30,1],["ev_multiclass_drone_18",8,123,4,1],["ev_multiclass_drone_19",8,2,9,1],["ev_multiclass_drone_20",8,178,32,1],["ev_multiclass_drone_21",8,32,0,1],["ev_multiclass_drone_22",8,9,9,1],["ev_multiclass_drone_23",8,9,22,1],["ev_multiclass_drone_24",8,3,11,1],["ev_multiclass_drone_25",8,69,13,1],["ev_multiclass_drone_26",8,0,21,1],["ev_3d_modeling_0",9,140,35,1],["ev_3d_modeling_1",9,52,25,1],["ev_3d_modeling_2",9,183,14,0],["ev_3d_modeling_3",9,46,1,1],["ev_3d_modeling_4",9,4,25,1],["ev_3d_modeling_5",9,111,3,0],["ev_3d_modeling_6",9,0,0,1],["ev_3d_modeling_7",9,135,35,1],["ev_3d_modeling_8",9,157,1,1],["ev_3d_modeling_9",9,114,23,1],["ev_3d_modeling_10",9,26,8,0],["ev_3d_modeling_11",9,1,18,1],["ev_3d_modeling_12",9,40,13,1],["ev_3d_modeling_13",9,158,7,0],["ev_3d_modeling_14",9,3,4,1],["ev_3d_modeling_15",9,105,23,1],["ev_3d_modeling_16",9,45,18,0],["ev_3d_modeling_17",9,103,2,1],["ev_3d_modeling_18",9,30,24,0],["ev_3d_modeling_19",9,8,2,0],["ev_3d_modeling_20",9,24,15,1],["ev_3d_modeling_21",9,77,18,0],["ev_3d_modeling_22",9,4,9,0],["ev_3d_modeling_23",9,91,37,1],["ev_3d_modeling_24",9,127,23,0],["ev_3d_modeling_25",9,19,8,0],["ev_3d_modeling_26",9,42,21,1],["ev_3d_modeling_27",9,99,26,1],["ev_3d_modeling_28",9,67,18,0],["ev_3d_modeling_29",9,49,30,1],["ev_3d_modeling_30",9,69,15,1],["ev_3d_modeling_31",9,27,39,1],["ev_3d_modeling_32",9,56,7,1],["ev_nemotron_personas_0",10,2,23,1],["ev_nemotron_personas_1",10,39,7,1],["ev_nemotron_personas_2",10,46,31,0],["ev_nemotron_personas_3",10,85,1,1],["ev_nemotron_personas_4",10,19,30,1],["ev_nemotron_personas_5",10,29,26,1],["ev_nemotron_personas_6",10,21,32,0],["ev_nemotron_personas_7",10,0,13,0],["ev_nemotron_personas_8",10,222,6,1],["ev_nemotron_personas_9",10,151,13,1],["ev_nemotron_personas_10",10,90,39,1],["ev_nemotron_personas_11",10,10,12,0],["ev_nemotron_personas_12",10,32,32,1],["ev_nemotron_personas_13",10,0,2,1],["ev_nemotron_personas_14",10,1,18,1],["ev_nemotron_personas_15",10,25,31,1],["ev_nemotron_personas_16",10,71,13,1],["ev_nemotron_personas_17",10,1,1,0],["ev_nemotron_personas_18",10,156,32,0],["ev_nemotron_personas_19",10,18,29,0],["ev_nemotron_personas_20",10,53,39,1],["ev_nemotron_personas_21",10,18,28,0],["ev_nemotron_personas_22",10,21,11,1],["ev_nemotron_personas_23",10,52,38,1],["ev_nemotron_personas_24",10,78,33,1],["ev_nemotron_personas_25",10,3,5,0],["ev_nemotron_personas_26",10,122,25,1],["ev_nemotron_personas_27",10,202,10,0],["ev_nemotron_personas_28",10,7,10,0],["ev_nemotron_personas_29",10,13,35,1],["ev_nemotron_personas_30",10,21,35,1],["ev_nemotron_personas_31",10,7,39,1],["ev_nemotron_personas_32",10,38,19,1],["ev_nemotron_personas_33",10,21,30,0],["ev_nemotron_personas_34",10,100,7,1],["ev_nemotron_personas_35",10,33,1,1],["ev_nemotron_personas_36",10,80,27,1],["ev_nemotron_personas_37",10,137,18,0],["ev_nemotron_personas_38",10,0,19,1],["ev_nemotron_personas_39",10,174,37,0],["ev_nemotron_personas_40",10,66,27,1],["ev_nemotron_personas_41",10,154,23,1],["ev_nemotron_personas_42",10,25,24,0],["ev_nemotron_personas_43",10,89,2,1],["ev_nemotron_personas_44",10,7,39,1],["ev_nemotron_personas_45",10,89,22,0],["ev_nemotron_personas_46",10,135,19,1],["ev_nemotron_personas_47",10,34,31,1],["ev_nemotron_personas_48",10,11,6,1],["ev_nemotron_personas_49",10,77,33,0],["ev_nemotron_personas_50",10,103,2,0],["ev_nemotron_personas_51",10,76,5,1],["ev_nemotron_personas_52",10,7,11,1],["ev_revit_2026_sdk_0",11,20,3,1],["ev_revit_2026_sdk_1",11,115,31,1],["ev_revit_2026_sdk_2",11,19,14,1],["ev_revit_2026_sdk_3",11,4,8,0],["ev_revit_2026_sdk_4",11,16,0,1],["ev_revit_2026_sdk_5",11,174,5,1],["ev_revit_2026_sdk_6",11,8,12,1],["ev_revit_2026_sdk_7",11,15,38,1],["ev_revit_2026_sdk_8",11,18,37,1],["ev_revit_2026_sdk_9",11,90,3,1],["ev_revit_2026_sdk_10",11,124,39,1],["ev_revit_2026_sdk_11",11,47,5,1],["ev_revit_2026_sdk_12",11,24,8,1],["ev_revit_2026_sdk_13",11,80,17,0],["ev_revit_2026_sdk_14",11,17,36,0],["ev_revit_2026_sdk_15",11,22,15,1],["ev_revit_2026_sdk_16",11,23,21,1],["ev_revit_2026_sdk_17",11,71,33,1],["ev_revit_2026_sdk_18",11,23,28,1],["ev_revit_2026_sdk_19",11,99,23,1],["ev_revit_2026_sdk_20",11,161,10,0],["ev_revit_2026_sdk_21",11,148,25,1],["ev_revit_2026_sdk_22",11,5,1,1],["ev_revit_2026_sdk_23",11,56,33,1],["ev_revit_2026_sdk_24",11,156,34,0],["ev_opencrab_global_0",12,2,18,1],["ev_opencrab_global_1",12,6,5,1],["ev_opencrab_global_2",12,170,5,1],["ev_opencrab_global_3",12,38,8,1],["ev_opencrab_global_4",12,99,5,1],["ev_opencrab_global_5",12,153,6,1],["ev_opencrab_global_6",12,9,11,0],["ev_opencrab_global_7",12,75,26,1],["ev_opencrab_global_8",12,62,3,0],["ev_opencrab_global_9",12,16,10,0],["ev_opencrab_global_10",12,53,19,1],["ev_opencrab_global_11",12,82,16,1],["ev_opencrab_global_12",12,12,34,0],["ev_opencrab_global_13",12,194,15,1],["ev_opencrab_global_14",12,138,34,1],["ev_opencrab_global_15",12,84,13,1],["ev_opencrab_global_16",12,87,26,0],["ev_opencrab_global_17",12,114,35,1],["ev_opencrab_global_18",12,73,38,1],["ev_opencrab_global_19",12,3,16,0],["ev_opencrab_global_20",12,159,9,0],["ev_opencrab_global_21",12,91,37,0],["ev_opencrab_global_22",12,8,37,1],["ev_opencrab_global_23",12,75,3,0],["ev_opencrab_global_24",12,42,36,1],["ev_opencrab_global_25",12,107,23,0],["ev_opencrab_global_26",12,29,17,1],["ev_opencrab_global_27",12,14,0,1],["ev_opencrab_global_28",12,43,8,0],["ev_opencrab_global_29",12,22,2,1],["ev_opencrab_global_30",12,152,22,1],["ev_opencrab_global_31",12,175,38,1],["ev_opencrab_global_32",12,19,23,0],["ev_opencrab_global_33",12,12,11,1],["ev_opencrab_global_34",12,131,39,1],["ev_opencrab_global_35",12,60,10,1],["ev_opencrab_global_36",12,40,21,1],["ev_opencrab_global_37",12,63,19,1],["ev_opencrab_global_38",12,232,20,1],["ev_opencrab_global_39",12,16,38,0],["ev_opencrab_global_40",12,103,13,1],["ev_opencrab_global_41",12,28,2,1],["ev_opencrab_global_42",12,184,22,1],["ev_opencrab_global_43",12,18,5,1],["ev_opencrab_global_44",12,10,2,0],["ev_opencrab_global_45",12,8,1,1],["ev_opencrab_global_46",12,103,15,1],["ev_opencrab_global_47",12,106,18,0],["ev_opencrab_global_48",12,111,17,1],["ev_opencrab_global_49",12,33,16,1],["ev_opencrab_global_50",12,2,30,1],["ev_opencrab_global_51",12,100,25,1],["ev_opencrab_global_52",12,177,16,1],["ev_opencrab_global_53",12,51,37,1],["ev_opencrab_global_54",12,105,9,0],["ev_opencrab_global_55",12,72,0,0],["ev_clinical_guideline_0",13,36,16,1],["ev_clinical_guideline_1",13,19,21,0],["ev_clinical_guideline_2",13,46,25,1],["ev_clinical_guideline_3",13,15,4,1],["ev_clinical_guideline_4",13,128,20,1],["ev_clinical_guideline_5",13,98,22,1],["ev_clinical_guideline_6",13,5,29,0],["ev_clinical_guideline_7",13,57,8,1],["ev_clinical_guideline_8",13,78,22,0],["ev_clinical_guideline_9",13,203,11,1],["ev_clinical_guideline_10",13,16,35,1],["ev_clinical_guideline_11",13,64,11,1],["ev_clinical_guideline_12",13,2,7,1],["ev_clinical_guideline_13",13,44,4,0],["ev_clinical_guideline_14",13,33,38,1],["ev_clinical_guideline_15",13,11,38,1],["ev_clinical_guideline_16",13,50,30,1],["ev_clinical_guideline_17",13,30,20,0],["ev_clinical_guideline_18",13,50,33,0],["ev_clinical_guideline_19",13,54,21,1],["ev_clinical_guideline_20",13,7,29,0],["ev_clinical_guideline_21",13,115,2,1],["ev_clinical_guideline_22",13,64,18,1],["ev_clinical_guideline_23",13,23,0,0],["ev_clinical_guideline_24",13,53,16,1],["ev_clinical_guideline_25",13,29,24,1],["ev_clinical_guideline_26",13,2,7,1],["ev_clinical_guideline_27",13,1,10,1],["ev_clinical_guideline_28",13,93,4,0],["ev_clinical_guideline_29",13,0,18,1],["ev_clinical_guideline_30",13,9,25,1],["ev_clinical_guideline_31",13,58,25,1],["ev_clinical_guideline_32",13,59,9,1],["ev_clinical_guideline_33",13,62,23,1],["ev_clinical_guideline_34",13,9,38,0],["ev_clinical_guideline_35",13,0,19,0],["ev_clinical_guideline_36",13,61,28,1],["ev_clinical_guideline_37",13,81,36,1],["ev_clinical_guideline_38",13,27,3,1],["ev_clinical_guideline_39",13,67,36,1],["ev_clinical_guideline_40",13,104,29,1],["ev_clinical_guideline_41",13,86,25,0],["ev_clinical_guideline_42",13,2,11,0],["ev_clinical_guideline_43",13,42,10,1],["ev_clinical_guideline_44",13,81,13,1],["ev_clinical_guideline_45",13,115,21,1],["ev_clinical_guideline_46",13,65,14,1],["ev_clinical_guideline_47",13,138,6,1],["ev_clinical_guideline_48",13,12,12,1],["ev_clinical_guideline_49",13,21,37,1],["ev_clinical_guideline_50",13,14,39,1],["ev_clinical_guideline_51",13,18,36,1],["ev_clinical_guideline_52",13,223,5,1],["ev_clinical_guideline_53",13,120,20,1],["ev_clinical_guideline_54",13,144,21,1],["ev_insurance_claim_0",14,29,18,0],["ev_insurance_claim_1",14,50,24,1],["ev_insurance_claim_2",14,29,31,0],["ev_insurance_claim_3",14,9,8,0],["ev_insurance_claim_4",14,47,27,1],["ev_insurance_claim_5",14,252,35,1],["ev_insurance_claim_6",14,66,34,1],["ev_insurance_claim_7",14,142,24,0],["ev_insurance_claim_8",14,91,18,1],["ev_insurance_claim_9",14,42,32,1],["ev_insurance_claim_10",14,7,34,0],["ev_insurance_claim_11",14,17,10,1],["ev_insurance_claim_12",14,222,22,0],["ev_insurance_claim_13",14,73,14,0],["ev_insurance_claim_14",14,9,1,0],["ev_insurance_claim_15",14,63,31,1],["ev_insurance_claim_16",14,50,29,0],["ev_insurance_claim_17",14,48,21,1],["ev_insurance_claim_18",14,55,15,1],["ev_insurance_claim_19",14,37,17,0],["ev_insurance_claim_20",14,96,2,1],["ev_insurance_claim_21",14,137,35,1],["ev_insurance_claim_22",14,160,5,0],["ev_insurance_claim_23",14,156,18,1],["ev_insurance_claim_24",14,17,7,1],["ev_insurance_claim_25",14,119,29,0],["ev_insurance_claim_26",14,33,8,1],["ev_insurance_claim_27",14,22,31,0],["ev_insurance_claim_28",14,89,10,1],["ev_insurance_claim_29",14,4,25,1],["ev_insurance_claim_30",14,24,21,1],["ev_insurance_claim_31",14,95,34,0],["ev_insurance_claim_32",14,80,19,0],["ev_insurance_claim_33",14,58,1,1],["ev_insurance_claim_34",14,136,37,1],["ev_insurance_claim_35",14,59,39,0],["ev_insurance_claim_36",14,50,6,0],["ev_insurance_claim_37",14,139,9,1],["ev_insurance_claim_38",14,47,26,1],["ev_insurance_claim_39",14,77,12,1],["ev_insurance_claim_40",14,37,21,1],["ev_insurance_claim_41",14,35,27,0],["ev_insurance_claim_42",14,46,9,1],["ev_insurance_claim_43",14,24,32,0],["ev_insurance_claim_44",14,56,22,1],["ev_insurance_claim_45",14,50,13,0],["ev_insurance_claim_46",14,4,29,0],["ev_insurance_claim_47",14,85,30,1],["ev_insurance_claim_48",14,14,21,1],["ev_policy_drift_0",15,180,13,1],["ev_policy_drift_1",15,48,34,1],["ev_policy_drift_2",15,106,36,1],["ev_policy_drift_3",15,48,39,1],["ev_policy_drift_4",15,174,14,1],["ev_policy_drift_5",15,6,8,1],["ev_policy_drift_6",15,28,25,1],["ev_policy_drift_7",15,49,19,1],["ev_policy_drift_8",15,34,4,1],["ev_policy_drift_9",15,29,32,0],["ev_policy_drift_10",15,113,14,1],["ev_policy_drift_11",15,120,10,1],["ev_policy_drift_12",15,30,25,1],["ev_policy_drift_13",15,165,16,0],["ev_policy_drift_14",15,2,32,0],["ev_policy_drift_15",15,35,25,0],["ev_policy_drift_16",15,27,9,1],["ev_policy_drift_17",15,2,4,0],["ev_policy_drift_18",15,16,38,1],["ev_policy_drift_19",15,42,3,1],["ev_policy_drift_20",15,146,25,1],["ev_policy_drift_21",15,14,37,0],["ev_policy_drift_22",15,15,9,1],["ev_policy_drift_23",15,50,13,1],["ev_policy_drift_24",15,89,6,1],["ev_policy_drift_25",15,183,33,1],["ev_policy_drift_26",15,5,29,1],["ev_policy_drift_27",15,2,29,1],["ev_policy_drift_28",15,72,2,1],["ev_policy_drift_29",15,33,15,1],["ev_policy_drift_30",15,81,18,0],["ev_policy_drift_31",15,165,1,0],["ev_policy_drift_32",15,135,36,1],["ev_policy_drift_33",15,121,8,1],["ev_policy_drift_34",15,202,15,1],["ev_policy_drift_35",15,42,3,1],["ev_policy_drift_36",15,54,24,1],["ev_policy_drift_37",15,0,39,1],["ev_policy_drift_38",15,12,5,1],["ev_policy_drift_39",15,171,18,1],["ev_policy_drift_40",15,99,36,1],["ev_policy_drift_41",15,109,16,1],["ev_policy_drift_42",15,23,10,0],["ev_policy_drift_43",15,94,31,1],["ev_policy_drift_44",15,175,5,1],["ev_policy_drift_45",15,66,22,1],["ev_policy_drift_46",15,42,12,1],["ev_policy_drift_47",15,49,1,1],["ev_policy_drift_48",15,48,23,1],["ev_policy_drift_49",15,56,12,1],["ev_semiconductor_std_0",16,117,25,1],["ev_semiconductor_std_1",16,28,2,1],["ev_semiconductor_std_2",16,6,37,1],["ev_semiconductor_std_3",16,104,33,1],["ev_semiconductor_std_4",16,12,21,1],["ev_semiconductor_std_5",16,75,23,1],["ev_semiconductor_std_6",16,84,1,0],["ev_semiconductor_std_7",16,51,35,1],["ev_semiconductor_std_8",16,24,27,1],["ev_semiconductor_std_9",16,1,15,1],["ev_semiconductor_std_10",16,14,24,1],["ev_semiconductor_std_11",16,40,5,1],["ev_semiconductor_std_12",16,28,35,0],["ev_semiconductor_std_13",16,9,30,1],["ev_semiconductor_std_14",16,85,39,0],["ev_semiconductor_std_15",16,3,5,0],["ev_semiconductor_std_16",16,15,1,1],["ev_semiconductor_std_17",16,38,12,1],["ev_semiconductor_std_18",16,145,37,0],["ev_semiconductor_std_19",16,68,22,0],["ev_semiconductor_std_20",16,136,9,0],["ev_semiconductor_std_21",16,2,20,1],["ev_semiconductor_std_22",16,22,0,0],["ev_semiconductor_std_23",16,57,13,1],["ev_semiconductor_std_24",16,9,34,0],["ev_semiconductor_std_25",16,9,13,1],["ev_semiconductor_std_26",16,0,39,1],["ev_semiconductor_std_27",16,2,8,0],["ev_semiconductor_std_28",16,172,28,0],["ev_semiconductor_std_29",16,10,29,1],["ev_semiconductor_std_30",16,232,31,0],["ev_semiconductor_std_31",16,4,0,1],["ev_semiconductor_std_32",16,17,39,1],["ev_semiconductor_std_33",16,102,16,1],["ev_own_ontology_0",17,45,13,1],["ev_own_ontology_1",17,135,11,1],["ev_own_ontology_2",17,10,34,0],["ev_own_ontology_3",17,7,19,1],["ev_own_ontology_4",17,47,37,1],["ev_own_ontology_5",17,20,11,1],["ev_own_ontology_6",17,128,4,1],["ev_own_ontology_7",17,80,6,1],["ev_own_ontology_8",17,132,24,0],["ev_own_ontology_9",17,31,36,0],["ev_own_ontology_10",17,58,35,1],["ev_own_ontology_11",17,3,31,0],["ev_own_ontology_12",17,17,8,1],["ev_own_ontology_13",17,32,27,1],["ev_own_ontology_14",17,133,24,1],["ev_own_ontology_15",17,96,23,0],["ev_own_ontology_16",17,33,27,0],["ev_own_ontology_17",17,92,12,1],["ev_own_ontology_18",17,38,39,1],["ev_own_ontology_19",17,64,30,0],["ev_own_ontology_20",17,13,24,1],["ev_own_ontology_21",17,7,19,1],["ev_own_ontology_22",17,67,7,0],["ev_own_ontology_23",17,23,37,1],["ev_own_ontology_24",17,80,21,1],["ev_own_ontology_25",17,7,23,1],["ev_own_ontology_26",17,46,3,1],["ev_own_ontology_27",17,13,35,1],["ev_own_ontology_28",17,13,27,1],["ev_own_ontology_29",17,12,23,1],["ev_own_ontology_30",17,10,29,1],["ev_own_ontology_31",17,78,33,1],["ev_own_ontology_32",17,21,35,0],["ev_own_ontology_33",17,83,29,1],["ev_own_ontology_34",17,17,2,1],["ev_own_ontology_35",17,148,22,0],["ev_own_ontology_36",17,73,6,1],["ev_own_ontology_37",17,2,8,0],["ev_own_ontology_38",17,51,26,1],["ev_own_ontology_39",17,14,21,1],["ev_own_ontology_40",17,79,12,1],["ev_own_ontology_41",17,14,35,1],["ev_own_ontology_42",17,4,29,1],["ev_own_ontology_43",17,42,12,0],["ev_own_ontology_44",17,78,20,0],["ev_own_ontology_45",17,203,8,1],["ev_own_ontology_46",17,16,2,1],["ev_own_ontology_47",17,135,15,1],["ev_own_ontology_48",17,46,38,1],["ev_own_ontology_49",17,112,33,1],["kr_pending_0",-1,13,0,0],["kr_pending_1",-1,26,0,0],["kr_pending_2",-1,26,0,0],["kr_pending_3",-1,50,0,0],["kr_pending_4",-1,49,0,0],["kr_pending_5",-1,24,0,0],["kr_pending_6",-1,49,0,0],["kr_pending_7",-1,15,0,0],["kr_pending_8",-1,1,0,0],["kr_pending_9",-1,26,0,0],["kr_pending_10",-1,43,0,0],["kr_pending_11",-1,9,0,0],["kr_pending_12",-1,9,0,0],["kr_pending_13",-1,53,0,0],["kr_pending_14",-1,49,0,0],["kr_pending_15",-1,50,0,0],["kr_pending_16",-1,24,0,0],["kr_pending_17",-1,51,0,0],["kr_pending_18",-1,51,0,0],["kr_pending_19",-1,48,0,0],["kr_pending_20",-1,56,0,0],["kr_pending_21",-1,43,0,0],["kr_pending_22",-1,23,0,0],["kr_pending_23",-1,28,0,0],["kr_pending_24",-1,8,0,0],["kr_pending_25",-1,59,0,0],["kr_pending_26",-1,8,0,0],["kr_pending_27",-1,54,0,0],["kr_pending_28",-1,22,0,0],["kr_pending_29",-1,49,0,0],["kr_pending_30",-1,34,0,0],["kr_pending_31",-1,6,0,0],["kr_pending_32",-1,56,0,0],["kr_pending_33",-1,49,0,0],["kr_pending_34",-1,9,0,0],["kr_pending_35",-1,30,0,0],["kr_pending_36",-1,55,0,0],["kr_pending_37",-1,48,0,0],["kr_pending_38",-1,20,0,0],["kr_pending_39",-1,3,0,0],["kr_pending_40",-1,5,0,0],["kr_pending_41",-1,9,0,0],["kr_pending_42",-1,13,0,0],["kr_pending_43",-1,35,0,0],["kr_pending_44",-1,47,0,0],["kr_pending_45",-1,4,0,0],["kr_pending_46",-1,41,0,0],["kr_pending_47",-1,12,0,0],["kr_pending_48",-1,56,0,0],["kr_pending_49",-1,35,0,0],["kr_pending_50",-1,58,0,0],["kr_pending_51",-1,7,0,0],["kr_pending_52",-1,53,0,0],["kr_pending_53",-1,5,0,0],["kr_pending_54",-1,22,0,0],["kr_pending_55",-1,1,0,0],["kr_pending_56",-1,38,0,0],["kr_pending_57",-1,26,0,0],["kr_pending_58",-1,27,0,0],["kr_pending_59",-1,34,0,0],["kr_pending_60",-1,28,0,0],["kr_pending_61",-1,54,0,0],["kr_pending_62",-1,1,0,0],["kr_pending_63",-1,23,0,0],["kr_pending_64",-1,14,0,0],["kr_pending_65",-1,44,0,0],["kr_pending_66",-1,18,0,0],["kr_pending_67",-1,20,0,0],["kr_pending_68",-1,35,0,0],["kr_pending_69",-1,36,0,0],["kr_pending_70",-1,15,0,0],["kr_pending_71",-1,8,0,0],["kr_pending_72",-1,46,0,0],["kr_pending_73",-1,54,0,0],["kr_pending_74",-1,18,0,0],["kr_pending_75",-1,54,0,0],["kr_pending_76",-1,3,0,0],["kr_pending_77",-1,46,0,0],["kr_pending_78",-1,35,0,0],["kr_pending_79",-1,30,0,0],["kr_pending_80",-1,45,0,0],["kr_pending_81",-1,18,0,0],["kr_pending_82",-1,26,0,0],["kr_pending_83",-1,29,0,0],["kr_pending_84",-1,37,0,0],["kr_pending_85",-1,29,0,0],["kr_pending_86",-1,49,0,0],["kr_pending_87",-1,12,0,0],["kr_pending_88",-1,31,0,0],["kr_pending_89",-1,18,0,0],["kr_pending_90",-1,26,0,0],["kr_pending_91",-1,13,0,0],["kr_pending_92",-1,13,0,0],["kr_pending_93",-1,37,0,0],["kr_pending_94",-1,14,0,0],["kr_pending_95",-1,22,0,0],["kr_pending_96",-1,14,0,0],["kr_pending_97",-1,22,0,0],["kr_pending_98",-1,27,0,0],["kr_pending_99",-1,51,0,0],["kr_pending_100",-1,24,0,0],["kr_pending_101",-1,45,0,0],["kr_pending_102",-1,59,0,0],["kr_pending_103",-1,24,0,0],["kr_pending_104",-1,45,0,0],["kr_pending_105",-1,52,0,0],["kr_pending_106",-1,31,0,0],["kr_pending_107",-1,8,0,0],["kr_pending_108",-1,15,0,0],["kr_pending_109",-1,25,0,0],["kr_pending_110",-1,43,0,0],["kr_pending_111",-1,16,0,0],["kr_pending_112",-1,54,0,0],["kr_pending_113",-1,25,0,0],["kr_pending_114",-1,37,0,0],["kr_pending_115",-1,2,0,0],["kr_pending_116",-1,19,0,0],["kr_pending_117",-1,25,0,0],["kr_pending_118",-1,56,0,0],["kr_pending_119",-1,55,0,0],["kr_pending_120",-1,29,0,0],["kr_pending_121",-1,47,0,0],["kr_pending_122",-1,6,0,0],["kr_pending_123",-1,59,0,0],["kr_pending_124",-1,24,0,0],["kr_pending_125",-1,7,0,0],["kr_pending_126",-1,15,0,0],["kr_pending_127",-1,24,0,0],["kr_pending_128",-1,34,0,0],["kr_pending_129",-1,48,0,0],["kr_pending_130",-1,30,0,0],["kr_pending_131",-1,40,0,0],["kr_pending_132",-1,43,0,0],["kr_pending_133",-1,28,0,0],["kr_pending_134",-1,31,0,0],["kr_pending_135",-1,6,0,0],["kr_pending_136",-1,50,0,0],["kr_pending_137",-1,39,0,0],["kr_pending_138",-1,21,0,0],["kr_pending_139",-1,29,0,0]]};
+</script>
+<script>
+(function () {
+'use strict';
+const G = window.GALAXY;
+const C = Object.assign({
+  title: 'Galaxy', tag: 'BETA', subtitle: 'Network',
+  nodeLabel: 'NODE', hubLabel: 'HUB', orphanLabel: 'ORPHAN', otherLabel: 'OTHER',
+  valueLabel: 'Links', subValueLabel: 'Weight', flagLabel: 'Flag',
+  flagTrueText: 'yes', flagFalseText: 'none',
+  positive: '#35e0c2', negative: '#ff5c7f',
+  gaugeLabel: 'SCORE', coreToggleLabel: 'Core nodes', coreThreshold: 8,
+  legend: [], stats: [], footer: '', seed: 1337,
+  groupColors: ['#7c9cba','#c8956c','#8fb47a','#b48fc7','#ff8fa8','#52d8e8','#e8d27a','#9b8cff','#6cc8a0','#d88fb8'],
+}, G.config || {});
+document.title = C.title + ' — ' + C.subtitle;
+$('#brand').textContent = C.title;
+$('#brandTag').textContent = C.tag;
+$('#sublabel').textContent = C.subtitle;
+$('#bootTitle').innerHTML = '◈ ' + esc(C.title);
+$('#tgCoreLabel').textContent = C.coreToggleLabel;
+document.documentElement.style.setProperty('--pos', C.positive);
+document.documentElement.style.setProperty('--neg', C.negative);
+
+// ── utils ────────────────────────────────────────────
+function $(s){ return document.querySelector(s); }
+function fmt(n){ return Number(n).toLocaleString('en-US'); }
+function esc(s){ return String(s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+)); }
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(C.seed);
+const gauss = () => (rng() + rng() + rng() - 1.5) / 1.5;
+
+const groupColor = (gi) => (G.groups[gi] && G.groups[gi].color) || C.groupColors[gi % C.groupColors.length];
+const hubGroup = (hubIdx) => G.groups.findIndex((g) => g.hubs.includes(G.hubs[hubIdx].id));
+const hubById = (id) => G.hubs.find((h) => h.id === id);
+
+// ── state ────────────────────────────────────────────
+let scene, camera, renderer, controls, raycaster;
+const planets = [];
+const groupAnchors = [];
+let tablePoints = null, echoPoints = null;
+let nodeMeta = [];
+let valuesSorted = [];
+let activeGroup = -1;
+let coreMode = false, clustersOnly = false;
+let tour = { playing: false, t: 1, speed: 1, curve: null, names: [] };
+let hovered = null;
+const mouse = new THREE.Vector2(-2, -2);
+let mousePx = { x: 0, y: 0 };
+let camAnim = null;
+const overlay = $('#overlay');
+
+// ── boot ─────────────────────────────────────────────
+// init() is invoked at the very END of this IIFE — module-level let/const below
+// (texture caches, _v, lastHoverCheck) must be initialized first (TDZ).
+function init() {
+  buildHeader();
+  buildScene();
+  buildGalaxy();
+  bindUI();
+  animate();
+  flyTo(new THREE.Vector3(640, 360, 950), new THREE.Vector3(-160, -20, -80), 2600);
+  setTimeout(() => $('#boot').classList.add('hide'), 700);
+}
+
+// ── header/stats ─────────────────────────────────────
+function buildHeader() {
+  const st = $('#stats');
+  C.stats.forEach((s) => {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = '<b>' + esc(fmt(s.value)) + '</b><span>' + esc(s.label) + '</span>';
+    st.appendChild(d);
+  });
+  $('#ftMeta').textContent = C.footer;
+  const lg = $('#legend');
+  C.legend.forEach((l) => {
+    const sp = document.createElement('span');
+    sp.innerHTML = l; // trusted: comes from builder config, may contain <b>/<span class="up|dn">
+    lg.appendChild(sp);
+  });
+  const tabs = $('#tabs');
+  const mk = (label, idx) => {
+    const b = document.createElement('button');
+    b.className = 'tab' + (idx === -1 ? ' on' : '');
+    b.textContent = label;
+    b.addEventListener('click', () => selectGroup(idx, b));
+    tabs.appendChild(b);
+  };
+  mk('ALL', -1);
+  G.groups.forEach((g, i) => mk(g.name, i));
+  if (G.nodes.some((n) => n[1] < 0)) mk(C.otherLabel, -2);
+}
+
+function selectGroup(idx, btn) {
+  activeGroup = idx;
+  document.querySelectorAll('#tabs .tab').forEach((t) => t.classList.remove('on'));
+  btn.classList.add('on');
+  if (tablePoints) tablePoints.material.uniforms.uGroup.value = idx;
+  planets.forEach((p) => { p.dim = idx >= 0 && p.group !== idx; });
+  if (idx >= 0) {
+    const a = groupAnchors[idx];
+    flyTo(a.pos.clone().add(new THREE.Vector3(40, a.radius * 0.9, a.radius * 2.1)), a.pos.clone(), 1400);
+  } else if (idx === -2) {
+    flyTo(new THREE.Vector3(120, -180, 760), new THREE.Vector3(0, -60, 0), 1400);
+  } else {
+    flyTo(new THREE.Vector3(640, 360, 950), new THREE.Vector3(-160, -20, -80), 1400);
+  }
+}
+
+// ── scene ────────────────────────────────────────────
+function buildScene() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x000000, 0.00042);
+  camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 1, 9000);
+  camera.position.set(0, 900, 2600);
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 1);
+  $('#stage').appendChild(renderer.domElement);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.rotateSpeed = 0.5;
+  controls.zoomSpeed = 0.9;
+  controls.minDistance = 60;
+  controls.maxDistance = 3600;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.16;
+
+  raycaster = new THREE.Raycaster();
+  raycaster.params.Points = { threshold: 7 };
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    mousePx = { x: e.clientX, y: e.clientY };
+    mouse.x = (e.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  });
+  renderer.domElement.addEventListener('click', () => { if (hovered) openPanel(hovered); });
+}
+
+// ── layout ───────────────────────────────────────────
+function layoutGroups() {
+  const N = G.groups.length;
+  const out = [];
+  for (let i = 0; i < N; i++) {
+    const t = N === 1 ? 0.5 : i / (N - 1);
+    const x = (t - 0.5) * 2150;
+    const z = Math.sin(t * Math.PI * 1.7) * 300 + (i % 2 ? 150 : -150);
+    const y = Math.sin(t * Math.PI * 2.3) * 55;
+    const size = G.groups[i].hubs.reduce((s, id) => s + (hubById(id) ? hubById(id).size : 0), 0);
+    out.push({ pos: new THREE.Vector3(x, y, z), radius: 100 + Math.sqrt(size) * 3.4 });
+  }
+  return out;
+}
+
+// ── galaxy build ─────────────────────────────────────
+function buildGalaxy() {
+  const groupsL = layoutGroups();
+  const hubPos = {};
+
+  G.groups.forEach((g, gi) => {
+    const L = groupsL[gi];
+    const el = document.createElement('div');
+    el.className = 'clabel';
+    el.innerHTML = esc(g.name) + '<div class="rule"></div>';
+    overlay.appendChild(el);
+    groupAnchors.push({ group: gi, pos: L.pos.clone().add(new THREE.Vector3(0, L.radius * 0.42, 0)), radius: L.radius, labelEl: el, name: g.name });
+  });
+  if (G.nodes.some((n) => n[1] < 0)) {
+    const el = document.createElement('div');
+    el.className = 'clabel';
+    el.style.opacity = '.4';
+    el.innerHTML = esc(C.otherLabel) + '<div class="rule"></div>';
+    overlay.appendChild(el);
+    groupAnchors.push({ group: -2, pos: new THREE.Vector3(0, -170, -260), radius: 220, labelEl: el, name: C.otherLabel });
+  }
+
+  G.hubs.forEach((h, hi) => {
+    const gi = hubGroup(hi);
+    if (gi < 0) return;
+    const A = groupsL[gi];
+    const idxInGroup = G.groups[gi].hubs.indexOf(h.id);
+    const nIn = G.groups[gi].hubs.length;
+    const ang = (idxInGroup / nIn) * Math.PI * 2 + gi * 1.3;
+    const rad = nIn === 1 ? 0 : A.radius * (0.42 + 0.3 * ((idxInGroup % 2) ? 1 : 0.55));
+    const pos = new THREE.Vector3(
+      A.pos.x + Math.cos(ang) * rad,
+      A.pos.y + gauss() * 26,
+      A.pos.z + Math.sin(ang) * rad * 0.72
+    );
+    hubPos[h.id] = pos;
+    const r = 9 + Math.sqrt(h.size) * 0.95;
+    const mesh = makePlanet(pos, r, groupColor(gi), h.id);
+    const labelEl = makePlanetLabel(h);
+    planets.push({ mesh, hub: h, hubIdx: hi, group: gi, pos, r, labelEl, dim: false });
+  });
+
+  buildNodeParticles(hubPos);
+  buildDust(groupsL);
+  buildStreams(hubPos);
+  valuesSorted = G.nodes.map((n) => n[2]).sort((a, b) => a - b);
+}
+
+function makePlanet(pos, r, hex, code) {
+  const grp = new THREE.Group();
+  grp.position.copy(pos);
+  const mat = new THREE.MeshBasicMaterial({ map: planetTexture(hex, code) });
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(r, 36, 24), mat);
+  sphere.rotation.y = rng() * Math.PI;
+  grp.add(sphere);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex(new THREE.Color(hex)), transparent: true, opacity: 0.75,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.scale.setScalar(r * 5.2);
+  grp.add(glow);
+  const ringN = 220, rp = new Float32Array(ringN * 3);
+  const tilt = 0.42 + rng() * 0.3, yaw = rng() * Math.PI;
+  for (let i = 0; i < ringN; i++) {
+    const a = rng() * Math.PI * 2;
+    const rr = r * (1.55 + rng() * 0.75);
+    let x = Math.cos(a) * rr, y = (rng() - 0.5) * r * 0.06, z = Math.sin(a) * rr;
+    const y2 = y * Math.cos(tilt) - z * Math.sin(tilt);
+    const z2 = y * Math.sin(tilt) + z * Math.cos(tilt);
+    const x3 = x * Math.cos(yaw) - z2 * Math.sin(yaw);
+    const z3 = x * Math.sin(yaw) + z2 * Math.cos(yaw);
+    rp[i * 3] = x3; rp[i * 3 + 1] = y2; rp[i * 3 + 2] = z3;
+  }
+  const rg = new THREE.BufferGeometry();
+  rg.setAttribute('position', new THREE.BufferAttribute(rp, 3));
+  const ring = new THREE.Points(rg, new THREE.PointsMaterial({
+    color: 0xbfd2e6, size: 2.2, sizeAttenuation: true, transparent: true, opacity: 0.7,
+    map: dotTex(), blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  grp.add(ring);
+  scene.add(grp);
+  return { grp, sphere, glow };
+}
+
+function planetTexture(hex, code) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const col = new THREE.Color(hex);
+  const grad = g.createLinearGradient(0, 0, 256, 256);
+  grad.addColorStop(0, '#' + col.clone().multiplyScalar(1.05).getHexString());
+  grad.addColorStop(0.55, '#' + col.clone().multiplyScalar(0.5).getHexString());
+  grad.addColorStop(1, '#05070a');
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 22; i++) {
+    g.fillStyle = 'rgba(255,255,255,' + (0.02 + rng() * 0.05) + ')';
+    g.fillRect(0, rng() * 256, 256, 2 + rng() * 9);
+  }
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = 'rgba(0,0,0,' + (0.05 + rng() * 0.12) + ')';
+    g.beginPath(); g.arc(rng() * 256, rng() * 256, 3 + rng() * 16, 0, 7); g.fill();
+  }
+  g.font = '700 64px "Space Grotesk", sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(255,255,255,.16)';
+  g.fillText(String(code).slice(0, 6), 128, 132);
+  return new THREE.CanvasTexture(c);
+}
+
+let _dotTex = null, _radials = {};
+function dotTex() {
+  if (_dotTex) return _dotTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.4, 'rgba(255,255,255,.55)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  _dotTex = new THREE.CanvasTexture(c);
+  return _dotTex;
+}
+function radialTex(color) {
+  const key = color.getHexString();
+  if (_radials[key]) return _radials[key];
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const R = Math.round(color.r * 255), Gc = Math.round(color.g * 255), B = Math.round(color.b * 255);
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(' + R + ',' + Gc + ',' + B + ',.85)');
+  gr.addColorStop(0.35, 'rgba(' + R + ',' + Gc + ',' + B + ',.22)');
+  gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  _radials[key] = new THREE.CanvasTexture(c);
+  return _radials[key];
+}
+
+function makePlanetLabel(h) {
+  const el = document.createElement('div');
+  el.className = 'plabel';
+  const gaugePct = h.gaugePct != null ? h.gaugePct : null;
+  el.innerHTML =
+    (gaugePct != null
+      ? '<div class="gauge"><div class="pct">' + Math.round(gaugePct) + '%<span>' + esc(C.gaugeLabel) + '</span></div>' +
+        '<div class="bar" style="width:96px"><i style="width:' + Math.max(3, Math.min(100, gaugePct)) + '%"></i></div></div>'
+      : '') +
+    '<div class="nm"><span class="code">' + esc(h.id) + '</span>' + (h.name && h.name !== h.id ? ' · ' + esc(h.name) : '') + '</div>';
+  overlay.appendChild(el);
+  return el;
+}
+
+// ── node particles ───────────────────────────────────
+function buildNodeParticles(hubPos) {
+  const N = G.nodes.length;
+  const pos = new Float32Array(N * 3);
+  const col = new Float32Array(N * 3);
+  const size = new Float32Array(N);
+  const alpha = new Float32Array(N);
+  const grp = new Float32Array(N);
+  const core = new Float32Array(N);
+  const P = new THREE.Color(C.positive), PB = P.clone().offsetHSL(0.02, 0, 0.06), PC = P.clone().offsetHSL(-0.04, 0, -0.03);
+  const Q = new THREE.Color(C.negative), QB = Q.clone().offsetHSL(0.02, 0, 0.08), QC = Q.clone().offsetHSL(-0.02, 0, -0.02);
+  const bandLen = 2100;
+
+  nodeMeta = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const [id, hubIdx, value, sub, flag] = G.nodes[i];
+    let p, gi = -2;
+    if (hubIdx >= 0 && G.hubs[hubIdx]) {
+      const h = G.hubs[hubIdx];
+      gi = hubGroup(hubIdx);
+      const c = hubPos[h.id];
+      const pr = 9 + Math.sqrt(h.size) * 0.95;
+      const a = rng() * Math.PI * 2;
+      const rr = pr * 1.7 + Math.pow(rng(), 0.55) * (24 + Math.sqrt(h.size) * 3.1);
+      p = new THREE.Vector3(
+        c.x + Math.cos(a) * rr,
+        c.y + 3 + Math.abs(gauss()) * 17,
+        c.z + Math.sin(a) * rr * 0.78
+      );
+    } else {
+      const t = rng();
+      const bx = (t - 0.5) * bandLen;
+      const bz = Math.sin(t * Math.PI * 1.7) * 240 + gauss() * 180;
+      p = new THREE.Vector3(bx + gauss() * 110, -(6 + Math.abs(gauss()) * 30), bz + gauss() * 60);
+    }
+    pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+
+    const base = flag > 0 ? [P, PB, PC][Math.floor(rng() * 3)] : [Q, QB, QC][Math.floor(rng() * 3)];
+    const jit = 0.88 + rng() * 0.24;
+    col[i * 3] = Math.min(1, base.r * jit);
+    col[i * 3 + 1] = Math.min(1, base.g * jit);
+    col[i * 3 + 2] = Math.min(1, base.b * jit);
+
+    size[i] = 2.8 + Math.min(8, Math.sqrt(value) * 0.72) + (rng() < 0.05 ? 2.6 : 0);
+    alpha[i] = hubIdx >= 0 ? 0.98 : 0.6;
+    grp[i] = gi;
+    core[i] = value;
+    nodeMeta[i] = { id, hubIdx, value, sub, flag, pos: p };
+  }
+
+  // echo particles — activity density proportional to node value
+  const eArr = { pos: [], col: [], size: [], alpha: [], grp: [], refs: [] };
+  for (let i = 0; i < N; i++) {
+    const m = nodeMeta[i];
+    if (m.value <= 0) continue;
+    const eN = Math.max(2, Math.min(26, Math.round(m.value * 0.5)));
+    for (let e = 0; e < eN; e++) {
+      const a2 = rng() * Math.PI * 2;
+      const rr2 = 2.5 + Math.pow(rng(), 0.7) * 15;
+      eArr.pos.push(m.pos.x + Math.cos(a2) * rr2, m.pos.y + gauss() * 6, m.pos.z + Math.sin(a2) * rr2 * 0.8);
+      const ci = i * 3;
+      const cj = 0.75 + rng() * 0.45;
+      eArr.col.push(Math.min(1, col[ci] * cj), Math.min(1, col[ci + 1] * cj), Math.min(1, col[ci + 2] * cj));
+      eArr.size.push(1.1 + rng() * 1.7);
+      eArr.alpha.push(0.42 + rng() * 0.3);
+      eArr.grp.push(grp[i]);
+      eArr.refs.push(m.value);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
+  geo.setAttribute('aGroup', new THREE.BufferAttribute(grp, 1));
+  geo.setAttribute('aRefs', new THREE.BufferAttribute(core, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: {
+      uGroup: { value: -1 }, uCore: { value: 0 }, uCoreThresh: { value: C.coreThreshold },
+      uPx: { value: Math.min(devicePixelRatio, 2) }, uTime: { value: 0 },
+    },
+    vertexShader: [
+      'attribute vec3 aColor; attribute float aSize, aAlpha, aGroup, aRefs;',
+      'uniform float uGroup, uCore, uCoreThresh, uPx, uTime;',
+      'varying vec3 vColor; varying float vAlpha;',
+      'void main(){',
+      '  vColor = aColor;',
+      '  float a = aAlpha;',
+      '  if (uGroup > -0.5) { a *= (abs(aGroup - uGroup) < .5) ? 1.0 : 0.07; }',
+      '  else if (uGroup < -1.5) { a *= (aGroup < -1.5) ? 1.0 : 0.07; }',
+      '  float s = aSize;',
+      '  if (uCore > .5) {',
+      '    if (aRefs < uCoreThresh) { a *= 0.1; s *= 0.7; } else { s *= 1.35; a = min(1., a*1.2); }',
+      '  }',
+      '  a *= 0.82 + 0.18 * sin(uTime*1.7 + position.x*0.13 + position.z*0.09);',
+      '  vAlpha = a;',
+      '  vec4 mv = modelViewMatrix * vec4(position, 1.);',
+      '  gl_PointSize = clamp(s * uPx * (720.0 / -mv.z), 2.3 * uPx, 46.0);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}',
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vColor; varying float vAlpha;',
+      'void main(){',
+      '  vec2 uv = gl_PointCoord - .5;',
+      '  float d = length(uv);',
+      '  if (d > .5) discard;',
+      '  float glow = pow(smoothstep(.5, .0, d), 1.1);',
+      '  float core = smoothstep(.24, .0, d);',
+      '  gl_FragColor = vec4(vColor * (1.0 + core * 1.6), vAlpha * glow);',
+      '}',
+    ].join('\n'),
+  });
+  tablePoints = new THREE.Points(geo, mat);
+  scene.add(tablePoints);
+
+  const egeo = new THREE.BufferGeometry();
+  egeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(eArr.pos), 3));
+  egeo.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(eArr.col), 3));
+  egeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(eArr.size), 1));
+  egeo.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(eArr.alpha), 1));
+  egeo.setAttribute('aGroup', new THREE.BufferAttribute(new Float32Array(eArr.grp), 1));
+  egeo.setAttribute('aRefs', new THREE.BufferAttribute(new Float32Array(eArr.refs), 1));
+  echoPoints = new THREE.Points(egeo, mat);
+  scene.add(echoPoints);
+}
+
+// ── dust + nebulae ───────────────────────────────────
+function buildDust(groupsL) {
+  const N = 5200;
+  const pos = new Float32Array(N * 3);
+  const col = new Float32Array(N * 3);
+  const size = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    let p;
+    if (i < N * 0.62) {
+      const t = rng();
+      const x = (t - 0.5) * 2400;
+      const z = Math.sin(t * Math.PI * 1.7) * 240 + gauss() * 130;
+      p = new THREE.Vector3(x, gauss() * 70, z + gauss() * 90);
+    } else {
+      const A = groupsL[Math.floor(rng() * groupsL.length)];
+      p = new THREE.Vector3(
+        A.pos.x + gauss() * A.radius * 1.15,
+        A.pos.y + gauss() * 46,
+        A.pos.z + gauss() * A.radius * 0.85
+      );
+    }
+    pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+    const v = 0.5 + rng() * 0.45;
+    const warm = rng() < 0.12;
+    col[i * 3] = v; col[i * 3 + 1] = v * (warm ? 0.9 : 1); col[i * 3 + 2] = v * (warm ? 0.8 : 1.08);
+    size[i] = 1.0 + rng() * 2.6;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uPx: { value: Math.min(devicePixelRatio, 2) }, uMul: { value: 1 } },
+    vertexShader: [
+      'attribute vec3 aColor; attribute float aSize;',
+      'uniform float uPx; varying vec3 vC;',
+      'void main(){ vC = aColor;',
+      '  vec4 mv = modelViewMatrix * vec4(position,1.);',
+      '  gl_PointSize = clamp(aSize * uPx * (620.0 / -mv.z), 1.1 * uPx, 30.0);',
+      '  gl_Position = projectionMatrix * mv; }',
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vC; uniform float uMul;',
+      'void main(){ vec2 uv = gl_PointCoord - .5; float d = length(uv);',
+      '  if (d>.5) discard;',
+      '  gl_FragColor = vec4(vC, .34 * uMul * pow(smoothstep(.5,.0,d), 1.5)); }',
+    ].join('\n'),
+  });
+  scene.add(new THREE.Points(geo, mat));
+  window.__dustMat = mat;
+
+  const neb = [new THREE.Color('#8fb0d8'), new THREE.Color('#b48fc7'), new THREE.Color('#7fd8cc')];
+  for (let i = 0; i < 16; i++) {
+    const t = rng();
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialTex(neb[i % 3]), transparent: true, opacity: 0.05 + rng() * 0.05,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    sp.position.set((t - 0.5) * 2100 + gauss() * 160, gauss() * 90, Math.sin(t * Math.PI * 1.7) * 240 + gauss() * 140);
+    sp.scale.setScalar(300 + rng() * 480);
+    scene.add(sp);
+  }
+}
+
+// ── hub streams (deps) ───────────────────────────────
+function buildStreams(hubPos) {
+  const pts = [];
+  const drawn = new Set();
+  let maxW = 1;
+  G.hubs.forEach((h) => (h.deps || []).forEach(([, w]) => { if (w > maxW) maxW = w; }));
+  const minW = maxW * 0.15;
+  G.hubs.forEach((h) => {
+    (h.deps || []).slice(0, 2).forEach(([to, w]) => {
+      if (w < minW) return;
+      const key = [h.id, to].sort().join('|');
+      if (drawn.has(key)) return;
+      drawn.add(key);
+      const a = hubPos[h.id], b = hubPos[to];
+      if (!a || !b) return;
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      mid.y += 30 + Math.min(90, w * 0.3);
+      const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+      for (let i = 0; i <= 46; i++) {
+        const p = curve.getPoint(i / 46);
+        pts.push(p.x + gauss() * 3, p.y + gauss() * 3, p.z + gauss() * 3);
+      }
+    });
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0x9fb6cc, size: 1.7, sizeAttenuation: true, map: dotTex(),
+    transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false,
+  })));
+}
+
+// ── overlay projection ───────────────────────────────
+const _v = new THREE.Vector3();
+function project(p) {
+  _v.copy(p).project(camera);
+  if (_v.z > 1) return null;
+  return { x: (_v.x * 0.5 + 0.5) * innerWidth, y: (-_v.y * 0.5 + 0.5) * innerHeight };
+}
+function pxPerWorld(dist) {
+  return (innerHeight * 0.5) / (Math.tan((camera.fov * Math.PI) / 360) * dist);
+}
+function updateOverlays() {
+  const cp = camera.position;
+  groupAnchors.forEach((a) => {
+    const s = project(a.pos);
+    const el = a.labelEl;
+    if (!s) { el.style.display = 'none'; return; }
+    const dist = cp.distanceTo(a.pos);
+    const fs = Math.max(12, Math.min(96, pxPerWorld(dist) * a.radius * 0.3));
+    const fade = dist < a.radius * 1.1 ? Math.max(0, (dist - a.radius * 0.5) / (a.radius * 0.6)) : 1;
+    const dimmed = activeGroup >= 0 && a.group !== activeGroup && a.group !== -2 ? 0.12 : 1;
+    el.style.display = 'block';
+    el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
+    el.style.fontSize = fs + 'px';
+    el.style.opacity = (a.group === -2 ? 0.4 : 0.9) * fade * dimmed;
+  });
+  planets.forEach((P) => {
+    const el = P.labelEl;
+    const top = P.pos.clone(); top.y += P.r * 1.9;
+    const s = project(top);
+    if (!s) { el.style.display = 'none'; return; }
+    const dist = cp.distanceTo(P.pos);
+    const k = pxPerWorld(dist) * P.r;
+    if (k < 9 || dist > 2600) { el.style.display = 'none'; return; }
+    const dimmed = P.dim ? 0.08 : 1;
+    el.style.display = 'block';
+    el.style.left = s.x + 'px';
+    el.style.top = (s.y - k * 1.9) + 'px';
+    el.style.opacity = Math.min(1, (k - 9) / 14) * dimmed;
+    const pct = el.querySelector('.pct');
+    if (pct) {
+      pct.style.fontSize = Math.max(11, Math.min(24, k * 0.5)) + 'px';
+      el.querySelector('.bar').style.width = Math.max(64, Math.min(150, k * 2.6)) + 'px';
+    }
+    P.mesh.glow.material.opacity = 0.5 * dimmed;
+  });
+}
+
+// ── hover ────────────────────────────────────────────
+function pickHover() {
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = planets.map((p) => p.mesh.sphere);
+  const hitP = raycaster.intersectObjects(meshes, false)[0];
+  if (hitP) {
+    const P = planets.find((p) => p.mesh.sphere === hitP.object);
+    if (!P.dim) return { type: 'hub', hub: P.hub, group: P.group };
+  }
+  if (tablePoints && !clustersOnly) {
+    const hitT = raycaster.intersectObject(tablePoints, false)[0];
+    if (hitT && hitT.index != null) {
+      const t = nodeMeta[hitT.index];
+      if (activeGroup >= 0) {
+        const gi = t.hubIdx >= 0 ? hubGroup(t.hubIdx) : -2;
+        if (gi !== activeGroup) return null;
+      }
+      return { type: 'node', t };
+    }
+  }
+  return null;
+}
+
+function renderHover(h) {
+  const el = $('#hover');
+  if (!h) { el.classList.remove('show'); document.body.style.cursor = 'default'; return; }
+  document.body.style.cursor = 'pointer';
+  el.innerHTML = h.type === 'hub' ? hubHoverHTML(h.hub) : nodeHoverHTML(h.t);
+  el.classList.add('show');
+  const w = el.offsetWidth, hh = el.offsetHeight;
+  let x = mousePx.x + 16, y = mousePx.y + 14;
+  if (x + w > innerWidth - 12) x = mousePx.x - w - 14;
+  if (y + hh > innerHeight - 12) y = mousePx.y - hh - 12;
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+}
+
+function groupOfNode(t) {
+  if (t.hubIdx < 0) return null;
+  return G.groups[hubGroup(t.hubIdx)] || null;
+}
+
+function nodeHoverHTML(t) {
+  const g = groupOfNode(t);
+  const hub = t.hubIdx >= 0 ? G.hubs[t.hubIdx] : null;
+  return '<div class="kind">' + esc(C.nodeLabel) + ' · ' + (g ? esc(g.name) : esc(C.orphanLabel)) + '</div>' +
+    '<div class="name">' + esc(t.id) + '</div>' +
+    '<div class="row"><span>' + esc(C.hubLabel) + '</span><b>' + (hub ? esc(hub.id) + (hub.name && hub.name !== hub.id ? ' ' + esc(hub.name) : '') : '—') + '</b></div>' +
+    '<div class="row"><span>' + esc(C.subValueLabel) + '</span><b>' + fmt(t.sub) + '</b></div>' +
+    '<div class="row"><span>' + esc(C.valueLabel) + '</span><b class="' + (t.value > 0 ? 'pos' : 'neg') + '">' + (t.value > 0 ? '+' + fmt(t.value) : '0') + '</b></div>' +
+    '<div class="row"><span>' + esc(C.flagLabel) + '</span><b class="' + (t.flag > 0 ? 'pos' : 'neg') + '">' + (t.flag > 0 ? esc(C.flagTrueText).replace('{n}', t.flag) : esc(C.flagFalseText)) + '</b></div>';
+}
+
+function hubHoverHTML(h) {
+  const gi = G.groups.findIndex((g) => g.hubs.includes(h.id));
+  const g = G.groups[gi];
+  const hue = groupColor(gi);
+  let html = '<div class="kind">' + esc(C.hubLabel) + ' · ' + esc(g.name) + '</div>' +
+    '<div class="name">' + esc(h.id) + (h.name && h.name !== h.id ? ' · ' + esc(h.name) : '') + '</div>';
+  Object.entries(h.metrics || {}).forEach(([k, v]) => {
+    html += '<div class="row"><span>' + esc(k) + '</span><b>' + esc(typeof v === 'number' ? fmt(v) : v) + '</b></div>';
+  });
+  if (h.top && h.top.length) {
+    html += '<div class="sect"><div class="sh"><span>Top ' + esc(C.nodeLabel.toLowerCase()) + 's</span><span>' + h.top.length + '</span></div>';
+    h.top.slice(0, 5).forEach((tt) => {
+      html += '<div class="item"><div class="thumb" style="background:' + hue + '">•</div><div class="t">' + esc(tt.id) + '</div><span class="val">+' + fmt(tt.value) + '</span></div>';
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+// ── right panel ──────────────────────────────────────
+function percentile(v) {
+  let lo = 0, hi = valuesSorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (valuesSorted[mid] <= v) lo = mid + 1; else hi = mid; }
+  return Math.round((lo / valuesSorted.length) * 100);
+}
+
+function openPanel(h) {
+  $('#hover').classList.remove('show');
+  document.body.style.cursor = 'default';
+  const inner = $('#rpInner');
+  inner.innerHTML = h.type === 'hub' ? hubPanelHTML(h.hub) : nodePanelHTML(h.t);
+  $('#rpanel').classList.add('show');
+  $('#dimmer').classList.add('show');
+  inner.querySelectorAll('[data-goto]').forEach((el) => {
+    el.addEventListener('click', () => searchGoto(el.dataset.goto));
+  });
+  controls.autoRotate = false;
+}
+function closePanel() {
+  $('#rpanel').classList.remove('show');
+  $('#dimmer').classList.remove('show');
+  if (!tour.playing && tour.t >= 0.999 && !camAnim) controls.autoRotate = true;
+}
+
+function nodePanelHTML(t) {
+  const score = percentile(t.value);
+  const level = t.value === 0 ? 'LOW' : score >= 90 ? 'CORE' : score >= 60 ? 'HIGH' : 'MID';
+  const g = groupOfNode(t);
+  const hub = t.hubIdx >= 0 ? G.hubs[t.hubIdx] : null;
+  return '<div class="rp-head"><div>' +
+    '<div class="rp-badges"><span class="rp-badge ' + (level === 'CORE' || level === 'HIGH' ? 'hi' : '') + '">' + level + '</span><span class="rp-tag">◦ ' + esc(C.nodeLabel) + '</span></div>' +
+    '<div class="rp-id">' + esc(t.id) + '</div>' +
+    '<div class="rp-sub">' + esc(C.subValueLabel) + ' ' + fmt(t.sub) + '</div>' +
+    '<div class="rp-status"><span class="gd"></span>' + esc(C.valueLabel) + ' ' + fmt(t.value) + ' · ' + esc(C.flagLabel) + ' ' + (t.flag > 0 ? esc(C.flagTrueText).replace('{n}', t.flag) : esc(C.flagFalseText)) + '</div>' +
+    '</div><div class="rp-score"><b>' + score + '</b><span>CORE SCORE</span></div></div>' +
+    '<div class="rp-trio">' +
+    '<div class="cell"><div class="l">' + esc(C.subValueLabel) + '</div><div class="v">' + fmt(t.sub) + '</div></div>' +
+    '<div class="cell"><div class="l">' + esc(C.valueLabel) + '</div><div class="v teal">' + (t.value > 0 ? '+' + fmt(t.value) : '0') + '</div></div>' +
+    '<div class="cell"><div class="l">Percentile</div><div class="v">' + score + '</div></div>' +
+    '</div>' +
+    '<div class="rp-pill"><span class="pd"></span>' + (g ? esc(g.name) + (hub ? ' · ' + esc(hub.id) : '') : 'UNASSIGNED') + '</div>' +
+    '<div class="rp-big"><div class="l">' + esc(C.valueLabel) + '</div><div class="n">' + (t.value > 0 ? '+' + fmt(t.value) : '0') + '</div></div>';
+}
+
+function hubPanelHTML(h) {
+  const gi = G.groups.findIndex((g) => g.hubs.includes(h.id));
+  const g = G.groups[gi];
+  const hue = groupColor(gi);
+  const mEntries = Object.entries(h.metrics || {});
+  let html = '<div class="rp-head"><div>' +
+    '<div class="rp-badges"><span class="rp-badge hi">' + esc(C.hubLabel) + '</span><span class="rp-tag">◦ ' + esc(g.name) + '</span></div>' +
+    '<div class="rp-id">' + esc(h.id) + '</div>' +
+    '<div class="rp-sub">' + esc(h.name || '') + '</div>' +
+    '</div><div class="rp-score"><b>' + fmt(h.size) + '</b><span>' + esc(C.nodeLabel) + 'S</span></div></div>' +
+    '<div class="rp-trio">';
+  mEntries.slice(0, 3).forEach(([k, v], i) => {
+    html += '<div class="cell"><div class="l">' + esc(k) + '</div><div class="v' + (i === 1 ? ' teal' : '') + '">' + esc(typeof v === 'number' ? fmt(v) : v) + '</div></div>';
+  });
+  html += '</div>';
+  if (h.gaugePct != null) html += '<div class="rp-pill"><span class="pd"></span>' + Math.round(h.gaugePct) + '% ' + esc(C.gaugeLabel) + '</div>';
+  html += '<div class="rp-big"><div class="l">' + esc(C.nodeLabel) + ' footprint</div><div class="n">' + fmt(h.size) + '</div></div>';
+  if (h.top && h.top.length) {
+    html += '<div class="rp-sect"><div class="sh"><span>Top ' + esc(C.nodeLabel.toLowerCase()) + 's</span><span class="warn">by ' + esc(C.valueLabel.toLowerCase()) + '</span></div><div class="rp-list">';
+    h.top.forEach((tt) => {
+      html += '<button class="rp-item" data-goto="' + esc(tt.id) + '"><div class="av" style="background:' + hue + '">•</div><div class="nm">' + esc(tt.id) + '</div><div class="r g">+' + fmt(tt.value) + '</div></button>';
+    });
+    html += '</div></div>';
+  }
+  if (h.deps && h.deps.length) {
+    html += '<div class="rp-sect"><div class="sh"><span>' + esc(C.hubLabel) + ' links</span><span>shared</span></div><div class="rp-list">';
+    h.deps.forEach(([to, w]) => {
+      const gg = G.groups.findIndex((x) => x.hubs.includes(to));
+      html += '<div class="rp-item"><div class="av" style="background:' + (gg >= 0 ? groupColor(gg) : '#5b6472') + '">•</div><div class="nm">' + esc(to) + '</div><div class="r g">+' + fmt(w) + '</div></div>';
+    });
+    html += '</div></div>';
+  }
+  return html;
+}
+
+// ── UI bindings ──────────────────────────────────────
+function bindUI() {
+  $('#rpClose').addEventListener('click', closePanel);
+  $('#dimmer').addEventListener('click', closePanel);
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePanel();
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#searchInput').focus(); }
+  });
+  $('#tgCore').addEventListener('click', function () {
+    coreMode = !coreMode;
+    this.classList.toggle('on', coreMode);
+    this.querySelector('.state').textContent = coreMode ? 'ON' : 'OFF';
+    if (tablePoints) tablePoints.material.uniforms.uCore.value = coreMode ? 1 : 0;
+  });
+  $('#tgClusters').addEventListener('click', function () {
+    clustersOnly = !clustersOnly;
+    this.classList.toggle('on', clustersOnly);
+    this.querySelector('.state').textContent = clustersOnly ? 'ON' : 'OFF';
+    if (tablePoints) tablePoints.visible = !clustersOnly;
+    if (echoPoints) echoPoints.visible = !clustersOnly;
+    if (window.__dustMat) window.__dustMat.uniforms.uMul.value = clustersOnly ? 0.35 : 1;
+  });
+  document.querySelectorAll('.speed').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.speed').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      tour.speed = parseFloat(b.dataset.s);
+    });
+  });
+  $('#playbtn').addEventListener('click', toggleTour);
+  const tl = $('#timeline');
+  let dragging = false;
+  const setT = (e) => {
+    const r = tl.getBoundingClientRect();
+    tour.t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    tour.playing = false; camAnim = null; updatePlayIcon();
+    applyTour();
+  };
+  tl.addEventListener('pointerdown', (e) => { dragging = true; setT(e); tl.setPointerCapture(e.pointerId); });
+  tl.addEventListener('pointermove', (e) => dragging && setT(e));
+  tl.addEventListener('pointerup', () => (dragging = false));
+  $('#searchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') searchGoto(e.target.value.trim());
+  });
+}
+
+function searchGoto(q) {
+  if (!q) return;
+  const Q = q.toUpperCase();
+  const hi = G.hubs.findIndex((h) => h.id.toUpperCase() === Q);
+  if (hi >= 0) {
+    const P = planets.find((p) => p.hubIdx === hi);
+    if (P) {
+      flyTo(P.pos.clone().add(new THREE.Vector3(0, P.r * 2.4, P.r * 7.5)), P.pos.clone(), 1300);
+      openPanel({ type: 'hub', hub: P.hub });
+      return;
+    }
+  }
+  const ti = nodeMeta.findIndex((t) => String(t.id).toUpperCase() === Q);
+  if (ti >= 0) {
+    const t = nodeMeta[ti];
+    flyTo(t.pos.clone().add(new THREE.Vector3(8, 26, 90)), t.pos.clone(), 1300);
+    openPanel({ type: 'node', t });
+    return;
+  }
+  const inp = $('#searchInput');
+  inp.style.color = C.negative;
+  setTimeout(() => (inp.style.color = ''), 600);
+}
+
+// ── camera anim / tour ───────────────────────────────
+function flyTo(pos, target, dur) {
+  camAnim = {
+    fromP: camera.position.clone(), toP: pos,
+    fromT: controls.target.clone(), toT: target,
+    t0: performance.now(), dur,
+  };
+  controls.autoRotate = false;
+}
+function stepCamAnim(now) {
+  if (!camAnim) return;
+  const k = Math.min(1, (now - camAnim.t0) / camAnim.dur);
+  const e = 1 - Math.pow(1 - k, 3);
+  camera.position.lerpVectors(camAnim.fromP, camAnim.toP, e);
+  controls.target.lerpVectors(camAnim.fromT, camAnim.toT, e);
+  if (k >= 1) {
+    camAnim = null;
+    if (!tour.playing && tour.t >= 0.999 && !$('#rpanel').classList.contains('show')) controls.autoRotate = true;
+  }
+}
+function buildTourCurve() {
+  const pts = [new THREE.Vector3(-1350, 420, 1500)];
+  const names = ['OVERVIEW'];
+  groupAnchors.filter((a) => a.group >= 0).forEach((a) => {
+    pts.push(a.pos.clone().add(new THREE.Vector3(30, a.radius * 0.55, a.radius * 1.7)));
+    names.push(a.name);
+  });
+  pts.push(new THREE.Vector3(640, 360, 950));
+  names.push('LIVE');
+  tour.curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.4);
+  tour.names = names;
+}
+function toggleTour() {
+  if (!tour.curve) buildTourCurve();
+  if (tour.playing) { tour.playing = false; }
+  else {
+    if (tour.t >= 0.999) tour.t = 0;
+    tour.playing = true;
+    controls.autoRotate = false;
+  }
+  updatePlayIcon();
+}
+function updatePlayIcon() {
+  $('#playIco').innerHTML = tour.playing
+    ? '<path d="M1.5 1h2.6v8H1.5zM5.9 1h2.6v8H5.9z"/>'
+    : '<path d="M2 1l7 4-7 4z"/>';
+}
+function applyTour() {
+  if (!tour.curve) buildTourCurve();
+  const t = Math.min(0.9999, tour.t);
+  const p = tour.curve.getPoint(t);
+  const ahead = tour.curve.getPoint(Math.min(0.9999, t + 0.03));
+  camera.position.copy(p);
+  controls.target.lerp(ahead, 0.6);
+  const live = tour.t >= 0.999;
+  $('#livestat').classList.toggle('scrub', !live);
+  const ni = Math.min(tour.names.length - 1, Math.floor(t * (tour.names.length - 1) + 0.5));
+  $('#liveTxt').textContent = live ? 'LIVE' : tour.names[ni];
+  $('#tlFill').style.width = (tour.t * 100) + '%';
+  $('#tlKnob').style.left = (tour.t * 100) + '%';
+  controls.autoRotate = live && !tour.playing && !$('#rpanel').classList.contains('show');
+}
+
+// ── main loop ────────────────────────────────────────
+let lastHoverCheck = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  if (tablePoints) tablePoints.material.uniforms.uTime.value = now / 1000;
+  if (tour.playing) {
+    tour.t = Math.min(1, tour.t + (0.00006 * tour.speed) * 16.7);
+    applyTour();
+    if (tour.t >= 1) { tour.playing = false; updatePlayIcon(); applyTour(); }
+  } else {
+    stepCamAnim(now);
+  }
+  controls.update();
+  if (now - lastHoverCheck > 40 && !$('#rpanel').classList.contains('show')) {
+    lastHoverCheck = now;
+    hovered = pickHover();
+    renderHover(hovered);
+  }
+  updateOverlays();
+  renderer.render(scene, camera);
+}
+
+init();
+})();
+</script>
+
+<style id="bg-mode">
+  /* Background mode: hide interactive chrome, keep the orbiting galaxy + labels. */
+  #tabs, #search, #controls, #legend, #hovercard, #boot, .panel, .hovercard,
+  header, .logo, .livechip, .beta, .speed, .toggle { display: none !important; }
+  #stage { pointer-events: none !important; }
+  body { background: #05070d !important; }
+  /* labels a touch dimmer so hero copy stays dominant */
+  #overlay .l { opacity: 0.62; }
+</style>
+</body>
+</html>
