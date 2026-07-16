@@ -181,15 +181,23 @@ def test_codex_provider_rejects_invalid_reasoning_effort_before_subprocess(monke
         CodexProvider(settings).analyse_batch(["Acme shipped a platform."])
 
 
-def test_repository_codex_config_uses_single_model_with_graded_effort():
+def test_repository_codex_config_uses_graded_two_model_policy():
+    """Judgement/verification/reasoning stay on gpt-5.6-sol; only the bounded
+    generative deliberation model_type may use gpt-5.6-terra.
+
+    Rationale: the 2026-07-14 D2 live run deliberately routed beliefs/options/
+    scenarios to Terra while Sol kept critic/decision/verification
+    (experiments/opencrab_pack_decision/RESULTS.md). This supersedes the
+    2026-07-10 single-model policy commit 73e4a86.
+    """
     root = Path(__file__).parents[1]
     models = json.loads((root / ".codex-llm" / "models.json").read_text(encoding="utf-8"))
     pipeline = json.loads((root / ".codex-llm" / "pipeline.json").read_text(encoding="utf-8"))
 
-    assert {value for key, value in models.items() if not key.startswith("_")} == {"gpt-5.6-sol"}
-    assert models["_policy"] == (
-        "single-model policy: gpt-5.6-sol, graded by reasoning effort (user HARD rule 2026-07)"
-    )
+    routing = {key: value for key, value in models.items() if not key.startswith("_")}
+    assert set(routing.values()) <= {"gpt-5.6-sol", "gpt-5.6-terra"}
+    assert {key for key, value in routing.items() if value == "gpt-5.6-terra"} <= {"deliberation"}
+    assert models["_policy"].startswith("graded two-model policy: gpt-5.6-sol")
     assert {stage["name"]: stage["effort"] for stage in pipeline["stages"]} == {
         "extract": "medium",
         "stance_judge": "xhigh",
@@ -197,10 +205,18 @@ def test_repository_codex_config_uses_single_model_with_graded_effort():
         "merge_judge": "medium",
         "gold_label": "xhigh",
         "pack_answer": "medium",
+        "deliberation_beliefs": "high",
+        "deliberation_options": "high",
+        "deliberation_scenarios": "high",
+        "deliberation_critic": "high",
+        "deliberation_decision": "high",
     }
     assert next(stage for stage in pipeline["stages"] if stage["name"] == "pack_answer")[
         "model_type"
     ] == "reasoning"
+    for name in ("deliberation_critic", "deliberation_decision"):
+        stage = next(item for item in pipeline["stages"] if item["name"] == name)
+        assert stage["model_type"] == "reasoning", f"{name} must stay on the sol judgement tier"
 
 
 def test_codex_provider_raises_unavailable_after_repair_failure(monkeypatch, tmp_path):
