@@ -1072,6 +1072,8 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 profile=payload.profile,
             )
             session.commit()
+            # Post-commit flip scan owns its own commit; failures never affect install.
+            opencrab_packs.scan_installed_pack(session, result.pack_install_id)
         except opencrab_packs.PackValidationError as exc:
             session.rollback()
             raise HTTPException(

@@ -868,40 +868,39 @@ def install_pack(
         )
 
     session.flush()
-    # Install admission is complete. Commit first so flip scan is post-commit:
-    # scan runs in a separate transaction and cannot roll back install rows.
-    install_id = install.id
-    install_status = install.status
-    install_pack_id = install.pack_id
-    install_declared = install.declared_version
-    install_digest = install.source_digest
-    install_uri = install.storage_uri
-    session.commit()
+    # Admission stays flush-only: the caller owns the transaction and commit.
+    # The caller runs the post-commit flip scan (see scan_installed_pack) so this
+    # function never commits an arbitrary shared caller session, which would
+    # otherwise persist unrelated pending rows the caller had not committed.
+    return PackInstallResult(
+        status=install.status,
+        pack_id=install.pack_id,
+        declared_version=install.declared_version,
+        source_digest=install.source_digest,
+        pack_install_id=install.id,
+        noop=False,
+        storage_uri=install.storage_uri,
+        admission_report=admission_report,
+    )
 
-    # Post-commit, hard-bounded scan: failures/latency never affect install result.
+
+def scan_installed_pack(session: Session, pack_install_id: int) -> None:
+    """Post-commit flip-condition scan for a freshly installed Pack.
+
+    Callers invoke this AFTER committing the install so the deterministic scan
+    runs against durable evidence. Scan failures never affect admission; the
+    caller's install result is already committed and returned.
+    """
     from openoyster.services.flip_monitoring import safe_scan_pack_install
 
-    safe_scan_pack_install(session, install_id)
-    # Persist scan side-effects (triggers/events) when present; install is already durable.
     try:
+        safe_scan_pack_install(session, pack_install_id)
         session.commit()
     except Exception:
         session.rollback()
-        # Install remains committed; scan side-effects are best-effort.
         logger.exception(
-            "flip scan commit failed after install pack_install_id=%s", install_id
+            "flip scan failed after install pack_install_id=%s", pack_install_id
         )
-
-    return PackInstallResult(
-        status=install_status,
-        pack_id=install_pack_id,
-        declared_version=install_declared,
-        source_digest=install_digest,
-        pack_install_id=install_id,
-        noop=False,
-        storage_uri=install_uri,
-        admission_report=admission_report,
-    )
 
 
 def list_active_installs(session: Session) -> list[PackInstall]:

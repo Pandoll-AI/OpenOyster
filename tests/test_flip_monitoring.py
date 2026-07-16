@@ -68,6 +68,8 @@ def _install_fixture(
         profile="compatible",
     )
     session.commit()
+    # Caller owns the post-commit flip scan (install_pack no longer scans).
+    opencrab_packs.scan_installed_pack(session, result.pack_install_id)
     install = session.get(PackInstall, result.pack_install_id)
     assert install is not None
     return install
@@ -561,7 +563,7 @@ def test_install_pack_succeeds_when_flip_scan_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#6 RED/GREEN: scan exception must not abort Pack admission (post-commit)."""
+    """#6 RED/GREEN: a scan exception must not abort Pack admission (post-commit)."""
 
     def _boom(*_args: Any, **_kwargs: Any) -> list[Any]:
         raise RuntimeError("simulated flip scan failure")
@@ -581,14 +583,46 @@ def test_install_pack_succeeds_when_flip_scan_raises(
             workspace=temp_settings.workspace,
             profile="compatible",
         )
-        # install_pack commits admission before scan; install is durable even if
-        # the outer session later rolls back.
-        session.rollback()
+        # Caller owns the commit; the post-commit scan isolates its own failure.
+        session.commit()
+        opencrab_packs.scan_installed_pack(session, result.pack_install_id)
         assert result.noop is False
         assert result.pack_install_id is not None
         install = session.get(PackInstall, result.pack_install_id)
         assert install is not None
         assert install.status == "active"
+
+
+def test_install_pack_does_not_commit_caller_session(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """Regression: install_pack must not commit unrelated pending caller rows."""
+    from openoyster.models import SystemState
+
+    with session_factory() as session:
+        marker = SystemState(key="rw5_marker", value_json={"unrelated": True})
+        session.add(marker)
+
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "install-tx-iso")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.install-tx-iso"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+        opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        # install_pack only flushed; rolling back must drop the unrelated marker
+        # (and the not-yet-committed admission).
+        session.rollback()
+
+    with session_factory() as session:
+        assert session.get(SystemState, "rw5_marker") is None
 
 
 def test_load_evidence_bounded_uses_sql_limit(

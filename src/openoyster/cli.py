@@ -933,6 +933,8 @@ def pack_install(
                 profile=profile,
             )
             session.commit()
+            # Post-commit flip scan owns its own commit; failures never affect install.
+            opencrab_packs.scan_installed_pack(session, result.pack_install_id)
         except opencrab_packs.PackValidationError as exc:
             session.rollback()
             _print_pack_json(
