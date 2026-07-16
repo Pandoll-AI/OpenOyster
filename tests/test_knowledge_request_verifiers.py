@@ -2,11 +2,51 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openoyster.services.cognitive_transition import _verify_claimed_requests
 from openoyster.services.knowledge_request_verifiers import (
+    BUILTIN_VERIFIERS,
+    SemanticRelevanceVerifier,
     select_verifier,
     verify_claimed_requests,
 )
+
+
+class _RelatedProvider:
+    """Minimal LLMProvider double for semantic relevance tests."""
+
+    name = "test-related"
+
+    def __init__(self, *, related: bool | None = True, error: Exception | None = None) -> None:
+        self.related = related
+        self.error = error
+        self.calls: list[tuple[str, str]] = []
+
+    def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[Any]:
+        del texts, policy
+        raise NotImplementedError
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        self.calls.append((prompt, stage))
+        if self.error is not None:
+            raise self.error
+        if self.related is None:
+            return {"not_related_key": True}  # non-conforming JSON shape
+        return {"related": self.related, "reason": "stub"}
+
+
+_NO_EVIDENCE_REQ = {
+    "local_key": "kr_no_evidence",
+    "question": "What is the field recovery time SLA?",
+    "gap_ref": "evidence:no_evidence",
+    "priority": "critical",
+}
+
+_EVIDENCE_TEXTS = {
+    "ev-a": "Field recovery time SLA is 4 hours for severity-1 incidents.",
+    "ev-b": "Backup pack mentions inventory only.",
+}
 
 
 def test_fallback_claimed_critic_gap_is_honestly_none_available() -> None:
@@ -148,3 +188,112 @@ def test_select_verifier_prefers_specialized_over_fallback() -> None:
     other = {"gap_ref": "options"}
     assert select_verifier(no_evidence).method_id == "added_cited_evidence_v1"
     assert select_verifier(other).method_id == "none_available_v1"
+
+
+def test_provider_none_does_not_apply_semantic_relevance() -> None:
+    """(a) provider=None keeps AddedCitedEvidenceV1 path; result unchanged."""
+    # BUILTIN must not include SemanticRelevanceVerifier.
+    assert not any(isinstance(v, SemanticRelevanceVerifier) for v in BUILTIN_VERIFIERS)
+
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-a", "ev-b"],
+        child_cited_evidence_ids={"ev-a", "ev-b"},
+        provider=None,
+        evidence_text_by_id=_EVIDENCE_TEXTS,
+    )
+    assert unverified == []
+    assert verified[0]["status"] == "verified_fulfilled"
+    assert verified[0]["verification_method"] == "added_cited_evidence_v1"
+    assert verified[0]["verification_evidence_ids"] == ["ev-a", "ev-b"]
+
+
+def test_semantic_relevance_related_true_verifies() -> None:
+    """(b) provider + related=true → verified_fulfilled(semantic_relevance_v1)."""
+    provider = _RelatedProvider(related=True)
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-a", "ev-uncited"],
+        child_cited_evidence_ids={"ev-a"},
+        provider=provider,
+        evidence_text_by_id=_EVIDENCE_TEXTS,
+    )
+    assert unverified == []
+    assert verified[0]["status"] == "verified_fulfilled"
+    assert verified[0]["verification_method"] == "semantic_relevance_v1"
+    assert verified[0]["verification_evidence_ids"] == ["ev-a"]
+    assert len(provider.calls) == 1
+    assert provider.calls[0][1] == "kr_semantic"
+
+
+def test_semantic_relevance_related_false_unverified() -> None:
+    """(c) related=false → claimed_unverified (no promotion)."""
+    provider = _RelatedProvider(related=False)
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-a"],
+        child_cited_evidence_ids={"ev-a"},
+        provider=provider,
+        evidence_text_by_id=_EVIDENCE_TEXTS,
+    )
+    assert verified == []
+    assert unverified[0]["status"] == "claimed_unverified"
+    assert unverified[0]["verification_method"] == "semantic_relevance_v1"
+    assert unverified[0]["verification_evidence_ids"] == []
+
+
+def test_semantic_relevance_provider_exception_not_promoted() -> None:
+    """(d) provider exception → claimed_unverified; run does not raise."""
+    provider = _RelatedProvider(error=RuntimeError("model down"))
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-a"],
+        child_cited_evidence_ids={"ev-a"},
+        provider=provider,
+        evidence_text_by_id=_EVIDENCE_TEXTS,
+    )
+    assert verified == []
+    assert unverified[0]["status"] == "claimed_unverified"
+    assert unverified[0]["verification_method"] == "semantic_relevance_v1"
+
+
+def test_semantic_relevance_empty_intersection_skips_provider() -> None:
+    """(e) empty added∩child_cited → claimed_unverified even with provider."""
+    provider = _RelatedProvider(related=True)
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-uncited"],
+        child_cited_evidence_ids=set(),
+        provider=provider,
+        evidence_text_by_id=_EVIDENCE_TEXTS,
+    )
+    assert verified == []
+    assert unverified[0]["status"] == "claimed_unverified"
+    assert provider.calls == []
+
+
+def test_semantic_relevance_missing_evidence_text_unverified() -> None:
+    """Missing text in evidence_text_by_id → conservative claimed_unverified."""
+    provider = _RelatedProvider(related=True)
+    requests = [dict(_NO_EVIDENCE_REQ)]
+    _, verified, unverified, _ = verify_claimed_requests(
+        requests,
+        claimed_keys={"kr_no_evidence"},
+        added_evidence_ids=["ev-missing"],
+        child_cited_evidence_ids={"ev-missing"},
+        provider=provider,
+        evidence_text_by_id={},  # no text available
+    )
+    assert verified == []
+    assert unverified[0]["status"] == "claimed_unverified"
+    assert provider.calls == []

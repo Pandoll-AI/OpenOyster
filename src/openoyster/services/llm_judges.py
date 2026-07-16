@@ -122,6 +122,8 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_deliberation_decision(prompt)
         case "flip_confirm":
             return _stub_flip_confirm(prompt)
+        case "kr_semantic":
+            return _stub_kr_semantic(prompt)
         case _:
             raise ExtractionUnavailable(f"stub does not implement JSON stage: {stage}")
 
@@ -406,6 +408,17 @@ def _stub_flip_confirm(prompt: str) -> dict[str, Any]:
     if len(quote.strip()) < MIN_QUOTE_CHARS:
         return {"related": False, "quote": None}
     return {"related": True, "quote": quote}
+
+
+def _stub_kr_semantic(prompt: str) -> dict[str, Any]:
+    """Deterministic KR semantic-relevance stub (related=true by default).
+
+    Force unrelated with ``KR_SEMANTIC_UNRELATED`` in the prompt body.
+    Real independence is only meaningful with claude-cli; stub is self-consistency.
+    """
+    if "KR_SEMANTIC_UNRELATED" in prompt:
+        return {"related": False, "reason": "stub_unrelated"}
+    return {"related": True, "reason": "stub_related"}
 
 
 def _stub_pack_answer(prompt: str) -> dict[str, Any]:

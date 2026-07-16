@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Collection
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from openoyster.config import get_settings
 from openoyster.deliberation_contracts import payload_digest
+from openoyster.llm import critic2_provider_from_settings
 from openoyster.models import (
     DeliberationArtifact,
     DeliberationAssertion,
@@ -17,6 +20,9 @@ from openoyster.models import (
     DeliberationRun,
 )
 from openoyster.services.knowledge_request_verifiers import verify_claimed_requests
+
+if TYPE_CHECKING:
+    from openoyster.llm import LLMProvider
 
 METHOD = "cognitive_transition_v2"
 
@@ -122,12 +128,39 @@ def _merge_knowledge_requests(*groups: list[dict[str, Any]]) -> list[dict[str, A
     return list(merged.values())
 
 
+def _evidence_text_by_ids(
+    session: Session,
+    run_id: int,
+    evidence_ids: Collection[str],
+) -> dict[str, str]:
+    """Map global_evidence_id → prompt-visible text for the child run snapshots."""
+    ids = [eid for eid in evidence_ids if isinstance(eid, str) and eid]
+    if not ids:
+        return {}
+    rows = session.scalars(
+        select(DeliberationEvidenceSnapshot).where(
+            DeliberationEvidenceSnapshot.run_id == run_id,
+            DeliberationEvidenceSnapshot.global_evidence_id.in_(ids),
+        )
+    ).all()
+    out: dict[str, str] = {}
+    for row in rows:
+        payload = row.prompt_visible_payload_json or {}
+        text = payload.get("text") if isinstance(payload, dict) else None
+        if isinstance(text, str) and text.strip():
+            # First non-empty text wins if multiple snapshots share an id.
+            out.setdefault(row.global_evidence_id, text)
+    return out
+
+
 def _verify_claimed_requests(
     requests: list[dict[str, Any]],
     *,
     claimed_keys: set[str],
     added_evidence_ids: list[str],
     child_cited_evidence_ids: set[str] | None = None,
+    provider: LLMProvider | None = None,
+    evidence_text_by_id: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Delegate claimed-KR verification to the type-specific registry."""
     return verify_claimed_requests(
@@ -135,6 +168,8 @@ def _verify_claimed_requests(
         claimed_keys=claimed_keys,
         added_evidence_ids=added_evidence_ids,
         child_cited_evidence_ids=child_cited_evidence_ids or set(),
+        provider=provider,
+        evidence_text_by_id=evidence_text_by_id,
     )
 
 
@@ -162,11 +197,19 @@ def build_cognitive_transition_payload(
     # Child-cited global evidence ids (belief/assertion citations only).
     child_evidence = _used_global_evidence_ids(session, child_run.id)
     added_evidence = sorted(set(child_evidence) - set(parent_evidence))
+    # Optional semantic gate: only when critic2 is configured (default off).
+    provider = critic2_provider_from_settings(get_settings())
+    evidence_text_by_id: dict[str, str] | None = None
+    if provider is not None:
+        # added_evidence is already child-cited minus parent-cited (intersection).
+        evidence_text_by_id = _evidence_text_by_ids(session, child_run.id, added_evidence)
     claimed, verified, unverified, unclaimed = _verify_claimed_requests(
         parent_knowledge_requests,
         claimed_keys=fulfilled_knowledge_request_keys,
         added_evidence_ids=added_evidence,
         child_cited_evidence_ids=set(child_evidence),
+        provider=provider,
+        evidence_text_by_id=evidence_text_by_id,
     )
     # remaining = unverified claimed + unclaimed parent (as-is) + child requests
     remaining = _merge_knowledge_requests(
