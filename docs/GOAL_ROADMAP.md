@@ -1,352 +1,168 @@
 # OpenOyster 목표 지향 로드맵
 
-> 목표부터 읽는 로드맵입니다. 이 문서는 현재 코드 구조 설명이 아니라, OpenOyster가 어떤 사용자 가치를 향해 가야 하는지 정의합니다.
+> 목표부터 읽는 로드맵입니다. 현재 코드 구조 설명이 아니라, OpenOyster가 어떤 사용자
+> 가치를 향해 가야 하는지 정의합니다.
+>
+> 2026-07-16 개정: 초판(수집·이해·가설 중심)은 Pack-only 숙의로 재포지셔닝되기 전의
+> 런타임을 전제로 작성됐습니다. 이 개정판은 숙의 수명주기를 중심으로 다시 씁니다.
+> 수집·구조화·Pack 생성은 OpenCrab의 책임입니다.
 
 ## 1. 최종 목표
 
-OpenOyster의 최종 목표는 정보를 많이 모으는 앱이 아니다.
+OpenOyster의 최종 목표는 좋은 답을 빨리 주는 앱이 아니다.
 
-**OpenOyster는 흩어진 정보 흐름을 지속적으로 관찰하고, 중요한 변화 신호를 찾아, 검증 가능한 가설·근거·반대근거·의사결정 산출물로 전환하는 오픈소스 Evidence-to-Decision OS가 되는 것을 목표로 한다.**
+**OpenOyster는 틀릴 수 있는 판단을 책임질 수 있게 만드는 오픈소스 판단 수명주기
+시스템(decision lifecycle system)이 되는 것을 목표로 한다.**
 
-사용자는 OpenOyster를 통해 더 빨리 읽고, 더 깊게 의심하고, 더 투명하게 판단하며, 시간이 지날수록 자신의 판단 체계를 개선할 수 있어야 한다.
+판단은 이벤트가 아니라 수명주기다.
 
-## 2. 제품 정체성
+```text
+숙의 → 결정 또는 기권
+        → (기권) 표적 지식 요청 → 새 Pack → 재숙의
+        → (결정) 전환 조건 감시 → 결과 기록 → 보정
+```
 
-OpenOyster는 다음 중간 지점을 지향한다.
+사용자는 OpenOyster를 통해 근거 없이 확신하지 않고, 반대근거를 빠뜨리지 않고,
+왜 그렇게 판단했는지 증명할 수 있고, 세상이 바뀌면 다시 판단하라는 신호를 받고,
+시간이 지나면 자신의 판단력이 나아지는지 측정할 수 있어야 한다.
 
-- Research assistant보다 깊다.
-- Autonomous agent보다 안전하다.
-- BI dashboard보다 해석적이다.
-- RAG chatbot보다 추적 가능하다.
-- Workflow automation보다 판단 중심이다.
+## 2. 사용자와 해결하는 고통
 
-제품 포지션:
+대상 사용자는 결정의 결과를 감당해야 하는 사람이다 — 전략·기획 담당자, 리서처,
+기술을 선택하는 빌더, 소규모 팀의 의사결정자.
 
-> **Evidence-to-Decision OS**
->
-> 흩어진 자료를 판단 가능한 가설, 근거, 반대근거, 결정 산출물로 바꾸는 인텔리전스 런타임.
+세 가지 적을 상대한다.
 
-피해야 할 포지션:
+1. **자신감 있는 오답** — 모델은 근거 없이도 확신에 차서 말한다.
+2. **확증편향** — 아무도 반대근거를 찾아주지 않는다.
+3. **판단의 휘발** — 결정의 이유와 전복 조건이 결정 직후 사라지고, 세상이 바뀌어도
+   아무도 그 결정을 다시 보지 않는다.
 
-- 범용 챗봇.
-- 요약봇.
-- 자동 에이전트 프레임워크.
-- 단순 RAG 검색 UI.
-- 예쁜 대시보드 우선 제품.
-- 승인 없는 외부 action executor.
+사용자의 다섯 가지 일(jobs)을 기준으로 모든 기능을 판정한다.
 
-## 3. 핵심 사용자 가치
+- J1 지금 이 근거로 결정해도 되는가, 더 알아봐야 하는가?
+- J2 내가 무엇을 모르는지 구체적으로 알려달라.
+- J3 결정 후에도 이 결정이 유효한지 지켜봐 달라.
+- J4 나중에 왜 그렇게 결정했는지 증명하게 해달라.
+- J5 내 판단력이 나아지고 있는지 알려달라.
 
-### 개인 리서처
+## 3. 제품 정체성
 
-사용자 목표:
+- OpenCrab이 지식을 만들고(수집·구조화·검증·Pack), OpenOyster는 그 지식으로
+  생각하고 결정한다. 사실 입력은 설치된 OpenCrab Pack뿐이다.
+- RAG 챗봇보다 추적 가능하고, 자율 에이전트보다 안전하며, 리서치 어시스턴트보다
+  판단 중심이다.
+- 기권은 실패가 아니라 1급 결과다. 근거가 부족하면 모델을 부르지 않고도 기권한다.
+- 산출물은 채팅 답변이 아니라 Decision Dossier와 그 수명주기 기록이다.
 
-- 읽어야 할 자료를 줄인다.
-- 중요한 신호와 반대근거를 놓치지 않는다.
-- 가설 중심 리서치 노트를 만든다.
-
-성공 경험:
-
-> “자료 더미가 아니라 검토할 가설 목록이 생겼다.”
-
-### 전략/기획 담당자
-
-사용자 목표:
-
-- 시장, 정책, 기술 변화에서 의사결정 신호를 빠르게 찾는다.
-- 경영진이나 팀에 근거 있는 memo를 제공한다.
-- 과거 판단의 근거와 결과를 추적한다.
-
-성공 경험:
-
-> “회의 전에 핵심 가설, 근거, 반대근거, 결정 포인트가 이미 정리돼 있다.”
-
-### 엔지니어/오픈소스 빌더
-
-사용자 목표:
-
-- agent 시스템을 만들 때 durable state, event log, retry, evaluation을 처음부터 갖춘다.
-- LLM workflow를 운영 가능한 구조로 확장한다.
-
-성공 경험:
-
-> “데모가 아니라 운영 가능한 agent runtime의 뼈대를 얻었다.”
-
-### 팀/조직
-
-사용자 목표:
-
-- 팀의 정보 흐름을 공유 intelligence memory로 만든다.
-- 누가 어떤 판단을 왜 했는지 추적한다.
-- AI 산출물을 검토, 승인, 피드백, 개선한다.
-
-성공 경험:
-
-> “우리 팀의 판단 과정이 문서, 근거, 피드백과 함께 축적된다.”
+피해야 할 포지션: 범용 챗봇, 요약봇, 자동 에이전트 프레임워크, 승인 없는 외부
+action executor, 예쁜 대시보드 우선 제품.
 
 ## 4. North Star
 
-가장 중요한 지표:
-
-> **실제 의사결정에 사용된 근거 연결 가설 수**
+> **살아있는 결정(living decisions)의 수**
 >
-> Evidence-backed hypotheses used in real decisions.
+> dossier가 있고, 전환 조건 감시가 붙어 있고, 결과가 기록되는 판단의 수.
 
 보조 지표:
 
-- 가설 중 2개 이상 근거가 연결된 비율.
-- 반대근거가 붙은 가설 비율.
-- `useful` 또는 `used` 피드백을 받은 artifact 비율.
-- stale hypothesis가 제때 review된 비율.
-- source diversity가 일정 기준 이상인 artifact 비율.
-- false-positive alert 감소율.
-- decision memo 생성까지 걸린 시간.
-- 사용자가 직접 읽어야 하는 문서 수 감소율.
+- 전환 조건 촉발이 실제 재숙의로 이어져 결정이 갱신된 횟수 (J3)
+- 기권의 사후 적중률 — 기권했어야 했던 기권의 비율 (J1, J5)
+- 반대근거 citation이 붙은 belief 비율 (확증편향 방어)
+- Knowledge Request가 새 Pack으로 충족되어 verified 전환된 비율 (J2)
+- adverse scenario의 실현 적중률 (J5)
+- replay 무결성 통과율 100% 유지 (J4)
 
-## 5. 목표 체계
+## 5. 수명주기 단계별 목표
 
-### A. 수집 목표
+### A. 숙의를 믿을 수 있게 (J1, J4)
 
-목표:
+목표: 선택과 기권 판정 자체가 신뢰 가능해야 한다.
 
-> 다양한 정보원을 안전하게 읽고, 모든 입력에 provenance를 남긴다.
+- 모든 grounded assertion은 검증 가능한 인용을 가진다 — fail-closed 게이트. (달성)
+- 감사는 LLM 없이 재생 가능하고, 저장물 변조를 스스로 탐지한다. (달성)
+- 기권 원인은 "Pack에 없음"과 "검색이 못 찾음"을 구분한다. (달성)
+- 검색은 교차언어·별칭을 다룬다 — manifest hints와 조건부 질의 확장. (진행)
+- 숙의 품질은 정답이 알려진 시나리오 벤치마크로 측정한다 — 기권 적절성,
+  critic의 심은 결함 적중률. (진행)
+- critic의 독립성은 역할극이 아니라 실제 타사 모델로 확보할 수 있다(옵션). (진행)
 
-단계:
+### B. 결정을 살아있게 (J3)
 
-1. 파일, URL, RSS, GitHub.
-2. 웹페이지, 검색, 이메일, Drive, Slack.
-3. DB, BI, 공시, 논문, 정책 API.
-4. 조직별 connector SDK.
+목표: dossier가 일회성 문서가 아니라 지속 감시되는 결정이 된다.
 
-원칙:
+- flip condition은 감시 가능한 predicate로 저장된다.
+- 새 Pack 설치가 감시 중인 결정의 전환 조건을 결정적으로 스캔한다.
+- 촉발 후보는 사용자에게 알림되고, 재숙의는 항상 사용자가 시작한다.
+- 자동 재숙의·자동 Pack 갱신은 하지 않는다.
 
-- source credential은 저장하지 않는다.
-- read connector와 write action을 분리한다.
-- 모든 document는 source, timestamp, parser version, content hash를 가진다.
-- connector는 size, timeout, SSRF/path traversal 방어를 가져야 한다.
+### C. 판단력을 측정 가능하게 (J5)
 
-### B. 이해 목표
+목표: 시스템이 아니라 사용자의 판단 체계가 개선된다.
 
-목표:
+- 결정 결과(adopted/reversed, scenario 실현)는 append-only 원장에 기록된다.
+- calibration 리포트는 결정적 집계만 사용한다 — 모델의 자기평가 금지.
+- outcome 데이터는 어떤 경로로도 evidence로 승격되거나 프롬프트에 주입되지 않는다.
+- Charter(지속 관심사)가 결정·감시·보정을 도메인 단위로 묶는다.
 
-> 문서 더미를 검토 가능한 지식 그래프로 바꾼다.
+### D. 학습 루프를 닫기 (J2)
 
-핵심 객체:
+목표: 기권 → 표적 수집 → 재숙의가 사람의 번역 없이 흐른다.
 
-- claim
-- signal
-- entity
-- risk
-- opportunity
-- contradiction
-- hypothesis
-- evidence edge
+- Knowledge Request는 기계가독 export로 OpenCrab에 전달된다. (달성)
+- OpenCrab이 이를 collection mission으로 소비하는 계약을 상호 확정한다. (OpenCrab 협의)
+- 충족 검증은 child가 실제 인용한 evidence로 바인딩되며(달성), 의미 관련성 검증은
+  옵션 2차 모델 게이트로 강화한다. (계획)
 
-좋은 이해 결과는 요약문이 아니라, 나중에 검증하고 반박할 수 있는 구조화된 관찰이어야 한다.
+### E. 안전 원칙 (불변)
 
-### C. 가설 목표
-
-목표:
-
-> 답변이 아니라 가설을 중심 객체로 만든다.
-
-좋은 가설의 조건:
-
-- 검증 가능하다.
-- 범위가 있다.
-- 지지 근거가 있다.
-- 반대근거를 받을 수 있다.
-- 시간이 지나면 강화, 약화, 폐기된다.
-- 결정이나 추가 작업으로 이어질 수 있다.
-
-### D. 의사결정 목표
-
-목표:
-
-> 예쁜 보고서가 아니라 decision artifact를 만든다.
-
-주요 산출물:
-
-- hypothesis brief
-- counter-evidence memo
-- decision memo
-- risk watchlist
-- market signal digest
-- policy drift report
-- falsification checkpoint
-
-좋은 산출물은 항상 다음을 포함한다.
-
-- 핵심 주장.
-- 근거.
-- 반대근거.
-- 불확실성.
-- 다음 확인 지점.
-- 추천 행동 또는 보류 사유.
-
-### E. 피드백 목표
-
-목표:
-
-> 시스템이 실제 사용자 결과로 “무엇이 좋은 산출물인가”를 배운다.
-
-피드백 종류:
-
-- useful
-- used
-- rejected
-- stale
-- wrong
-- too noisy
-- missing evidence
-- good counterpoint
-- decision adopted
-- decision reversed
-
-정책 튜닝은 모델의 자기칭찬이 아니라 실제 라벨, replay, shadow evaluation을 기반으로 해야 한다.
-
-### F. 안전 목표
-
-목표:
-
-> 자율성을 갖되, 위험한 자동화를 승인 경계 밖으로 내보내지 않는다.
-
-원칙:
-
-- 읽기는 자동화 가능.
-- 해석은 자동화 가능.
-- 제안은 자동화 가능.
-- 외부 쓰기, 삭제, 전송, 배포, 결제는 승인 필요.
-- mission change는 승인 필요.
-- policy promotion은 검증 필요.
+- 읽기·해석·제안은 자동화 가능. 외부 쓰기·전송·배포·결제·mission 변경은 승인 필요.
+- Pack-only factual boundary를 약화하는 기능은 받지 않는다.
+- 새 narrative 표면에는 항상 epistemic classification과 검증 게이트를 둔다.
+- 한계는 숨기지 않고 문서화한다 — 측정 불가는 측정 불가라고 쓴다.
 
 ## 6. 단계별 로드맵
 
-### Phase 1. 신뢰 가능한 개인용 알파
+진행 표기: (달성) 구현·검증 완료 · (진행) 착수 · (계획) 미착수 · (외부) 타 저장소 의존.
 
-목표:
+### Wave A — 판단의 눈
 
-- 로컬에서 쉽게 실행된다.
-- 문서를 넣으면 가설과 근거가 나온다.
-- provenance를 확인할 수 있다.
-- README만 보고 10분 안에 demo가 된다.
+1. Pack manifest 다국어 retrieval hints + 조건부 LLM 질의 확장(provenance 기록). (달성)
+2. 숙의 gold set v1 — 정답 시나리오 벤치마크(기권 적절성·critic 적중률). (달성)
+3. 기존 gold 라벨 34건 사람 검수와 counter 모순쌍 코퍼스 수집. (계획 — 사람 실행)
 
-성공 기준:
+### Wave B — 결정의 수명주기
 
-- 설치 실패율이 낮다.
-- 예제 corpus에서 signal, hypothesis, artifact가 생성된다.
-- evidence inspection이 가능하다.
-- 테스트와 문서가 일치한다.
+1. Flip Condition Monitoring D3 — 결정적 스캔·알림·dismiss. (달성; LLM 확인 stage는 계획)
+2. Decision Outcome Ledger + calibration 리포트. (달성)
+3. Charter 1급화 — 도메인별 감시·보정 묶음. (달성)
 
-### Phase 2. 리서처용 실전 도구
+### Wave C — 학습 루프
 
-목표:
+1. KR→OpenCrab 소비 프로토콜 상호 확정. (외부 — OpenCrab 협의)
+2. 크로스벤더 critic2 provider (진짜 타사 모델). (달성 — claude-cli provider, 기본 off)
+3. KR 의미 충족 검증 옵션 게이트 — C2의 2차 모델로 질문↔evidence 관련성 판정. (계획)
 
-- RSS, GitHub, 웹페이지, 폴더 감시를 안정적으로 지원한다.
-- weekly intelligence digest를 만든다.
-- 반대근거 탐색을 강화한다.
-- 가설 lifecycle을 관리한다.
+### Wave D — 정체성과 채택면
 
-핵심 기능:
+1. 이 문서의 유지와 legacy 정리(아래 7절).
+2. 결정 저널 read-only UI — 결정 타임라인, KR 인박스, 감시 목록.
 
-- watchlist
-- hypothesis status
-- stale hypothesis review
-- source diversity scoring
-- evidence quality scoring
-- recurring digest
+## 7. Legacy 수집 런타임의 거취
 
-성공 기준:
+signal/hypothesis 수집 런타임(`loops/`, RSS·GitHub connector, stance judge)은
+Pack-only 재포지셔닝 이전의 산물이다. 방침:
 
-> 사용자가 “읽을 문서 목록”보다 “검토할 가설 목록”을 보게 된다.
+- **동결(frozen)**: 신규 기능을 받지 않는다. 버그 수정과 보안 패치만.
+- **이관 권고**: 수집·신호 탐지 가치는 OpenCrab의 책임 영역이며, 해당 코드의
+  이관 또는 아카이브를 OpenCrab 로드맵과 함께 결정한다.
+- 문서·CLI에서 legacy 표면은 "durable signal/hypothesis runtime (frozen)"으로
+  표기해 신규 사용자의 오독을 막는다.
 
-### Phase 3. 팀용 Decision Intelligence
+## 8. 하지 않는 일
 
-목표:
-
-- 여러 사람이 evidence와 artifact에 피드백한다.
-- approval queue를 통해 외부 action과 정책 변경을 통제한다.
-- 팀 단위 dashboard와 audit history를 제공한다.
-
-핵심 기능:
-
-- user identity
-- RBAC
-- artifact review workflow
-- approval records
-- team feedback metrics
-- decision outcome tracking
-
-성공 기준:
-
-> 팀 회의와 전략 검토에 OpenOyster artifact가 실제로 사용된다.
-
-### Phase 4. 운영 가능한 Intelligence Platform
-
-목표:
-
-- 장기 실행과 장애 복구를 견딘다.
-- 대규모 source와 worker를 처리한다.
-- connector ecosystem을 갖춘다.
-
-핵심 기능:
-
-- OpenTelemetry
-- backup/restore tests
-- distributed worker
-- vector/hybrid retrieval
-- connector SDK
-- deployment templates
-- load/chaos tests
-
-성공 기준:
-
-> 실제 조직의 지속 운영에 견딘다.
-
-### Phase 5. Intelligence OS
-
-목표:
-
-> 조직의 정보 흐름, 판단, 피드백, 결과가 하나의 학습 루프로 연결된다.
-
-사용자가 지속적으로 답할 수 있어야 하는 질문:
-
-- 무엇을 알아야 하는가?
-- 무엇이 바뀌었는가?
-- 무엇을 믿을 수 있는가?
-- 무엇을 결정해야 하는가?
-- 지난 판단은 맞았는가?
-
-## 7. 사용자 경험 목표
-
-### 첫 사용
-
-> “챗봇이 아니라 내 자료를 판단 가능한 구조로 바꾸는 시스템이구나.”
-
-### 일주일 사용
-
-> “내가 놓쳤을 신호를 잡아주고, 근거와 반대근거까지 같이 준다.”
-
-### 한 달 사용
-
-> “우리 팀의 판단 과정이 축적되고 있다.”
-
-### 장기 사용
-
-> “이 시스템은 단순히 답하는 게 아니라, 우리가 무엇을 보고 믿고 결정했는지 기억한다.”
-
-## 8. 비목표
-
-당분간 목표로 하지 않는다.
-
-- 모든 것을 자동 결정하는 agent.
-- 범용 챗봇.
-- 단순 RAG 검색 UI.
-- 모델 provider wrapper.
-- 자동 웹 크롤러.
-- 예쁜 대시보드 우선 제품.
-- 승인 없는 외부 action executor.
-
-OpenOyster의 핵심은 계속 이것이다.
-
-> **AI 자동화가 아니라, 감사 가능한 판단 인프라.**
+- OpenCrab Pack 생성·자동 갱신·revision diff·rollback
+- 웹 검색·모델 사전 지식의 evidence 승격
+- Knowledge Request 자동 수행, 승인 없는 자동 재숙의
+- outcome 기반 자동 정책·프롬프트 튜닝
+- 범용 자율 agent와 외부 시스템 write action

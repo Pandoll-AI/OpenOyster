@@ -2,6 +2,37 @@
 
 All notable changes are documented here. OpenOyster is pre-`1.0`; compatibility may change between minor releases.
 
+## Unreleased — decision lifecycle
+
+Extends the product from a deliberation engine toward a decision lifecycle system:
+believe → decide/abstain → (abstain) targeted learning → (decide) watch → record
+outcome → calibrate. Reframes the goal roadmap around that lifecycle.
+
+### Added
+
+- Cross-language retrieval: optional Pack manifest `retrieval_hints` (routing aids,
+  never citable) plus a bounded LLM query-expansion stage that fires only when the
+  first pass finds nothing, recorded as a `retrieval_trace` dossier artifact.
+- Deliberation gold set v1: six verdict-known scenarios and a harness reporting
+  abstention correctness, critic catch rate, and select accuracy (stub-validated
+  in CI; real-model numbers are a manual run).
+- Flip Condition Monitoring (D3): structured flip `predicate`s become watches; a
+  new Pack install deterministically scans them and records candidate triggers with
+  an event — never auto-re-deliberating.
+- Decision Outcome Ledger and a deterministic calibration report, kept strictly out
+  of prompts, retrieval, and the dossier (proven by a behavioural test).
+- First-class Charters that group decisions/watches/calibration, with run-time
+  validation of `mission_charter_id` (`unknown_charter` / `charter_archived`).
+- Cross-vendor second critic via a `claude-cli` provider (still off by default),
+  giving the optional critic an independent model family.
+- Migrations 0009 (flip watches/triggers), 0010 (outcome ledger), 0011 (charters).
+
+### Changed
+
+- Rewrote `docs/GOAL_ROADMAP.md` around the decision lifecycle; set the North Star
+  to living decisions; recommended freezing/handing off the legacy signal/hypothesis
+  collection runtime to OpenCrab.
+
 ## Unreleased — deliberation integrity hardening
 
 Adversarial review of D1/D2 (two Codex passes) surfaced integrity and disclosure
