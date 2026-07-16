@@ -177,6 +177,138 @@ class CodexProvider(LLMProvider):
             )
 
 
+class ClaudeCliProvider(LLMProvider):
+    """Cross-vendor secondary critic via Claude Code CLI (``claude -p``).
+
+    Critic-only: ``query_json`` is supported; extraction is intentionally unavailable.
+    Dangerous permission-bypass flags are never passed.
+    """
+
+    name = "claude-cli"
+
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or get_settings()
+
+    def _write_log(self, *, stage: str, record: dict[str, Any]) -> None:
+        # Separate from .codex-llm — critic2 has its own artifact path.
+        log_dir = Path(self.settings.workspace) / "claude-cli-logs" / stage
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f"{record['run_id']}.json"
+            log_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            return
+
+    def _parse_stdout(self, stdout: str) -> tuple[dict[str, Any], str]:
+        """Unwrap Claude ``--output-format json`` envelope, then extract the payload.
+
+        Claude CLI typically wraps model text as ``{"result": "..."}`` or
+        ``{"text": "..."}``. Prefer that inner string; fall back to scanning the
+        full stdout for the first JSON object.
+        """
+        stripped = stdout.strip()
+        try:
+            outer = json.loads(stripped)
+        except json.JSONDecodeError:
+            return extract_json_payload(stdout)
+        if isinstance(outer, dict):
+            for key in ("result", "text"):
+                inner = outer.get(key)
+                if isinstance(inner, dict):
+                    return inner, stdout
+                if isinstance(inner, str) and inner.strip():
+                    try:
+                        return extract_json_payload(inner)
+                    except JsonResponseError:
+                        pass
+        return extract_json_payload(stdout)
+
+    def _attempt(self, prompt: str, stage: str) -> JsonAttempt:
+        model = self.settings.claude_model
+        prepared_prompt = f"{T1_CONSTRAINT_BLOCK}\n\n{prompt}"
+        run_id = uuid4().hex
+        started = time.perf_counter()
+        exit_code: int | None = None
+        parsing_success = False
+        error: str | None = None
+        try:
+            command = [
+                self.settings.claude_binary,
+                "-p",
+                "--output-format",
+                "json",
+            ]
+            if model:
+                command.extend(["--model", model])
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                input=prepared_prompt,
+                text=True,
+                timeout=self.settings.claude_timeout_seconds,
+                check=False,
+            )
+            exit_code = completed.returncode
+            if completed.returncode != 0:
+                error = f"claude-cli exited with {completed.returncode}"
+                raise ExtractionUnavailable(error)
+            payload, raw_response = self._parse_stdout(completed.stdout)
+            parsing_success = True
+            return JsonAttempt(
+                payload=payload,
+                raw_response=raw_response,
+                model=model or "claude-cli-default",
+                usage={
+                    "prompt_characters": len(prepared_prompt),
+                    "response_characters": len(completed.stdout),
+                },
+            )
+        except FileNotFoundError as exc:
+            error = f"claude binary not found: {self.settings.claude_binary}"
+            raise ExtractionUnavailable(error) from exc
+        except subprocess.TimeoutExpired as exc:
+            error = f"claude-cli timed out after {self.settings.claude_timeout_seconds} seconds"
+            timeout_output(exc.stdout)
+            raise ExtractionUnavailable(error) from exc
+        except JsonResponseError as exc:
+            error = exc.reason
+            raise
+        finally:
+            self._write_log(
+                stage=stage,
+                record={
+                    "run_id": run_id,
+                    "stage": stage,
+                    "model": model,
+                    "effort": None,
+                    "prompt_length": len(prepared_prompt),
+                    "prompt_sha256": sha256_text(prepared_prompt),
+                    "duration_seconds": time.perf_counter() - started,
+                    "exit_code": exit_code,
+                    "parsing_success": parsing_success,
+                    "error": error,
+                },
+            )
+
+    def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+        try:
+            return self._attempt(prompt, stage).payload
+        except JsonResponseError as exc:
+            raise ExtractionUnavailable(exc.reason) from exc
+
+    def stage_profile(self, stage: str) -> dict[str, Any]:
+        del stage
+        return {
+            "provider": self.name,
+            "model": self.settings.claude_model,
+            "effort": None,
+        }
+
+    def analyse_batch(self, texts: list[str], policy: dict[str, Any] | None = None) -> list[TextAnalysis]:
+        del texts, policy
+        raise ExtractionUnavailable("claude-cli is critic-only")
+
+
 class OpenAICompatibleProvider(LLMProvider):
     name = "openai-compatible"
 
@@ -299,5 +431,7 @@ def critic2_provider_from_settings(settings: Settings | None = None) -> LLMProvi
             return CodexProvider(settings)
         case "stub":
             return StubProvider()
+        case "claude-cli":
+            return ClaudeCliProvider(settings)
         case other:
             assert_never(other)
