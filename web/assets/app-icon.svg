@@ -1,0 +1,26 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="80%">
+      <stop offset="0%" stop-color="#12161f"/>
+      <stop offset="100%" stop-color="#05070d"/>
+    </radialGradient>
+    <radialGradient id="pearl" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#fff6e2"/>
+      <stop offset="45%" stop-color="#ffd7a0"/>
+      <stop offset="100%" stop-color="#e8873a"/>
+    </radialGradient>
+    <linearGradient id="shell" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb765"/>
+      <stop offset="100%" stop-color="#d4762e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g stroke="url(#shell)" stroke-width="15" stroke-linecap="round" opacity="0.9" fill="none">
+    <path d="M256 306 L256 150"/>
+    <path d="M256 306 L184 166"/>
+    <path d="M256 306 L328 166"/>
+    <path d="M256 306 L132 214"/>
+    <path d="M256 306 L380 214"/>
+  </g>
+  <circle cx="256" cy="330" r="54" fill="url(#pearl)"/>
+</svg>

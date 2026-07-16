@@ -1,0 +1,9 @@
+node_modules
+dist
+.galaxy.json
+.shot-*.png
+.DS_Store
+.vercel
+.nodes.json
+.edges.json
+.config.json

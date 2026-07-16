@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>OpenOyster — 지식으로 생각하고 결정한다</title>
+    <meta name="description" content="OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 생각하고 결정한다. Pack만을 근거로 삼는 오픈소스 판단 수명주기 시스템 — OpenCrab에 영감받은 팬 프로젝트." />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#05070d" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OpenOyster — 지식으로 생각하고 결정한다" />
+    <meta property="og:description" content="OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 생각하고 결정한다. 기권은 실패가 아니라 1급 결과다." />
+    <meta property="og:url" content="https://openoyster.vercel.app/" />
+    <meta property="og:image" content="https://openoyster.vercel.app/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://openoyster.vercel.app/og.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <!-- Auto-orbiting mock Pack galaxy (network-galaxy scene, chrome-less) -->
+    <iframe id="galaxy" src="/galaxy.html" title="OpenCrab Pack universe (mock visual)" tabindex="-1" aria-hidden="true"></iframe>
+    <div id="veil"></div>
+
+    <!-- Intro video popup -->
+    <div id="intro" class="intro" hidden>
+      <div class="intro__box">
+        <video id="introVideo" class="intro__video" playsinline muted preload="auto" poster="/intro-poster.svg">
+          <source src="/intro.mp4" type="video/mp4" />
+        </video>
+        <div class="intro__bar">
+          <button id="introSound" class="intro__ghost" type="button">🔇 소리 켜기</button>
+          <button id="introClose" class="intro__ghost" type="button">건너뛰기 ✕</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav__brand" href="#top">
+        <span class="nav__shell">◗</span> OpenOyster
+      </a>
+      <div class="nav__right">
+        <span class="chip">OpenCrab 팬 프로젝트</span>
+        <a class="nav__link" href="https://github.com/Pandoll-AI/OpenOyster" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </nav>
+
+    <main id="top">
+      <!-- HERO -->
+      <header class="hero">
+        <p class="hero__eyebrow reveal">EVIDENCE-TO-DECISION · ALPHA</p>
+        <h1 class="hero__title reveal">
+          <span>OpenCrab이 지식을 만들면,</span>
+          <span>OpenOyster는 그 지식으로</span>
+          <span class="amber">생각하고 결정한다.</span>
+        </h1>
+        <p class="hero__sub reveal">
+          Pack만을 사실 근거로 삼아 믿음·대안·반론을 세우고, 선택하거나 <b>기권</b>합니다.
+          채팅 답변이 아니라 감사 가능한 <b>Decision Dossier</b>를 남깁니다.
+        </p>
+        <div class="hero__cta reveal">
+          <a class="btn btn--amber" href="https://github.com/Pandoll-AI/OpenOyster" target="_blank" rel="noopener">저장소 보기 ↗</a>
+          <a class="btn btn--ghost" href="#why">왜 필요한가 ↓</a>
+        </div>
+        <p class="hero__caption mono reveal">↑ 배경은 OpenCrab Pack 우주의 <em>mock</em> 시각화입니다 — 실제 데이터가 아닙니다.</p>
+      </header>
+
+      <!-- WHY: three enemies -->
+      <section id="why" class="section">
+        <p class="kicker reveal">왜 필요한가</p>
+        <h2 class="h2 reveal">판단에는 세 가지 적이 있다.</h2>
+        <div class="grid3">
+          <article class="card reveal">
+            <span class="card__no mono">01</span>
+            <h3>자신감 있는 오답</h3>
+            <p>모델은 근거가 없어도 확신에 차서 말한다. 판단에 쓰려면 날조를 구조적으로 막아야 한다.</p>
+          </article>
+          <article class="card reveal">
+            <span class="card__no mono">02</span>
+            <h3>확증편향</h3>
+            <p>아무도 반대근거를 찾아주지 않는다. 회의에서 "반론은 검토했나?"에 답할 수 없다.</p>
+          </article>
+          <article class="card reveal">
+            <span class="card__no mono">03</span>
+            <h3>판단의 휘발</h3>
+            <p>결정의 이유와 전복 조건이 결정 직후 사라진다. 세상이 바뀌어도 아무도 그 결정을 다시 보지 않는다.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ROLE SPLIT -->
+      <section class="section">
+        <p class="kicker reveal">두 계층</p>
+        <h2 class="h2 reveal">OpenCrab이 지식을 만들고, OpenOyster가 그 지식으로 결정한다.</h2>
+        <div class="flow reveal">
+          <div class="flow__node">
+            <span class="flow__tag mono">SOURCE</span>
+            <b>원천 자료</b>
+            <p>문서·데이터·논문</p>
+          </div>
+          <span class="flow__arrow">→</span>
+          <div class="flow__node flow__node--crab">
+            <span class="flow__tag mono">OpenCrab</span>
+            <b>지식 · 구조화 · 검증</b>
+            <p>수집·온톨로지·evidence·Pack 생성</p>
+          </div>
+          <span class="flow__arrow">→</span>
+          <div class="flow__node flow__node--oyster">
+            <span class="flow__tag mono">OpenOyster</span>
+            <b>믿음 · 대안 · 결정/기권</b>
+            <p>Pack만 근거로 숙의</p>
+          </div>
+          <span class="flow__arrow">→</span>
+          <div class="flow__node">
+            <span class="flow__tag mono">OUTPUT</span>
+            <b>Decision Dossier</b>
+            <p>+ Knowledge Requests</p>
+          </div>
+        </div>
+        <p class="note reveal">두 프로젝트는 경쟁 관계가 아니라 앞뒤로 이어지는 두 계층입니다. OpenOyster는 입력을 <b>의도적으로 OpenCrab Pack으로만</b> 제한합니다.</p>
+      </section>
+
+      <!-- LIFECYCLE -->
+      <section class="section">
+        <p class="kicker reveal">판단 수명주기</p>
+        <h2 class="h2 reveal">결정은 이벤트가 아니라 수명주기다.</h2>
+        <ol class="cycle">
+          <li class="cycle__step reveal"><span class="mono">01</span><b>숙의</b><p>Pack 근거로 믿음·대안·시나리오·반론</p></li>
+          <li class="cycle__step reveal"><span class="mono">02</span><b>결정 또는 기권</b><p>억지로 고르지 않는다 — 기권은 1급 결과</p></li>
+          <li class="cycle__step reveal"><span class="mono">03</span><b>감시</b><p>전환 조건(flip)이 새 Pack에서 촉발되는지</p></li>
+          <li class="cycle__step reveal"><span class="mono">04</span><b>결과 기록</b><p>채택·번복·시나리오 적중을 원장에</p></li>
+          <li class="cycle__step reveal"><span class="mono">05</span><b>보정</b><p>시간이 지날수록 판단 체계가 나아진다</p></li>
+        </ol>
+      </section>
+
+      <!-- TERMS -->
+      <section class="section">
+        <p class="kicker reveal">어휘</p>
+        <h2 class="h2 reveal">RAG 챗봇보다 추적 가능하고, 자율 에이전트보다 안전하다.</h2>
+        <div class="terms">
+          <div class="term reveal"><b class="mono">Belief</b><span>지지·반대 근거를 가진 원자적 명제</span></div>
+          <div class="term reveal"><b class="mono">Flip Condition</b><span>무엇이 바뀌면 이 결정을 뒤집는가</span></div>
+          <div class="term reveal"><b class="mono">Knowledge Request</b><span>부족한 근거를 채우는 표적 수집 요청</span></div>
+          <div class="term reveal"><b class="mono">Cognitive Impact</b><span>근거가 baseline에서도 유지되는가</span></div>
+          <div class="term reveal"><b class="mono">Audit Replay</b><span>LLM 없이 결정을 재검증·변조 탐지</span></div>
+          <div class="term reveal"><b class="mono">Abstention</b><span>근거 없으면 모델도 안 부르고 기권</span></div>
+        </div>
+      </section>
+
+      <!-- OPENCRAB HOMAGE (required) -->
+      <section id="homage" class="section homage">
+        <p class="kicker amber reveal">오마주</p>
+        <h2 class="h2 reveal">이 프로젝트는 <span class="amber">OpenCrab</span>에서 큰 영감을 받았습니다.</h2>
+        <div class="homage__body reveal">
+          <p>
+            배경의 은하수 — 정책·시장·과학·의료·문화로 나뉜 <b>온톨로지 Pack</b>의 우주 —
+            는 <a href="https://github.com/AlexAI-MCP/OpenCrab" target="_blank" rel="noopener">OpenCrab</a>의
+            세계입니다. OpenCrab은 크롤링·파싱·evidence 인덱싱·검증을 거쳐 지식을
+            <b>검증된 Pack</b>으로 빚어내는 <span class="mono">MetaOntology OS</span>입니다.
+          </p>
+          <p>
+            OpenOyster는 그 Pack을 받아 <b>그 위에서 생각하고 결정하는 층</b>을 얹은,
+            <b>팬이 만든 확장 서비스</b>입니다. OpenCrab 팀의 공식 제품이 아니며 제휴 관계도 아닙니다 —
+            단지 그 설계 철학에 깊이 감탄해, 굴이 진주를 만들듯 검증된 지식에서
+            책임질 수 있는 결정을 길어 올리고 싶었습니다.
+          </p>
+          <div class="homage__links">
+            <a class="btn btn--amber" href="https://github.com/AlexAI-MCP/OpenCrab" target="_blank" rel="noopener">OpenCrab 저장소 ↗</a>
+            <a class="btn btn--ghost" href="https://opencrab.sh" target="_blank" rel="noopener">opencrab.sh ↗</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="foot__brand"><span class="nav__shell">◗</span> OpenOyster</div>
+      <p class="foot__line">OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 생각하고 결정한다.</p>
+      <div class="foot__meta mono">
+        <a href="https://github.com/Pandoll-AI/OpenOyster" target="_blank" rel="noopener">Pandoll-AI/OpenOyster</a>
+        <span>· Apache-2.0</span>
+        <span>· alpha</span>
+        <span>· OpenCrab 팬 프로젝트 (비제휴)</span>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

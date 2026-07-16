@@ -1,0 +1,14 @@
+{
+  "name": "OpenOyster — 지식으로 생각하고 결정한다",
+  "short_name": "OpenOyster",
+  "description": "OpenCrab이 지식을 만들면, OpenOyster는 그 지식으로 생각하고 결정한다. Pack만을 근거로 삼는 판단 수명주기 시스템 (OpenCrab 팬 프로젝트).",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
