@@ -106,8 +106,8 @@ Cognitive Impact + Decision Dossier + Audit Replay
 완료된 기권 run에 저장된 Knowledge Request를 OpenCrab 또는 사용자가 충족했다고
 주장하면, 명시한 새 Pack ID로 `deliberate continue`를 실행할 수 있습니다. 새로 인용된
 Evidence가 확인돼야 verified fulfilled로 승격됩니다. 자식 run은 부모 Mission을 동결하고
-`parent_run_id`로 연결되며, `cognitive_transition_v2`가
-belief·option·critic·decision·citation scope의 변화를 보여 줍니다. Pack 내용 자체의
+`parent_run_id`로 연결되며, `cognitive_transition_v3`가
+belief·option·critic·decision·citation scope의 변화와 동결 `semantic_verdicts`를 보여 줍니다. Pack 내용 자체의
 diff를 계산하거나 외부 사실을 발견하지는 않습니다. 자세한 계약은
 [Decision Continuity D2 요구사항](docs/DECISION_CONTINUITY_D2_REQUIREMENTS.md)을
 참조하세요.

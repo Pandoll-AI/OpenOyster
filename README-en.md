@@ -73,7 +73,7 @@ from `no_match_in_pack_evidence` so a retrieval miss is not recorded as true abs
 
 A completed abstention can be continued once its Knowledge Requests are claimed fulfilled with a
 newly installed Pack. The child freezes the parent Mission, records `parent_run_id`, and a
-`cognitive_transition_v2` artifact reports belief/option/critic/decision/citation-scope changes.
+`cognitive_transition_v3` artifact reports belief/option/critic/decision/citation-scope changes and freezes optional critic2 relevance into `semantic_verdicts`.
 A Knowledge Request is verified only when newly added evidence is also cited by a child assertion;
 semantic relevance is not proven. Knowledge Requests can be exported in a machine-readable form
 (`openoyster deliberate knowledge-requests RUN_ID --format export` / `?format=export`) for

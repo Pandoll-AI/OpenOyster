@@ -120,6 +120,10 @@ def stub_query_json(prompt: str, stage: str) -> dict[str, Any]:
             return _stub_deliberation_critic(prompt)
         case "deliberation_decision":
             return _stub_deliberation_decision(prompt)
+        case "flip_confirm":
+            return _stub_flip_confirm(prompt)
+        case "kr_semantic":
+            return _stub_kr_semantic(prompt)
         case _:
             raise ExtractionUnavailable(f"stub does not implement JSON stage: {stage}")
 
@@ -375,6 +379,60 @@ def _stub_deliberation_decision(prompt: str) -> dict[str, Any]:
         ],
         "knowledge_requests": [],
     }
+
+
+def _stub_flip_confirm(prompt: str) -> dict[str, Any]:
+    """Deterministic flip_confirm stub: related=true with a real evidence quote.
+
+    Parses the first body from ``[UNTRUSTED_EVIDENCE_JSON]...`` (preferred) or
+    the legacy ``[EVIDENCE id=...]...[/EVIDENCE]`` block and returns a
+    verbatim substring meeting MIN_QUOTE_CHARS so tests can assert
+    llm_supported. Force unsupported by overriding the provider in tests
+    (related=false or a fabricated quote).
+    """
+    if "FLIP_CONFIRM_UNRELATED" in prompt:
+        return {"related": False, "quote": None}
+    if "FLIP_CONFIRM_FAKE_QUOTE" in prompt:
+        return {"related": True, "quote": "this quote is not in any evidence body"}
+    body: str | None = None
+    try:
+        from openoyster.services.flip_monitoring import parse_untrusted_evidence_json
+
+        items = parse_untrusted_evidence_json(prompt)
+    except Exception:
+        items = None
+    if items:
+        first = items[0]
+        if isinstance(first.get("text"), str):
+            body = first["text"]
+    if body is None:
+        match = re.search(
+            r"\[EVIDENCE id=(?P<id>[^\]]+)\]\n(?P<body>.*?)\n\[/EVIDENCE\]",
+            prompt,
+            re.S,
+        )
+        if match is None:
+            return {"related": False, "quote": None}
+        body = match.group("body").strip()
+    body = body.strip()
+    if len(body) < MIN_QUOTE_CHARS:
+        return {"related": False, "quote": None}
+    # First contiguous phrase long enough for the quote gate.
+    quote = body if len(body) <= 120 else body[:120]
+    if len(quote.strip()) < MIN_QUOTE_CHARS:
+        return {"related": False, "quote": None}
+    return {"related": True, "quote": quote}
+
+
+def _stub_kr_semantic(prompt: str) -> dict[str, Any]:
+    """Deterministic KR semantic-relevance stub (related=true by default).
+
+    Force unrelated with ``KR_SEMANTIC_UNRELATED`` in the prompt body.
+    Real independence is only meaningful with claude-cli; stub is self-consistency.
+    """
+    if "KR_SEMANTIC_UNRELATED" in prompt:
+        return {"related": False, "reason": "stub_unrelated"}
+    return {"related": True, "reason": "stub_related"}
 
 
 def _stub_pack_answer(prompt: str) -> dict[str, Any]:

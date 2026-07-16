@@ -943,6 +943,10 @@ class DeliberationFlipTrigger(Base):
         ForeignKey("pack_installs.id", ondelete="RESTRICT"), index=True
     )
     matched_evidence_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # Optional LLM confirmation: none|llm_supported|llm_unsupported|error
+    confirmation: Mapped[str] = mapped_column(String(20), server_default="none", default="none")
+    confirmation_anchors_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    confirmation_note: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     watch: Mapped[DeliberationFlipWatch] = relationship(back_populates="triggers")

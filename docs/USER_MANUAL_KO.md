@@ -217,7 +217,7 @@ openoyster deliberate continue PARENT_RUN_ID \
 openoyster deliberate transition CHILD_RUN_ID
 ```
 
-선택적으로 `--impact-baseline-packs`와 `--allow-compatible-packs`를 지정할 수 있습니다. `--fulfills`는 충족 주장입니다. `evidence:no_evidence` 요청은 새로 인용된 Evidence가 있어야 검증 완료됩니다. 자식에는 `cognitive_transition_v2` artifact가 저장되며 claimed, verified fulfilled, unverified claimed 요청을 분리합니다. critic의 gap finding도 새 Knowledge Request로 승격됩니다.
+선택적으로 `--impact-baseline-packs`와 `--allow-compatible-packs`를 지정할 수 있습니다. `--fulfills`는 충족 주장입니다. `evidence:no_evidence` 요청은 새로 인용된 Evidence가 있어야 검증 완료됩니다. 자식에는 `cognitive_transition_v3` artifact가 저장되며 claimed, verified fulfilled, unverified claimed 요청을 분리하고, critic2 관련 판정은 `semantic_verdicts`에 동결합니다. critic의 gap finding도 새 Knowledge Request로 승격됩니다.
 
 예를 들어 첫 실행이 “현장 복구 시간” 근거가 없어 `kr_no_evidence`를 남기고 기권했다고 합시다. 사용자가 OpenCrab에서 해당 근거를 담은 새 Pack을 설치하고 `--fulfills kr_no_evidence`로 계속 실행하면, 전환 결과에서 새 belief의 상태 변화, 기존 option의 viable 변화, critic verdict, 최종 decision의 `abstain`→`select` 변화, 추가된 global evidence ID를 한 번에 확인할 수 있습니다. 여전히 부족한 요청은 `remaining_knowledge_requests`에 남습니다.
 

@@ -560,6 +560,7 @@ def _complete_run(
     run: DeliberationRun,
     *,
     fulfilled_knowledge_request_keys: set[str] | None = None,
+    settings: Settings | None = None,
 ) -> DeliberationRun:
     compute_cognitive_impact(session, run)
     if run.parent_run_id is not None:
@@ -571,6 +572,7 @@ def _complete_run(
             parent_run=parent_run,
             child_run=run,
             fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys or set(),
+            settings=settings,
         )
     run.status = "impact_ready"
     session.flush()
@@ -1505,7 +1507,10 @@ def run_deliberation(
             session, run=run, stage_call=None, decision=decision, snap_ids=snap_ids
         )
         return _complete_run(
-            session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+            session,
+            run,
+            fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys,
+            settings=settings,
         )
 
     prior: dict[str, Any] = {}
@@ -1593,7 +1598,10 @@ def run_deliberation(
                 session, run=run, stage_call=call, decision=decision, snap_ids=snap_ids
             )
             return _complete_run(
-                session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+                session,
+                run,
+                fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys,
+                settings=settings,
             )
 
         kind = STAGE_ARTIFACT_KIND[stage]
@@ -1695,7 +1703,10 @@ def run_deliberation(
         session.commit()
 
     return _complete_run(
-        session, run, fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys
+        session,
+        run,
+        fulfilled_knowledge_request_keys=fulfilled_knowledge_request_keys,
+        settings=settings,
     )
 
 

@@ -69,7 +69,9 @@ def _install_fixture(
     )
     session.commit()
     # Caller owns the post-commit flip scan (install_pack no longer scans).
-    opencrab_packs.scan_installed_pack(session, result.pack_install_id)
+    opencrab_packs.scan_installed_pack(
+        session, result.pack_install_id, settings=settings
+    )
     install = session.get(PackInstall, result.pack_install_id)
     assert install is not None
     return install

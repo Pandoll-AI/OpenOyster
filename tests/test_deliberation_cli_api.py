@@ -275,7 +275,7 @@ def test_cli_continues_an_abstention_and_exposes_transition(monkeypatch, tmp_pat
         transition = runner.invoke(app, ["deliberate", "transition", str(child["id"])])
         assert transition.exit_code == 0, transition.output
         transition_payload = json.loads(transition.output)
-        assert transition_payload["method"] == "cognitive_transition_v2"
+        assert transition_payload["method"] == "cognitive_transition_v3"
         assert transition_payload["fulfilled_knowledge_requests"][0]["local_key"] == (
             "kr_no_evidence"
         )
@@ -369,7 +369,7 @@ def test_api_continues_an_abstention_and_exposes_transition(
             headers=auth,
         )
         assert transition.status_code == 200, transition.text
-        assert transition.json()["method"] == "cognitive_transition_v2"
+        assert transition.json()["method"] == "cognitive_transition_v3"
 
 
 def test_cli_knowledge_requests_export_schema(monkeypatch, tmp_path: Path) -> None:

@@ -502,9 +502,11 @@ def test_linked_redeliberation_fulfills_knowledge_request_and_records_cognitive_
         )
         assert transition is not None
         payload = transition.payload_json
-        assert payload["method"] == "cognitive_transition_v2"
+        assert payload["method"] == "cognitive_transition_v3"
         assert payload["parent_run_id"] == parent.id
         assert payload["child_run_id"] == child.id
+        # critic2 off → empty frozen semantic_verdicts; structural added_cited.
+        assert payload.get("semantic_verdicts") == {}
         assert payload["fulfilled_knowledge_requests"] == [
             {
                 "local_key": "kr_no_evidence",
@@ -540,8 +542,367 @@ def test_linked_redeliberation_fulfills_knowledge_request_and_records_cognitive_
         assert parent_dossier_after is not None
         assert parent_dossier_after.json_digest == parent_digest_before
 
+        # #2(a): critic2 off → replay is LLM-free and matches (no digest drift).
         replay = replay_deliberation(session, child.id)
         assert replay.matched is True
+        assert replay.result_json.get("llm_called") is False
+
+
+def test_transition_replay_is_llm_free_with_and_without_critic2(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2 RED→GREEN: replay never calls LLM; frozen semantic digests match.
+
+    (a) critic2 off → replay 0 LLM calls, no mismatch
+    (b) critic2 on (stub) at create → replay 0 LLM calls, same digest
+    (c) provider that raises if called during replay → still not invoked
+    """
+    from openoyster.services import cognitive_transition as ct
+    from openoyster.services import deliberation_replay as replay_mod
+
+    mission = _load_mission()
+
+    def _parent_child(
+        session: Session,
+        *,
+        settings: Settings,
+        key_prefix: str,
+        child_provider: LLMProvider | None = None,
+    ):
+        parent_install = _install_minimal(
+            session,
+            settings,
+            tmp_path,
+            pack_id=f"{key_prefix}-parent-pack",
+            dirname=f"{key_prefix}-parent-pack",
+        )
+        for row in session.scalars(
+            select(PackEvidence).where(PackEvidence.pack_install_id == parent_install.id)
+        ).all():
+            session.delete(row)
+        session.commit()
+        parent = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[parent_install.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key=f"{key_prefix}-parent",
+            provider=CountingProvider(),
+            settings=settings,
+            allow_compatible_packs=True,
+        )
+        child_install = _install_minimal(
+            session,
+            settings,
+            tmp_path,
+            pack_id=f"{key_prefix}-child-pack",
+            dirname=f"{key_prefix}-child-pack",
+        )
+        child = deliberation.continue_deliberation(
+            session,
+            parent_run_id=parent.id,
+            pack_ids=[child_install.pack_id],
+            impact_baseline_pack_ids=[],
+            fulfilled_knowledge_request_keys=["kr_no_evidence"],
+            idempotency_key=f"{key_prefix}-child",
+            provider=child_provider or CountingProvider(),
+            settings=settings,
+            allow_compatible_packs=True,
+        )
+        return parent, child
+
+    # --- (a) critic2 off ---
+    with session_factory() as session:
+        assert temp_settings.critic2_provider == "none"
+        _parent, child = _parent_child(session, settings=temp_settings, key_prefix="replay-a")
+        transition = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == child.id,
+                DeliberationArtifact.kind == "cognitive_transition",
+            )
+        )
+        assert transition is not None
+        assert transition.payload_json["method"] == "cognitive_transition_v3"
+        assert transition.payload_json.get("semantic_verdicts") == {}
+
+        create_calls = {"n": 0}
+        real_build = ct.build_cognitive_transition_payload
+
+        def counting_build(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            create_calls["n"] += 1
+            return real_build(*args, **kwargs)
+
+        monkeypatch.setattr(replay_mod, "build_cognitive_transition_payload", counting_build)
+
+        boom_calls: list[str] = []
+
+        class BoomProvider(LLMProvider):
+            name = "boom"
+
+            def analyse_batch(
+                self, texts: list[str], policy: dict[str, Any] | None = None
+            ) -> list[TextAnalysis]:
+                del texts, policy
+                raise AssertionError("unused")
+
+            def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+                boom_calls.append(stage)
+                raise RuntimeError("replay must not call provider")
+
+        # Even if someone wires a live provider factory, build/replay must not use it.
+        monkeypatch.setattr(
+            ct, "critic2_provider_from_settings", lambda settings=None: BoomProvider()
+        )
+
+        replay = replay_deliberation(session, child.id)
+        assert replay.matched is True
+        assert boom_calls == []
+        assert create_calls["n"] == 1  # recompute once, LLM-free
+
+    # --- (b)+(c) critic2 on at create; replay still LLM-free ---
+    with session_factory() as session:
+        settings_on = temp_settings.model_copy(update={"critic2_provider": "stub"})
+        semantic_provider = CountingProvider()
+        # Route critic2 factory to our counting stub for create-time freeze.
+        monkeypatch.setattr(
+            ct,
+            "critic2_provider_from_settings",
+            lambda settings=None: semantic_provider,
+        )
+        _parent, child = _parent_child(
+            session, settings=settings_on, key_prefix="replay-b"
+        )
+        transition = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == child.id,
+                DeliberationArtifact.kind == "cognitive_transition",
+            )
+        )
+        assert transition is not None
+        payload = transition.payload_json
+        assert payload["method"] == "cognitive_transition_v3"
+        # Semantic freeze present for the claimed KR.
+        assert "kr_no_evidence" in (payload.get("semantic_verdicts") or {})
+        freeze = payload["semantic_verdicts"]["kr_no_evidence"]
+        assert freeze.get("related") is True
+        assert freeze.get("method") == "semantic_relevance_v1"
+        assert freeze.get("verification_evidence_ids")
+        # Create-time semantic call happened at least once.
+        assert "kr_semantic" in semantic_provider.calls
+
+        create_semantic_calls = list(semantic_provider.calls)
+        # (c) Boom provider if factory invoked during replay.
+        boom_calls2: list[str] = []
+
+        class BoomProvider2(LLMProvider):
+            name = "boom2"
+
+            def analyse_batch(
+                self, texts: list[str], policy: dict[str, Any] | None = None
+            ) -> list[TextAnalysis]:
+                del texts, policy
+                raise AssertionError("unused")
+
+            def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+                boom_calls2.append(stage)
+                raise RuntimeError("replay must not call provider")
+
+        monkeypatch.setattr(
+            ct, "critic2_provider_from_settings", lambda settings=None: BoomProvider2()
+        )
+        # Also boom if build tried to import factory somehow.
+        monkeypatch.setattr(
+            "openoyster.llm.critic2_provider_from_settings",
+            lambda settings=None: BoomProvider2(),
+        )
+
+        replay = replay_deliberation(session, child.id)
+        assert replay.matched is True
+        assert boom_calls2 == []
+        # No additional semantic calls on the create-time provider.
+        assert semantic_provider.calls == create_semantic_calls
+
+
+def test_transition_uses_explicit_settings_not_global_cache(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#3: explicit settings.critic2_provider='none' must not fire semantic gate
+    even when the global get_settings() cache would return stub.
+    """
+    from openoyster.services import cognitive_transition as ct
+
+    mission = _load_mission()
+    semantic_calls: list[str] = []
+
+    class TrackingProvider(LLMProvider):
+        name = "track-stub"
+
+        def analyse_batch(
+            self, texts: list[str], policy: dict[str, Any] | None = None
+        ) -> list[TextAnalysis]:
+            del texts, policy
+            raise AssertionError("unused")
+
+        def query_json(self, prompt: str, stage: str) -> dict[str, Any]:
+            semantic_calls.append(stage)
+            from openoyster.services.llm_judges import stub_query_json
+
+            return stub_query_json(prompt, stage)
+
+    # Global cache pretends critic2=stub; explicit runtime settings stay none.
+    class _GlobalStub:
+        critic2_provider = "stub"
+        llm_model = "gpt-test"
+        claude_model = None
+
+    monkeypatch.setattr(ct, "get_settings", lambda: _GlobalStub())
+    monkeypatch.setattr(
+        ct, "critic2_provider_from_settings", lambda settings=None: TrackingProvider()
+    )
+
+    with session_factory() as session:
+        assert temp_settings.critic2_provider == "none"
+        parent_install = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="settings-parent-pack",
+            dirname="settings-parent-pack",
+        )
+        for row in session.scalars(
+            select(PackEvidence).where(PackEvidence.pack_install_id == parent_install.id)
+        ).all():
+            session.delete(row)
+        session.commit()
+        parent = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[parent_install.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key="settings-parent",
+            provider=CountingProvider(),
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        child_install = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="settings-child-pack",
+            dirname="settings-child-pack",
+        )
+        child = deliberation.continue_deliberation(
+            session,
+            parent_run_id=parent.id,
+            pack_ids=[child_install.pack_id],
+            impact_baseline_pack_ids=[],
+            fulfilled_knowledge_request_keys=["kr_no_evidence"],
+            idempotency_key="settings-child",
+            provider=CountingProvider(),
+            settings=temp_settings,  # explicit none
+            allow_compatible_packs=True,
+        )
+        transition = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == child.id,
+                DeliberationArtifact.kind == "cognitive_transition",
+            )
+        )
+        assert transition is not None
+        payload = transition.payload_json
+        assert payload["method"] == "cognitive_transition_v3"
+        assert payload.get("semantic_verdicts") == {}
+        # Structural path (not semantic).
+        assert payload["fulfilled_knowledge_requests"][0]["verification_method"] == (
+            "added_cited_evidence_v1"
+        )
+        assert "kr_semantic" not in semantic_calls
+
+
+def test_transition_factory_exception_fail_closed_no_structural_promotion(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4: critic2 factory exception → transition still created; KR unverified.
+
+    Gate was configured (critic2 != none) so structural must not promote.
+    """
+    from openoyster.services import cognitive_transition as ct
+
+    mission = _load_mission()
+    settings_on = temp_settings.model_copy(update={"critic2_provider": "stub"})
+
+    def _boom_factory(settings: Any = None) -> Any:
+        raise RuntimeError("critic2 factory: binary not found")
+
+    monkeypatch.setattr(ct, "critic2_provider_from_settings", _boom_factory)
+
+    with session_factory() as session:
+        parent_install = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="factory-parent-pack",
+            dirname="factory-parent-pack",
+        )
+        for row in session.scalars(
+            select(PackEvidence).where(PackEvidence.pack_install_id == parent_install.id)
+        ).all():
+            session.delete(row)
+        session.commit()
+        parent = deliberation.run_deliberation(
+            session,
+            mission,
+            pack_ids=[parent_install.pack_id],
+            impact_baseline_pack_ids=[],
+            idempotency_key="factory-parent",
+            provider=CountingProvider(),
+            settings=temp_settings,
+            allow_compatible_packs=True,
+        )
+        child_install = _install_minimal(
+            session,
+            temp_settings,
+            tmp_path,
+            pack_id="factory-child-pack",
+            dirname="factory-child-pack",
+        )
+        child = deliberation.continue_deliberation(
+            session,
+            parent_run_id=parent.id,
+            pack_ids=[child_install.pack_id],
+            impact_baseline_pack_ids=[],
+            fulfilled_knowledge_request_keys=["kr_no_evidence"],
+            idempotency_key="factory-child",
+            provider=CountingProvider(),
+            settings=settings_on,
+            allow_compatible_packs=True,
+        )
+        assert child.status == "completed"
+        transition = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == child.id,
+                DeliberationArtifact.kind == "cognitive_transition",
+            )
+        )
+        assert transition is not None
+        payload = transition.payload_json
+        assert payload["method"] == "cognitive_transition_v3"
+        assert payload["verified_fulfilled_knowledge_requests"] == []
+        assert payload["fulfilled_knowledge_requests"] == []
+        assert payload["unverified_claimed_knowledge_requests"][0]["status"] == (
+            "claimed_unverified"
+        )
+        # Fail-closed frozen entry present.
+        assert payload["semantic_verdicts"]["kr_no_evidence"]["related"] is False
 
 
 def test_claimed_fulfillment_without_new_cited_evidence_remains_unverified(
