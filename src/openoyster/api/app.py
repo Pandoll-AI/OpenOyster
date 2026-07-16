@@ -423,6 +423,12 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 allow_compatible_packs=payload.allow_compatible_packs,
             )
             session.commit()
+        except deliberation.DeliberationContinuationError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
         except Exception:
             session.rollback()
             raise HTTPException(
@@ -573,16 +579,33 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
     )
     def get_deliberation_knowledge_requests(
         run_id: int,
+        format: str | None = None,
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        deliberation_run_or_404(session, run_id)
+        from openoyster.services.knowledge_request_verifiers import (
+            build_knowledge_request_export,
+        )
+
+        run = deliberation_run_or_404(session, run_id)
         artifact = session.scalar(
             select(DeliberationArtifact).where(
                 DeliberationArtifact.run_id == run_id,
                 DeliberationArtifact.kind == "knowledge_requests",
             )
         )
-        payload = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        raw = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        if format == "export":
+            items = raw.get("knowledge_requests") if isinstance(raw, dict) else None
+            mission = run.mission_snapshot_json if isinstance(run.mission_snapshot_json, dict) else {}
+            payload = build_knowledge_request_export(
+                run_id=run.id,
+                parent_run_id=run.parent_run_id,
+                mission_digest=run.mission_digest,
+                decision_question=str(mission.get("decision_question") or ""),
+                knowledge_requests=list(items) if isinstance(items, list) else [],
+            )
+        else:
+            payload = raw
         return _sanitize_deliberation_value(payload)  # type: ignore[return-value]
 
     @application.get(

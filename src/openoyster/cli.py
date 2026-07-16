@@ -1211,17 +1211,34 @@ def deliberate_transition(run_id: Annotated[int, typer.Argument(min=1)]) -> None
 
 
 @deliberate_app.command("knowledge-requests")
-def deliberate_knowledge_requests(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+def deliberate_knowledge_requests(
+    run_id: Annotated[int, typer.Argument(min=1)],
+    format: Annotated[Literal["default", "export"], typer.Option()] = "default",
+) -> None:
     """Export inert Knowledge Requests; this command never executes them."""
+    from .services.knowledge_request_verifiers import build_knowledge_request_export
+
     with _runtime() as (_, _, factory), factory() as session:
-        _get_deliberation_run(session, run_id)
+        run = _get_deliberation_run(session, run_id)
         artifact = session.scalar(
             select(DeliberationArtifact).where(
                 DeliberationArtifact.run_id == run_id,
                 DeliberationArtifact.kind == "knowledge_requests",
             )
         )
-        payload = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        raw = artifact.payload_json if artifact is not None else {"knowledge_requests": []}
+        if format == "export":
+            items = raw.get("knowledge_requests") if isinstance(raw, dict) else None
+            mission = run.mission_snapshot_json if isinstance(run.mission_snapshot_json, dict) else {}
+            payload = build_knowledge_request_export(
+                run_id=run.id,
+                parent_run_id=run.parent_run_id,
+                mission_digest=run.mission_digest,
+                decision_question=str(mission.get("decision_question") or ""),
+                knowledge_requests=list(items) if isinstance(items, list) else [],
+            )
+        else:
+            payload = raw
     _print_pack_json(_sanitize_deliberation_value(payload))
 
 

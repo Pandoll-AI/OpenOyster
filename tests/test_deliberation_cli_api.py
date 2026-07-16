@@ -370,3 +370,103 @@ def test_api_continues_an_abstention_and_exposes_transition(
         )
         assert transition.status_code == 200, transition.text
         assert transition.json()["method"] == "cognitive_transition_v2"
+
+
+def test_cli_knowledge_requests_export_schema(monkeypatch, tmp_path: Path) -> None:
+    _set_cli_env(monkeypatch, tmp_path)
+    runner = CliRunner()
+    mission = _mission_payload()
+    mission_file = tmp_path / "mission-export.json"
+    mission_file.write_text(json.dumps(mission), encoding="utf-8")
+    try:
+        installed = runner.invoke(app, ["pack", "install", str(MINIMAL_FIXTURE)])
+        assert installed.exit_code == 0, installed.output
+
+        created = runner.invoke(
+            app,
+            [
+                "deliberate",
+                "run",
+                str(mission_file),
+                "--packs",
+                "p0-f1-minimal",
+                "--impact-baseline-packs",
+                "p0-f1-minimal",
+                "--allow-compatible-packs",
+                "--idempotency-key",
+                "cli-kr-export-1",
+            ],
+        )
+        assert created.exit_code == 0, created.output
+        run_id = json.loads(created.output)["id"]
+
+        default_result = runner.invoke(app, ["deliberate", "knowledge-requests", str(run_id)])
+        assert default_result.exit_code == 0, default_result.output
+        default_payload = json.loads(default_result.output)
+        assert "knowledge_requests" in default_payload
+        assert "schema" not in default_payload
+
+        export_result = runner.invoke(
+            app, ["deliberate", "knowledge-requests", str(run_id), "--format", "export"]
+        )
+        assert export_result.exit_code == 0, export_result.output
+        assert "/private/openoyster/secret-path" not in export_result.output
+        export_payload = json.loads(export_result.output)
+        assert export_payload["schema"] == "openoyster.knowledge_request_export/v1"
+        assert export_payload["run_id"] == run_id
+        assert export_payload["parent_run_id"] is None
+        assert isinstance(export_payload["mission_digest"], str)
+        assert len(export_payload["mission_digest"]) > 0
+        assert export_payload["decision_question"] == mission["decision_question"]
+        assert isinstance(export_payload["requests"], list)
+        for item in export_payload["requests"]:
+            assert "local_key" in item
+            assert "question" in item
+            assert "gap_ref" in item
+            assert "priority" in item
+    finally:
+        clear_settings_cache()
+
+
+def test_api_knowledge_requests_export_schema(
+    temp_settings: Settings, session_factory, tmp_path: Path
+) -> None:
+    pack_id = _install_fixture(session_factory, temp_settings, tmp_path)
+    application = create_app(settings=temp_settings, session_factory=session_factory)
+    auth = {temp_settings.api_key_header: str(temp_settings.api_key)}
+    mission = _mission_payload()
+    with TestClient(application) as client:
+        created = client.post(
+            "/v1/deliberations",
+            json={
+                "mission": mission,
+                "packs": [pack_id],
+                "impact_baseline_packs": [pack_id],
+                "allow_compatible_packs": True,
+            },
+            headers={**auth, "Idempotency-Key": "api-kr-export-1"},
+        )
+        assert created.status_code == 200, created.text
+        run_id = created.json()["id"]
+
+        default = client.get(f"/v1/deliberations/{run_id}/knowledge-requests", headers=auth)
+        assert default.status_code == 200
+        assert "knowledge_requests" in default.json()
+        assert "schema" not in default.json()
+
+        export = client.get(
+            f"/v1/deliberations/{run_id}/knowledge-requests",
+            params={"format": "export"},
+            headers=auth,
+        )
+        assert export.status_code == 200, export.text
+        assert "/private/openoyster/secret-path" not in export.text
+        payload = export.json()
+        assert payload["schema"] == "openoyster.knowledge_request_export/v1"
+        assert payload["run_id"] == run_id
+        assert payload["parent_run_id"] is None
+        assert isinstance(payload["mission_digest"], str)
+        assert payload["decision_question"] == mission["decision_question"]
+        assert isinstance(payload["requests"], list)
+        for item in payload["requests"]:
+            assert {"local_key", "question", "gap_ref", "priority"} <= set(item)
