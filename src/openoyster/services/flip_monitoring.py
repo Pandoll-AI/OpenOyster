@@ -84,6 +84,7 @@ CONFIRM_STAGE = "flip_confirm"
 CONFIRM_CLAIM_NOTE = "_confirming"
 
 CONFIRMATION_NONE = "none"
+CONFIRMATION_CONFIRMING = "confirming"
 CONFIRMATION_LLM_SUPPORTED = "llm_supported"
 CONFIRMATION_LLM_UNSUPPORTED = "llm_unsupported"
 CONFIRMATION_ERROR = "error"
@@ -96,6 +97,7 @@ TERMINAL_CONFIRMATIONS = frozenset(
     }
 )
 # Atomic claim sources: none (first pass) and error (retry allowed).
+# In-progress "confirming" is NOT claimable — serializes concurrent re-entry.
 CLAIMABLE_CONFIRMATIONS = frozenset(
     {
         CONFIRMATION_NONE,
@@ -350,13 +352,19 @@ def scan_pack_install(
 
     On match: atomically claim the watch (watching → triggered_candidate),
     append a trigger row (unique on watch+install; IntegrityError is idempotent),
-    and emit ``flip_trigger_candidate``. When ``flip_confirm_provider`` is set,
-    each new trigger is confirmed once via LLM; watch status is never advanced
-    by confirmation.
+    and emit ``flip_trigger_candidate``.
+
+    Deterministic only: LLM confirmation is intentionally NOT run here. Callers
+    that want confirm must commit the deterministic triggers first, then call
+    ``confirm_pending_triggers`` (see ``scan_installed_pack``).
+
+    ``settings`` is accepted for API stability but is unused here: confirm runs
+    only after commit via ``confirm_pending_triggers``.
 
     Evidence scan is hard-bounded by row count and total text chars so install-time
     scans cannot unbounded-walk large packs.
     """
+    _ = settings  # confirm is post-commit; deterministic scan does not need settings
     install = session.get(PackInstall, pack_install_id)
     if install is None:
         raise FlipWatchError("pack_install_not_found", f"pack_install_id={pack_install_id}")
@@ -399,18 +407,6 @@ def scan_pack_install(
     )
     if not watches or not evidence_rows:
         return []
-
-    # Confirm is optional and never allowed to abort deterministic trigger writes.
-    # Resolve the provider lazily inside the post-trigger confirm phase so a
-    # factory exception cannot roll back the scan savepoint.
-    confirm_enabled = _confirm_enabled(settings)
-    confirm_resolved = False
-    confirm_provider: LLMProvider | None = None
-    confirm_budget = CONFIRM_MAX_TRIGGERS
-    confirm_deadline: float | None = None
-    if confirm_enabled:
-        timeout_s = _confirm_timeout_seconds(settings)
-        confirm_deadline = time.monotonic() + timeout_s
 
     created: list[DeliberationFlipTrigger] = []
     now = utcnow()
@@ -474,12 +470,55 @@ def scan_pack_install(
             idempotency_key=f"flip-trigger-candidate:{watch.id}:{pack_install_id}",
         )
         created.append(trigger)
+    return created
 
-        # G1 confirm runs only AFTER the deterministic trigger is durable in this
-        # transaction. Any confirm/factory failure leaves confirmation="none"
-        # (or error via confirm_trigger) and never undoes the trigger/watch.
-        if not confirm_enabled:
-            continue
+
+def confirm_pending_triggers(
+    session: Session,
+    pack_install_id: int,
+    settings: Settings | None = None,
+) -> None:
+    """LLM-confirm pending triggers for one Pack install (post-commit only).
+
+    Must run AFTER deterministic triggers from ``scan_pack_install`` are
+    committed. Failures are isolated: they never undo install or trigger rows.
+    Each successful claim/judgement is flushed; the caller may commit per
+    confirm or once after the batch (``scan_installed_pack`` commits the batch).
+    """
+    if not _confirm_enabled(settings):
+        return
+
+    timeout_s = _confirm_timeout_seconds(settings)
+    confirm_deadline = time.monotonic() + timeout_s
+    confirm_budget = CONFIRM_MAX_TRIGGERS
+
+    triggers = list(
+        session.scalars(
+            select(DeliberationFlipTrigger)
+            .where(
+                DeliberationFlipTrigger.pack_install_id == pack_install_id,
+                DeliberationFlipTrigger.confirmation.in_(list(CLAIMABLE_CONFIRMATIONS)),
+            )
+            .order_by(DeliberationFlipTrigger.id.asc())
+        ).all()
+    )
+    if not triggers:
+        return
+
+    confirm_provider: LLMProvider | None = None
+    try:
+        confirm_provider = _resolve_confirm_provider(settings)
+    except Exception:
+        logger.exception(
+            "flip_confirm provider factory failed; leaving confirmation as-is "
+            "pack_install_id=%s",
+            pack_install_id,
+        )
+        return
+    if confirm_provider is None:
+        return
+
+    for trigger in triggers:
         if confirm_budget <= 0:
             logger.warning(
                 "flip_confirm call cap reached; leaving confirmation=none "
@@ -488,25 +527,19 @@ def scan_pack_install(
                 trigger.id,
                 CONFIRM_MAX_TRIGGERS,
             )
-            continue
-        if confirm_deadline is not None and time.monotonic() >= confirm_deadline:
+            break
+        if time.monotonic() >= confirm_deadline:
             logger.warning(
-                "flip_confirm stage budget exhausted; leaving confirmation=none "
+                "flip_confirm stage budget exhausted; leaving confirmation as-is "
                 "pack_install_id=%s trigger_id=%s",
                 pack_install_id,
                 trigger.id,
             )
-            confirm_budget = 0
-            continue
+            break
         try:
-            if not confirm_resolved:
-                confirm_provider = _resolve_confirm_provider(settings)
-                confirm_resolved = True
-            if confirm_provider is None:
-                confirm_enabled = False
-                continue
             confirm_trigger(session, trigger, confirm_provider)
             confirm_budget -= 1
+            session.commit()
         except Exception:
             logger.exception(
                 "flip_confirm phase failed; deterministic trigger preserved "
@@ -514,10 +547,15 @@ def scan_pack_install(
                 pack_install_id,
                 getattr(trigger, "id", None),
             )
-            # Disable further confirms this scan if factory/provider is toxic.
-            if confirm_provider is None:
-                confirm_enabled = False
-    return created
+            try:
+                session.rollback()
+            except Exception:
+                logger.exception(
+                    "flip_confirm rollback after failure failed pack_install_id=%s",
+                    pack_install_id,
+                )
+            # Stop further confirms this pass if the session/provider is toxic.
+            break
 
 
 def safe_scan_pack_install(
@@ -579,6 +617,27 @@ def _confirm_timeout_seconds(settings: Settings | None) -> float:
     return float(getattr(resolved, "flip_confirm_timeout_seconds", 20.0) or 20.0)
 
 
+def _settings_for_confirm_provider(settings: Settings | None) -> Settings:
+    """Copy settings with codex/claude timeouts bounded to flip_confirm budget.
+
+    Stage-time deadline still caps the confirm loop; this also makes the
+    underlying subprocess ``timeout=`` honour ``flip_confirm_timeout_seconds``
+    instead of the default 300s codex/claude budgets.
+    """
+    from openoyster.config import get_settings
+
+    resolved = settings if settings is not None else get_settings()
+    timeout_s = float(getattr(resolved, "flip_confirm_timeout_seconds", 20.0) or 20.0)
+    # codex/claude Field(ge=10.0); clamp so model_copy validation always succeeds.
+    provider_timeout = min(max(timeout_s, 10.0), 1800.0)
+    return resolved.model_copy(
+        update={
+            "codex_timeout_seconds": provider_timeout,
+            "claude_timeout_seconds": provider_timeout,
+        }
+    )
+
+
 def _resolve_confirm_provider(settings: Settings | None) -> LLMProvider | None:
     """Build the flip_confirm provider from *settings* only (no silent global swap).
 
@@ -586,10 +645,16 @@ def _resolve_confirm_provider(settings: Settings | None) -> LLMProvider | None:
     compatibility. Callers that hold a runtime Settings object (cli/api) MUST
     pass it so an explicit ``flip_confirm_provider="none"`` is honoured even if
     the process-global cache has a stub/codex value.
+
+    Provider subprocess timeouts are lowered to ``flip_confirm_timeout_seconds``
+    so a hung codex/claude call cannot sit for the full 300s default.
     """
     from openoyster.llm import flip_confirm_provider_from_settings
 
-    return flip_confirm_provider_from_settings(settings)
+    if not _confirm_enabled(settings):
+        return None
+    bounded = _settings_for_confirm_provider(settings)
+    return flip_confirm_provider_from_settings(bounded)
 
 
 def _flip_condition_text(session: Session, watch: DeliberationFlipWatch) -> str:
@@ -779,12 +844,13 @@ def _quote_in_evidence(quote: str, evidence_items: list[tuple[str, str]]) -> str
 
 
 def _claim_trigger_for_confirm(session: Session, trigger: DeliberationFlipTrigger) -> bool:
-    """Atomically claim a trigger for confirmation.
+    """Atomically claim a trigger for confirmation via in-progress state.
 
-    Returns False when the trigger is already terminal (idempotent no-op) or
-    another caller won the claim. Claim is allowed from confirmation='none'
-    (first pass) or confirmation='error' (retry). Terminal results are never
-    overwritten.
+    Transitions confirmation ``none|error`` → ``confirming`` with a conditional
+    UPDATE (rowcount==1). Returns False when already terminal, already
+    ``confirming``, or another caller won the claim. ``error`` remains
+    retriable once the prior attempt finished (left error, not confirming).
+    Terminal results are never overwritten.
     """
     session.refresh(trigger)
     if trigger.confirmation in TERMINAL_CONFIRMATIONS:
@@ -798,7 +864,7 @@ def _claim_trigger_for_confirm(session: Session, trigger: DeliberationFlipTrigge
             DeliberationFlipTrigger.confirmation.in_(list(CLAIMABLE_CONFIRMATIONS)),
         )
         .values(
-            confirmation=CONFIRMATION_ERROR,
+            confirmation=CONFIRMATION_CONFIRMING,
             confirmation_note=CONFIRM_CLAIM_NOTE,
             confirmation_anchors_json=[],
         )
@@ -820,13 +886,14 @@ def confirm_trigger(
     Never changes watch status. Never re-runs deliberation. Exceptions are
     swallowed into confirmation='error' so scan/install isolation holds.
 
-    Atomic + idempotent: terminal confirmations (llm_supported/llm_unsupported)
-    are claimed once and never overwritten on re-call. confirmation='error' is
-    retriable.
+    Atomic + idempotent: claims via confirmation='confirming', then writes a
+    terminal result (llm_supported/llm_unsupported) or error. Terminal
+    confirmations are never overwritten. confirmation='error' is retriable
+    only when not currently confirming.
     """
     try:
         if not _claim_trigger_for_confirm(session, trigger):
-            # Already terminal, or lost the claim race — keep existing result.
+            # Already terminal, confirming, or lost the claim race.
             return
 
         watch = session.get(DeliberationFlipWatch, trigger.watch_id)
@@ -913,7 +980,7 @@ def confirm_trigger(
             getattr(trigger, "id", None),
         )
         try:
-            # Only write error if we still hold a non-terminal claim.
+            # Only write error if we still hold a non-terminal claim (confirming).
             session.refresh(trigger)
             if trigger.confirmation not in TERMINAL_CONFIRMATIONS:
                 trigger.confirmation = CONFIRMATION_ERROR

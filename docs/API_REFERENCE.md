@@ -279,6 +279,6 @@ These input/continuation errors return HTTP `422` with `{"detail":{"code":"..."}
 
 ### `GET /v1/deliberations/{id}/transition`
 
-Returns the sanitized persisted transition artifact for a child run. Its method is `cognitive_transition_v2`. It separates `claimed_knowledge_requests`, `verified_fulfilled_knowledge_requests`, and `unverified_claimed_knowledge_requests`; `fulfilled_knowledge_requests` is a compatibility alias for the verified subset. Unverified claims and critic-promoted gaps remain in `remaining_knowledge_requests`.
+Returns the sanitized persisted transition artifact for a child run. Its method is `cognitive_transition_v3`. It separates `claimed_knowledge_requests`, `verified_fulfilled_knowledge_requests`, and `unverified_claimed_knowledge_requests`; `fulfilled_knowledge_requests` is a compatibility alias for the verified subset. Unverified claims and critic-promoted gaps remain in `remaining_knowledge_requests`. When critic2 is enabled, relevance judgments are frozen into `semantic_verdicts` for LLM-free replay.
 
 The parent and transition artifact are immutable. Repeating the same continuation with the same idempotency key and parent returns the existing run state; it does not create another child execution. This also applies to a `failed_execution` child, so retrying after provider/runtime recovery requires a new `Idempotency-Key`. Replay remains an LLM-free audit of stored child artifacts and does not compare Pack contents.

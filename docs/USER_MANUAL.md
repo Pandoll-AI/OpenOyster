@@ -343,7 +343,7 @@ openoyster deliberate continue PARENT_RUN_ID \
 openoyster deliberate transition CHILD_RUN_ID
 ```
 
-The child reuses the frozen parent Mission snapshot and records `parent_run_id`. Its immutable `cognitive_transition_v2` artifact separates claimed, verified fulfilled, and unverified claimed requests. `evidence:no_evidence` is verified only when the child cites newly added evidence. Critic gap findings are promoted to new Knowledge Requests.
+The child reuses the frozen parent Mission snapshot and records `parent_run_id`. Its immutable `cognitive_transition_v3` artifact separates claimed, verified fulfilled, and unverified claimed requests, and freezes optional critic2 relevance into `semantic_verdicts`. `evidence:no_evidence` is verified only when the child cites newly added evidence. Critic gap findings are promoted to new Knowledge Requests.
 
 Concrete flow: the first run abstains because evidence for “field recovery time” is missing and records `kr_no_evidence`. OpenCrab supplies a new Pack, and the user continues with `--fulfills kr_no_evidence`. The transition then makes the exact changes in beliefs, viable options, critic verdict, decision (`abstain` to `select`, when the gates allow it), and cited global evidence visible. Unfulfilled requests remain listed.
 

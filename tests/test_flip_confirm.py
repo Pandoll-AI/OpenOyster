@@ -453,7 +453,7 @@ def test_scan_hook_calls_confirm_when_provider_configured(
     temp_settings: Settings,
     tmp_path: Path,
 ) -> None:
-    """scan_pack_install with settings.flip_confirm_provider invokes confirm once."""
+    """Post-commit confirm path with flip_confirm_provider confirms once."""
     temp_settings.flip_confirm_provider = "stub"
     with session_factory() as session:
         watch = _setup_watching(session, temp_settings, tmp_path, key="hook")
@@ -474,12 +474,17 @@ def test_scan_hook_calls_confirm_when_provider_configured(
             profile="compatible",
         )
         session.commit()
-        # Explicit scan with settings (not get_settings cache).
+        # Deterministic scan leaves confirmation=none; confirm is post-commit.
         created = flip_monitoring.scan_pack_install(
             session, result.pack_install_id, settings=temp_settings
         )
         session.commit()
         assert len(created) == 1
+        assert created[0].confirmation == "none"
+        flip_monitoring.confirm_pending_triggers(
+            session, result.pack_install_id, settings=temp_settings
+        )
+        session.refresh(created[0])
         assert created[0].confirmation == "llm_supported"
         session.refresh(watch)
         assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
@@ -587,12 +592,15 @@ def test_factory_exception_preserves_deterministic_trigger(
         )
         session.commit()
 
-        # safe_scan must succeed and preserve the deterministic trigger.
+        # Deterministic scan commits first; factory boom only hits post-commit confirm.
         created = flip_monitoring.safe_scan_pack_install(
             session, result.pack_install_id, settings=temp_settings
         )
         session.commit()
         assert len(created) == 1
+        flip_monitoring.confirm_pending_triggers(
+            session, result.pack_install_id, settings=temp_settings
+        )
         session.refresh(watch)
         assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
         triggers = session.scalars(
@@ -652,7 +660,13 @@ def test_confirm_cap_leaves_excess_as_none(
         )
         session.commit()
         assert len(created) == 3
+        assert all(t.confirmation == "none" for t in created)
+        flip_monitoring.confirm_pending_triggers(
+            session, result.pack_install_id, settings=temp_settings
+        )
         assert len(confirm_calls) == 2
+        for t in created:
+            session.refresh(t)
         confirmations = [t.confirmation for t in created]
         assert confirmations.count("llm_supported") == 2
         assert confirmations.count("none") == 1
@@ -837,3 +851,250 @@ def test_confirm_trigger_is_idempotent_for_terminal(
         assert next(iter(trigger.confirmation_anchors_json or []))["quote"] == first_quote
         assert second.calls == []  # never invoked after terminal claim miss
         assert first.calls == ["flip_confirm"]
+
+
+# ---------------------------------------------------------------------------
+# Post-commit confirm + real timeout + confirming claim serialization
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_pending_sees_already_committed_deterministic_trigger(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4 RED/GREEN (a): confirm_pending runs only after deterministic commit.
+
+    A separate session must already see the trigger when confirm starts.
+    """
+    temp_settings.flip_confirm_provider = "stub"
+    seen_at_confirm: dict[str, Any] = {}
+    real_confirm_pending = flip_monitoring.confirm_pending_triggers
+
+    def _tracking_confirm_pending(
+        session: Session, pack_install_id: int, settings: Any = None
+    ) -> None:
+        with session_factory() as other:
+            rows = list(
+                other.scalars(
+                    select(DeliberationFlipTrigger).where(
+                        DeliberationFlipTrigger.pack_install_id == pack_install_id
+                    )
+                ).all()
+            )
+            install = other.get(PackInstall, pack_install_id)
+            seen_at_confirm["n"] = len(rows)
+            seen_at_confirm["confirmations"] = [r.confirmation for r in rows]
+            seen_at_confirm["install_status"] = (
+                install.status if install is not None else None
+            )
+        return real_confirm_pending(session, pack_install_id, settings=settings)
+
+    # scan_installed_pack imports confirm_pending_triggers at call time.
+    monkeypatch.setattr(
+        flip_monitoring, "confirm_pending_triggers", _tracking_confirm_pending
+    )
+
+    with session_factory() as session:
+        watch = _setup_watching(session, temp_settings, tmp_path, key="g4post")
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "g4post-match")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.g4post-match"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        evidence_path = pack_dir / "evidence" / "index.jsonl"
+        row = json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])
+        row["text"] = EVIDENCE_BODY
+        evidence_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        opencrab_packs.scan_installed_pack(
+            session, result.pack_install_id, settings=temp_settings
+        )
+
+        assert seen_at_confirm.get("n") == 1
+        assert seen_at_confirm.get("confirmations") == ["none"]
+        assert seen_at_confirm.get("install_status") == "active"
+        session.refresh(watch)
+        assert watch.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+        trigger = session.scalar(
+            select(DeliberationFlipTrigger).where(
+                DeliberationFlipTrigger.watch_id == watch.id
+            )
+        )
+        assert trigger is not None
+        assert trigger.confirmation == "llm_supported"
+
+
+def test_hanging_confirm_does_not_undo_durable_trigger(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4 RED/GREEN (b): infinite-wait confirm leaves install+trigger durable."""
+    temp_settings.flip_confirm_provider = "stub"
+
+    def _hang_forever(
+        session: Session, pack_install_id: int, settings: Any = None
+    ) -> None:
+        del session, pack_install_id, settings
+        raise TimeoutError("confirm provider hung forever")
+
+    monkeypatch.setattr(flip_monitoring, "confirm_pending_triggers", _hang_forever)
+
+    with session_factory() as session:
+        watch = _setup_watching(session, temp_settings, tmp_path, key="g4hang")
+        pack_dir = _copy_fixture(MINIMAL_FIXTURE, tmp_path / "g4hang-match")
+        manifest = pack_dir / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["pack_id"] = "pack.g4hang-match"
+        manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        evidence_path = pack_dir / "evidence" / "index.jsonl"
+        row = json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])
+        row["text"] = EVIDENCE_BODY
+        evidence_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = opencrab_packs.install_pack(
+            session,
+            pack_dir,
+            workspace=temp_settings.workspace,
+            profile="compatible",
+        )
+        session.commit()
+        opencrab_packs.scan_installed_pack(
+            session, result.pack_install_id, settings=temp_settings
+        )
+
+    # Fresh session: install + deterministic trigger must still be durable.
+    with session_factory() as other:
+        install = other.get(PackInstall, result.pack_install_id)
+        assert install is not None
+        assert install.status == "active"
+        trigger = other.scalar(
+            select(DeliberationFlipTrigger).where(
+                DeliberationFlipTrigger.pack_install_id == result.pack_install_id
+            )
+        )
+        assert trigger is not None
+        assert trigger.confirmation == "none"
+        watch_row = other.get(DeliberationFlipWatch, watch.id)
+        assert watch_row is not None
+        assert watch_row.status == flip_monitoring.WATCH_STATUS_TRIGGERED_CANDIDATE
+
+
+def test_confirm_provider_timeouts_match_flip_confirm_budget(
+    temp_settings: Settings,
+) -> None:
+    """#4 RED/GREEN (c): provider settings use flip_confirm_timeout_seconds."""
+    temp_settings.flip_confirm_provider = "codex"
+    temp_settings.flip_confirm_timeout_seconds = 20.0
+    # Defaults are 300s — confirm path must lower them.
+    assert temp_settings.codex_timeout_seconds == 300.0
+    assert temp_settings.claude_timeout_seconds == 300.0
+
+    bounded = flip_monitoring._settings_for_confirm_provider(temp_settings)
+    assert bounded.codex_timeout_seconds == 20.0
+    assert bounded.claude_timeout_seconds == 20.0
+    assert bounded.flip_confirm_timeout_seconds == 20.0
+    assert bounded.flip_confirm_provider == "codex"
+
+    # Provider factory must receive the bounded copy, not the raw 300s settings.
+    captured: list[Settings] = []
+    real_factory = __import__(
+        "openoyster.llm", fromlist=["flip_confirm_provider_from_settings"]
+    ).flip_confirm_provider_from_settings
+
+    def _capture(settings: Settings | None = None) -> Any:
+        assert settings is not None
+        captured.append(settings)
+        # Avoid spawning a real CodexProvider — return a stub stand-in.
+        return ControllableConfirmProvider()
+
+    import openoyster.llm as llm_mod
+
+    original = llm_mod.flip_confirm_provider_from_settings
+    try:
+        llm_mod.flip_confirm_provider_from_settings = _capture  # type: ignore[assignment]
+        provider = flip_monitoring._resolve_confirm_provider(temp_settings)
+        assert provider is not None
+        assert len(captured) == 1
+        assert captured[0].codex_timeout_seconds == 20.0
+        assert captured[0].claude_timeout_seconds == 20.0
+    finally:
+        llm_mod.flip_confirm_provider_from_settings = original  # type: ignore[assignment]
+        _ = real_factory
+
+
+def test_claim_serializes_error_reentry_via_confirming(
+    session_factory: sessionmaker[Session],
+    temp_settings: Settings,
+    tmp_path: Path,
+) -> None:
+    """#7 RED/GREEN: second claim on error while confirming is rejected.
+
+    First claim from error → confirming (True). Immediate second claim → False.
+    Terminal re-confirm remains a no-op (result immutable).
+    """
+    with session_factory() as session:
+        watch = _setup_watching(session, temp_settings, tmp_path, key="g7ser")
+        _install_fixture(
+            session,
+            temp_settings,
+            tmp_path,
+            MINIMAL_FIXTURE,
+            dirname="g7ser-match",
+            pack_id="pack.g7ser-match",
+            evidence_text=EVIDENCE_BODY,
+        )
+        session.refresh(watch)
+        trigger = session.scalar(
+            select(DeliberationFlipTrigger).where(
+                DeliberationFlipTrigger.watch_id == watch.id
+            )
+        )
+        assert trigger is not None
+
+        # Put the row into retriable error state (as after a prior provider failure).
+        trigger.confirmation = flip_monitoring.CONFIRMATION_ERROR
+        trigger.confirmation_note = "provider_RuntimeError"
+        trigger.confirmation_anchors_json = []
+        session.commit()
+        session.refresh(trigger)
+
+        first = flip_monitoring._claim_trigger_for_confirm(session, trigger)
+        assert first is True
+        assert trigger.confirmation == flip_monitoring.CONFIRMATION_CONFIRMING
+
+        second = flip_monitoring._claim_trigger_for_confirm(session, trigger)
+        assert second is False
+        assert trigger.confirmation == flip_monitoring.CONFIRMATION_CONFIRMING
+
+        # Finish as terminal; re-confirm must not overwrite.
+        trigger.confirmation = flip_monitoring.CONFIRMATION_LLM_SUPPORTED
+        trigger.confirmation_note = None
+        trigger.confirmation_anchors_json = [
+            {"evidence_id": "ev-1", "quote": "requires operator confirmation."}
+        ]
+        session.commit()
+        session.refresh(trigger)
+
+        third = flip_monitoring._claim_trigger_for_confirm(session, trigger)
+        assert third is False
+        assert trigger.confirmation == flip_monitoring.CONFIRMATION_LLM_SUPPORTED
+        assert next(iter(trigger.confirmation_anchors_json or []))["quote"] == (
+            "requires operator confirmation."
+        )
+
+        # Full confirm_trigger path is also a no-op on terminal.
+        overwrite = ControllableConfirmProvider(related=False, quote=None)
+        flip_monitoring.confirm_trigger(session, trigger, overwrite)
+        session.commit()
+        session.refresh(trigger)
+        assert trigger.confirmation == flip_monitoring.CONFIRMATION_LLM_SUPPORTED
+        assert overwrite.calls == []

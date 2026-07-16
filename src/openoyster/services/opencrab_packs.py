@@ -896,13 +896,20 @@ def scan_installed_pack(
     """Post-commit flip-condition scan for a freshly installed Pack.
 
     Callers invoke this AFTER committing the install so the deterministic scan
-    runs against durable evidence. Scan failures never affect admission; the
-    caller's install result is already committed and returned.
+    runs against durable evidence. Order:
+
+    1. ``safe_scan_pack_install`` — deterministic trigger create only
+    2. ``session.commit()`` — triggers become durable
+    3. ``confirm_pending_triggers`` — optional LLM confirm (isolated; may
+       commit per trigger). Confirm failure never undoes install or triggers.
 
     Pass the caller's runtime ``settings`` so flip_confirm_provider is not
     re-resolved from the global ``get_settings()`` cache.
     """
-    from openoyster.services.flip_monitoring import safe_scan_pack_install
+    from openoyster.services.flip_monitoring import (
+        confirm_pending_triggers,
+        safe_scan_pack_install,
+    )
 
     try:
         safe_scan_pack_install(session, pack_install_id, settings=settings)
@@ -911,6 +918,24 @@ def scan_installed_pack(
         session.rollback()
         logger.exception(
             "flip scan failed after install pack_install_id=%s", pack_install_id
+        )
+        return
+
+    # Confirm is post-commit and fully isolated from install + deterministic triggers.
+    try:
+        confirm_pending_triggers(session, pack_install_id, settings=settings)
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            logger.exception(
+                "flip confirm rollback failed after install pack_install_id=%s",
+                pack_install_id,
+            )
+        logger.exception(
+            "flip confirm failed after install; deterministic triggers preserved "
+            "pack_install_id=%s",
+            pack_install_id,
         )
 
 
