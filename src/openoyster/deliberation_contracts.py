@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from openoyster.utils import sha256_text
 
 CONTRACT_VERSION: Final = "deliberation-d1-v1"
-PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v8"
+PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v9"
 
 MAX_BELIEFS: Final = 20
 MAX_OPTIONS: Final = 5
@@ -22,6 +22,9 @@ MAX_LLM_ATTEMPTS: Final = 10
 MIN_QUOTE_CHARS: Final = 12
 MAX_RETRIEVAL_EXPANSION_QUERIES: Final = 5
 MAX_RETRIEVAL_EXPANSION_QUERY_CHARS: Final = 200
+MAX_FLIP_PREDICATE_TERMS: Final = 8
+MAX_FLIP_PREDICATE_TERM_CHARS: Final = 100
+MAX_ACTIVE_FLIP_WATCHES: Final = 200
 
 STAGE_BELIEFS: Final = "deliberation_beliefs"
 STAGE_OPTIONS: Final = "deliberation_options"
@@ -320,9 +323,43 @@ class CriticStagePayload(StrictModel):
     findings: list[NarrativeAssertion] = Field(default_factory=list)
 
 
+class FlipPredicate(StrictModel):
+    """Deterministic FTS watch predicate for flip-condition monitoring (D3).
+
+    Absent predicate means the flip condition is dossier-only (not watched).
+    """
+
+    query_terms: list[str] = Field(min_length=1, max_length=MAX_FLIP_PREDICATE_TERMS)
+    note: str | None = None
+
+    @field_validator("query_terms")
+    @classmethod
+    def _term_bounds(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("query_terms must contain at least one term")
+        if len(value) > MAX_FLIP_PREDICATE_TERMS:
+            raise ValueError(
+                f"at most {MAX_FLIP_PREDICATE_TERMS} query_terms allowed"
+            )
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("query_terms must be strings")
+            text = item.strip()
+            if not text:
+                raise ValueError("query_terms must not contain empty strings")
+            if len(text) > MAX_FLIP_PREDICATE_TERM_CHARS:
+                raise ValueError(
+                    f"query_term exceeds {MAX_FLIP_PREDICATE_TERM_CHARS} chars"
+                )
+            cleaned.append(text)
+        return cleaned
+
+
 class FlipCondition(StrictModel):
     local_key: str = Field(min_length=1)
     condition: NarrativeAssertion
+    predicate: FlipPredicate | None = None
 
 
 class KnowledgeRequest(StrictModel):

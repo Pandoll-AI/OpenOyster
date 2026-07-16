@@ -548,6 +548,11 @@ def _complete_run(
     session.flush()
     persist_dossier(session, run)
     session.flush()
+    # D3: promote flip conditions with structured predicates into watches.
+    from openoyster.services.flip_monitoring import create_watches_for_completed_run
+
+    create_watches_for_completed_run(session, run)
+    session.flush()
     session.commit()
     return run
 

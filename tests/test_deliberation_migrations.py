@@ -23,6 +23,8 @@ REQUIRED_TABLES = {
     "deliberation_dossiers",
     "deliberation_cognitive_impacts",
     "deliberation_replay_results",
+    "deliberation_flip_watches",
+    "deliberation_flip_triggers",
 }
 
 
@@ -609,5 +611,56 @@ def test_0008_does_not_trust_transition_claimed_for_continuation_backfill(
             assert "TAMPERED-CLAIMED-KEY" not in keys
             # Continuation fingerprint left for lazy-fill (not reconstructed from claimed).
             assert fp is None
+    finally:
+        engine.dispose()
+
+
+def test_0009_flip_monitoring_tables_upgrade_and_downgrade(temp_settings: Settings) -> None:
+    """0009 creates flip watch/trigger tables; downgrade removes them symmetrically."""
+    engine = make_engine(temp_settings)
+    try:
+        upgrade_database(temp_settings, revision="0008_fulfilled_request_keys")
+        inspector = inspect(engine)
+        before = set(inspector.get_table_names())
+        assert "deliberation_flip_watches" not in before
+        assert "deliberation_flip_triggers" not in before
+
+        upgrade_database(temp_settings, revision="head")
+        inspector = inspect(engine)
+        after = set(inspector.get_table_names())
+        assert "deliberation_flip_watches" in after
+        assert "deliberation_flip_triggers" in after
+
+        watch_cols = {
+            column["name"] for column in inspector.get_columns("deliberation_flip_watches")
+        }
+        assert {
+            "id",
+            "run_id",
+            "flip_local_key",
+            "predicate_json",
+            "status",
+            "dismiss_reason",
+            "created_at",
+            "updated_at",
+        } <= watch_cols
+        trigger_cols = {
+            column["name"] for column in inspector.get_columns("deliberation_flip_triggers")
+        }
+        assert {
+            "id",
+            "watch_id",
+            "pack_install_id",
+            "matched_evidence_ids",
+            "created_at",
+        } <= trigger_cols
+
+        config = _alembic_config(temp_settings.db_url)
+        command.downgrade(config, "0008_fulfilled_request_keys")
+        inspector = inspect(engine)
+        downgraded = set(inspector.get_table_names())
+        assert "deliberation_flip_watches" not in downgraded
+        assert "deliberation_flip_triggers" not in downgraded
+        assert "deliberation_runs" in downgraded
     finally:
         engine.dispose()

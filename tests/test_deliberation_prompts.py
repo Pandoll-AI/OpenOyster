@@ -22,3 +22,6 @@ def test_stage_prompt_exposes_closed_output_contract_and_hidden_invariants() -> 
     assert "at least 12 non-padding characters after strip" in prompt
     assert "mission_pointer is an RFC 6901 JSON Pointer" in prompt
     assert "Do not add wrapper fields" in prompt
+    assert "flip_conditions[].predicate" in prompt
+    assert "query_terms" in prompt
+    assert "dossier-only" in prompt

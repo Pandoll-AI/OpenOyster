@@ -96,6 +96,14 @@ class DeliberationContinueRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class FlipWatchDismissRequest(BaseModel):
+    """Dismiss a flip-condition watch with a required audit reason."""
+
+    reason: str = Field(min_length=1)
+
+    model_config = {"extra": "forbid"}
+
+
 _DELIBERATION_HIDDEN_FIELDS = {
     "failure_detail",
     "idempotency_key",
@@ -630,6 +638,88 @@ code{{background:#f2f4f7;padding:.1rem .3rem;border-radius:4px}}
                 detail={"code": "cognitive_transition_not_ready"},
             )
         return _sanitize_deliberation_value(artifact.payload_json)  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/deliberations/{run_id}/flip-watches",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def get_deliberation_flip_watches(
+        run_id: int,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """List flip-condition watches for one completed deliberation run (D3)."""
+        from openoyster.services import flip_monitoring
+
+        deliberation_run_or_404(session, run_id)
+        watches = flip_monitoring.list_watches(session, run_id=run_id)
+        payload = {
+            "run_id": run_id,
+            "watches": [flip_monitoring.watch_public_payload(watch) for watch in watches],
+        }
+        return _sanitize_deliberation_value(payload)  # type: ignore[return-value]
+
+    @application.get(
+        "/v1/flip-triggers",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def list_flip_triggers(
+        status_filter: Annotated[str | None, Query(alias="status")] = None,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """List flip-trigger candidates; optional watch-status filter (alias: candidate)."""
+        from openoyster.services import flip_monitoring
+
+        try:
+            rows = flip_monitoring.list_triggers(session, status=status_filter)
+        except flip_monitoring.FlipWatchError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": exc.code},
+            ) from None
+        payload = {
+            "triggers": [
+                flip_monitoring.trigger_public_payload(trigger, watch)
+                for trigger, watch in rows
+            ]
+        }
+        return _sanitize_deliberation_value(payload)  # type: ignore[return-value]
+
+    @application.post(
+        "/v1/flip-watches/{watch_id}/dismiss",
+        dependencies=[Depends(_deliberation_authorised)],
+    )
+    def dismiss_flip_watch(
+        watch_id: int,
+        payload: FlipWatchDismissRequest,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        """Dismiss a flip watch with audit reason. Never re-runs deliberation."""
+        from openoyster.services import flip_monitoring
+
+        try:
+            watch = flip_monitoring.dismiss_watch(session, watch_id, reason=payload.reason)
+            session.commit()
+        except flip_monitoring.FlipWatchError as exc:
+            session.rollback()
+            code = exc.code
+            http_status = (
+                status.HTTP_404_NOT_FOUND
+                if code == "watch_not_found"
+                else status.HTTP_422_UNPROCESSABLE_CONTENT
+            )
+            raise HTTPException(
+                status_code=http_status,
+                detail={"code": code},
+            ) from None
+        except Exception:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "flip_watch_dismiss_failed"},
+            ) from None
+        return _sanitize_deliberation_value(
+            {"watch": flip_monitoring.watch_public_payload(watch)}
+        )  # type: ignore[return-value]
 
     @application.post("/v1/run-cycle", dependencies=[Depends(_write_authorised)])
     def run_cycle() -> dict[str, Any]:

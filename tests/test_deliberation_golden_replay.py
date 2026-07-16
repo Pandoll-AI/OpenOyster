@@ -39,12 +39,13 @@ MISSION_PATH = PROJECT_ROOT / "tests/fixtures/deliberation_d1/mission_happy.json
 # module, print the new digests from a failing assertion, and commit the new
 # constants only after confirming the delta is intentional.
 # 2026-07-16: rebased for the intentional `retrieval_trace` dossier key (W-A1
-# query-expansion provenance); verified the payload delta was exactly that key.
+# query-expansion provenance), then again for the D3 flip-condition `predicate`
+# field and prompt template v9; verified the deltas were exactly those.
 GOLDEN_SELECT_DOSSIER_JSON_DIGEST = (
-    "46cc4f93f39652198834885e0e732c78420ec20ebbc9bbf633880a2a9f450c93"
+    "2a325111d8cdd4807ac5506f22c878cd3ec0a91239c916ce39cd9d2661a41b5b"
 )
 GOLDEN_NO_EVIDENCE_DOSSIER_JSON_DIGEST = (
-    "c781fc6fd3c723e94e9d4e79054c146538cc26aaff34e917f99ab46c6b9e9a88"
+    "ed8a684a5cbf94392ca9abd62d3202b14c29640dc40ece8c74fb37e5a0ce3b57"
 )
 
 

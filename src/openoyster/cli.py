@@ -76,12 +76,14 @@ hypothesis_app = typer.Typer(help="Inspect hypotheses and evidence.")
 artifact_app = typer.Typer(help="Inspect artifacts and provenance.")
 pack_app = typer.Typer(help="Validate, install, inspect, and query trusted OpenCrab Pack directories.")
 deliberate_app = typer.Typer(help="Run and audit Autonomous Deliberation D1 decisions.")
+deliberate_watch_app = typer.Typer(help="Monitor flip-condition watches (D3).")
 app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(artifact_app, name="artifact")
 app.add_typer(pack_app, name="pack")
 app.add_typer(deliberate_app, name="deliberate")
+deliberate_app.add_typer(deliberate_watch_app, name="watch")
 app.add_typer(eval_app, name="eval")
 app.add_typer(gold_app, name="gold")
 console = Console()
@@ -1240,6 +1242,116 @@ def deliberate_knowledge_requests(
         else:
             payload = raw
     _print_pack_json(_sanitize_deliberation_value(payload))
+
+
+@deliberate_watch_app.command("list")
+def deliberate_watch_list(
+    status: Annotated[str | None, typer.Option(help="Filter by watch status.")] = None,
+) -> None:
+    """List flip-condition watches (D3). Never re-runs deliberation."""
+    from .services import flip_monitoring
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            watches = flip_monitoring.list_watches(session, status=status)
+            payload = {
+                "watches": [
+                    _sanitize_deliberation_value(flip_monitoring.watch_public_payload(w))
+                    for w in watches
+                ]
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("show")
+def deliberate_watch_show(watch_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show one flip-condition watch and its triggers."""
+    from .services import flip_monitoring
+
+    with _runtime() as (_, _, factory), factory() as session:
+        watch = flip_monitoring.get_watch(session, watch_id)
+        if watch is None:
+            _print_pack_json({"error": {"code": "watch_not_found"}})
+            raise typer.Exit(code=2)
+        triggers = flip_monitoring.list_triggers(session, watch_id=watch_id)
+        payload = {
+            "watch": _sanitize_deliberation_value(flip_monitoring.watch_public_payload(watch)),
+            "triggers": [
+                _sanitize_deliberation_value(
+                    flip_monitoring.trigger_public_payload(trigger, parent)
+                )
+                for trigger, parent in triggers
+            ],
+        }
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("scan")
+def deliberate_watch_scan(
+    pack_install: Annotated[
+        int | None,
+        typer.Option("--pack-install", help="Pack install ID to scan against watching predicates."),
+    ] = None,
+) -> None:
+    """Manually scan watching flip predicates against a Pack install (deterministic)."""
+    from .services import flip_monitoring
+
+    if pack_install is None:
+        _print_pack_json({"error": {"code": "pack_install_required"}})
+        raise typer.Exit(code=2)
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            triggers = flip_monitoring.scan_pack_install(session, pack_install)
+            session.commit()
+            trigger_payloads = []
+            for trigger in triggers:
+                watch = flip_monitoring.get_watch(session, trigger.watch_id)
+                if watch is None:
+                    continue
+                trigger_payloads.append(
+                    _sanitize_deliberation_value(
+                        flip_monitoring.trigger_public_payload(trigger, watch)
+                    )
+                )
+            payload = {
+                "pack_install_id": pack_install,
+                "triggered": len(triggers),
+                "triggers": trigger_payloads,
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("dismiss")
+def deliberate_watch_dismiss(
+    watch_id: Annotated[int, typer.Argument(min=1)],
+    reason: Annotated[str, typer.Option(help="Audit reason for dismissing this watch.")],
+) -> None:
+    """Dismiss a flip watch with a required audit reason. Does not re-deliberate."""
+    from .services import flip_monitoring
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            watch = flip_monitoring.dismiss_watch(session, watch_id, reason=reason)
+            session.commit()
+            payload = {
+                "watch": _sanitize_deliberation_value(flip_monitoring.watch_public_payload(watch))
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
 
 
 def _print_results(results) -> None:
