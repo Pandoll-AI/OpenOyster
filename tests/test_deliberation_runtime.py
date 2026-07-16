@@ -384,7 +384,10 @@ def test_no_match_in_pack_evidence_abstains_with_retrieval_status(
         )
         session.commit()
 
-        assert provider.calls == []
+        # Pack has evidence but no lexical match → optional expansion fires once,
+        # then still abstains with no_match (never proceeds to deliberation stages).
+        assert provider.calls == ["retrieval_query_expansion"]
+        assert run.llm_attempt_count == 1
         assert run.status == "completed"
         assert run.outcome == "abstain"
         knowledge = session.scalar(
@@ -398,6 +401,13 @@ def test_no_match_in_pack_evidence_abstains_with_retrieval_status(
         assert len(requests) == 1
         assert requests[0]["local_key"] == "kr_no_evidence"
         assert requests[0]["retrieval_status"] == "no_match_in_pack_evidence"
+        trace = session.scalar(
+            select(DeliberationArtifact).where(
+                DeliberationArtifact.run_id == run.id,
+                DeliberationArtifact.kind == "retrieval_trace",
+            )
+        )
+        assert trace is not None
 
 
 def test_provider_failure_is_execution_failure_not_epistemic_abstention(

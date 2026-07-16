@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -19,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from openoyster.models import PackEdge, PackEvidence, PackFile, PackInstall, PackNode, utcnow
 from openoyster.utils import stable_hash
+
+logger = logging.getLogger(__name__)
 
 AdmissionProfile = Literal["compatible", "strict"]
 SUPPORTED_FORMAT_VERSION: Final = "opencrab-pack-v1"
@@ -135,6 +138,76 @@ def _issue(
     if record_id is not None:
         payload["record_id"] = record_id
     return payload
+
+
+def _diagnose_retrieval_hints(manifest: dict[str, Any], issues: list[dict[str, Any]]) -> list[str]:
+    """Accept optional manifest.retrieval_hints as a string array (lenient).
+
+    Invalid shapes/elements are ignored with a non-error diagnostic; admission
+    is never rejected for this field. Hints are search routing aids only.
+    Caps (shared with pack_retrieval): max 32 hints, 200 chars each.
+    """
+    # Local import avoids a hard package cycle at module load.
+    from openoyster.services.pack_retrieval import (
+        MAX_RETRIEVAL_HINT_CHARS,
+        MAX_RETRIEVAL_HINTS,
+        normalize_retrieval_hints,
+    )
+
+    if "retrieval_hints" not in manifest:
+        return []
+    raw = manifest.get("retrieval_hints")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        issues.append(
+            _issue(
+                "ignored_retrieval_hints",
+                "info",
+                "manifest.retrieval_hints ignored: expected a string array",
+                path="manifest.json",
+            )
+        )
+        return []
+    accepted: list[str] = []
+    ignored_elements = False
+    truncated = False
+    for item in raw:
+        if len(accepted) >= MAX_RETRIEVAL_HINTS:
+            truncated = True
+            break
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                if len(text) > MAX_RETRIEVAL_HINT_CHARS:
+                    truncated = True
+                accepted.append(text[:MAX_RETRIEVAL_HINT_CHARS])
+            # empty strings are silently dropped
+        else:
+            ignored_elements = True
+    if ignored_elements:
+        issues.append(
+            _issue(
+                "ignored_retrieval_hints_elements",
+                "info",
+                "manifest.retrieval_hints non-string elements ignored",
+                path="manifest.json",
+            )
+        )
+    if truncated:
+        issues.append(
+            _issue(
+                "truncated_retrieval_hints",
+                "info",
+                (
+                    f"manifest.retrieval_hints truncated to {MAX_RETRIEVAL_HINTS} items "
+                    f"and {MAX_RETRIEVAL_HINT_CHARS} chars each"
+                ),
+                path="manifest.json",
+            )
+        )
+    # Keep admission-time list identical to runtime normalize path.
+    return normalize_retrieval_hints(accepted)
 
 
 def _iter_pack_files(root: Path) -> list[Path]:
@@ -371,6 +444,9 @@ def validate_pack_directory(
     grammar_version = (
         str(manifest["grammar_version"]) if manifest.get("grammar_version") is not None else None
     )
+
+    # Optional multi-language retrieval aliases. Lenient: never fail admission.
+    _diagnose_retrieval_hints(manifest, issues)
 
     node_ids: dict[str, dict[str, Any]] = {}
     for node in nodes:
@@ -792,6 +868,10 @@ def install_pack(
         )
 
     session.flush()
+    # Admission stays flush-only: the caller owns the transaction and commit.
+    # The caller runs the post-commit flip scan (see scan_installed_pack) so this
+    # function never commits an arbitrary shared caller session, which would
+    # otherwise persist unrelated pending rows the caller had not committed.
     return PackInstallResult(
         status=install.status,
         pack_id=install.pack_id,
@@ -802,6 +882,25 @@ def install_pack(
         storage_uri=install.storage_uri,
         admission_report=admission_report,
     )
+
+
+def scan_installed_pack(session: Session, pack_install_id: int) -> None:
+    """Post-commit flip-condition scan for a freshly installed Pack.
+
+    Callers invoke this AFTER committing the install so the deterministic scan
+    runs against durable evidence. Scan failures never affect admission; the
+    caller's install result is already committed and returned.
+    """
+    from openoyster.services.flip_monitoring import safe_scan_pack_install
+
+    try:
+        safe_scan_pack_install(session, pack_install_id)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception(
+            "flip scan failed after install pack_install_id=%s", pack_install_id
+        )
 
 
 def list_active_installs(session: Session) -> list[PackInstall]:

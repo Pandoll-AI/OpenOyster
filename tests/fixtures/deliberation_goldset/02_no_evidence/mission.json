@@ -1,0 +1,11 @@
+{
+  "goal": "Decide whether to accept a claim when the pack has no evidence",
+  "decision_question": "Should we accept the claim supported by the installed Pack?",
+  "constraints": [
+    "Do not invent facts outside Pack evidence"
+  ],
+  "preferences": [
+    "Prefer options that remain reversible"
+  ],
+  "context": "Empty pack control background; never cite as evidence."
+}

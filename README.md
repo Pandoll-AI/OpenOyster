@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-282%20passing-brightgreen.svg)](tests)
 [![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 [![Language](https://img.shields.io/badge/docs-Korean%20%7C%20English-lightgrey.svg)](README-en.md)
 
@@ -269,6 +269,15 @@ openoyster deliberate dossier RUN_ID --format json|markdown
 openoyster deliberate replay RUN_ID
 openoyster deliberate impact RUN_ID
 openoyster deliberate knowledge-requests RUN_ID [--format default|export]
+openoyster deliberate continue PARENT --packs PACK_ID,... --fulfills KEY,... --idempotency-key KEY
+openoyster deliberate transition CHILD
+
+openoyster deliberate watch list|scan|show|dismiss        # flip condition 감시 (D3)
+openoyster deliberate outcome record|show RUN_ID          # 결정 결과 원장
+openoyster deliberate calibration [--charter ID]          # 판단력 보정 리포트
+openoyster charter create|list|show|archive               # 지속 관심사
+
+openoyster eval deliberation [--scenarios DIR]            # 숙의 gold set 벤치마크
 
 openoyster serve
 openoyster status
@@ -276,9 +285,10 @@ openoyster doctor
 openoyster db upgrade
 ```
 
-기존 durable signal/hypothesis runtime도 유지됩니다. 파일·URL·RSS·GitHub 읽기,
-event-driven loop, evidence inspection, policy/evaluation 명령은 상세 매뉴얼에서 확인할 수
-있습니다.
+수집 계층인 durable signal/hypothesis runtime(파일·URL·RSS·GitHub 읽기, event-driven
+loop)은 **동결(frozen) 상태**로 유지됩니다 — 신규 기능 없이 유지보수만 하며, 수집·신호
+탐지 가치의 OpenCrab 이관을 로드맵에서 다룹니다. 자세한 방침은
+[GOAL_ROADMAP](docs/GOAL_ROADMAP.md) 7절을 참조하세요.
 
 # API
 
@@ -318,7 +328,7 @@ PATH="$PWD/.venv/bin:$PATH" make check
 현재 검증 범위는 다음을 포함합니다.
 
 - Ruff와 mypy
-- 204개 unit/integration test
+- 282개 unit/integration test
 - Pack source 불변성
 - D1 contract, migration, runtime, CLI/API
 - SQLite migration upgrade/downgrade

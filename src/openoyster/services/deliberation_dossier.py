@@ -124,6 +124,7 @@ def build_dossier_payload(session: Session, run: DeliberationRun) -> dict[str, A
         "knowledge_requests": artifacts.get("knowledge_requests"),
         "cognitive_transition": artifacts.get("cognitive_transition"),
         "cognitive_impact": impact.impact_json if impact is not None else None,
+        "retrieval_trace": artifacts.get("retrieval_trace"),
         "evidence_snapshots": _citations_summary(session, run.id),
         "stage_calls": _stage_call_summaries(session, run.id),
         "llm_attempt_count": run.llm_attempt_count,
@@ -217,6 +218,25 @@ def render_dossier_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- Decision support: `{impact.get('decision_support')}`")
         grounded = impact.get("grounded_assertions") or []
         lines.append(f"- Grounded assertions projected: {len(grounded)}")
+    retrieval_trace = payload.get("retrieval_trace")
+    if isinstance(retrieval_trace, dict):
+        lines.extend(["", "## Retrieval trace"])
+        # Digest/count schema only — never render raw query strings.
+        original_digest = retrieval_trace.get("original_query_digest")
+        if original_digest:
+            lines.append(f"- Original query digest: `{original_digest}`")
+        expanded_count = retrieval_trace.get("expanded_query_count")
+        if expanded_count is not None:
+            lines.append(f"- Expanded query count: {expanded_count}")
+        used_digest = retrieval_trace.get("used_query_digest")
+        if used_digest:
+            lines.append(f"- Used query digest: `{used_digest}`")
+        safety = retrieval_trace.get("safety_code")
+        if safety:
+            lines.append(f"- Safety code: `{safety}`")
+        matched_via = retrieval_trace.get("matched_via")
+        if matched_via:
+            lines.append(f"- Matched via: `{matched_via}`")
     lines.extend(["", "## Evidence snapshots"])
     snaps = payload.get("evidence_snapshots") or []
     if snaps:

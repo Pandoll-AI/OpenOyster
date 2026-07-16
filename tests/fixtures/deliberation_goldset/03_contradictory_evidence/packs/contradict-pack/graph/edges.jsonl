@@ -1,0 +1,4 @@
+{"id":"edge:contains:pro","from_id":"resource:doc:pro","to_id":"evidence:pro","from_space":"resource","to_space":"evidence","relation":"contains","confidence":1.0,"evidence_refs":["evidence:pro"]}
+{"id":"edge:contains:con","from_id":"resource:doc:con","to_id":"evidence:con","from_space":"resource","to_space":"evidence","relation":"contains","confidence":1.0,"evidence_refs":["evidence:con"]}
+{"id":"edge:supports:1","from_id":"evidence:pro","to_id":"claim:1","from_space":"evidence","to_space":"claim","relation":"supports","confidence":0.9,"evidence_refs":["evidence:pro"]}
+{"id":"edge:opposes:1","from_id":"evidence:con","to_id":"claim:1","from_space":"evidence","to_space":"claim","relation":"opposes","confidence":0.9,"evidence_refs":["evidence:con"]}

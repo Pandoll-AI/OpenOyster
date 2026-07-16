@@ -18,6 +18,11 @@ from .llm import provider_from_settings
 from .policies import get_active_policy
 from .services.evaluation import evaluate_counter_evidence, evaluate_goldset
 from .services.evaluation_common import json_path_for_id, safe_child_path
+from .services.evaluation_deliberation import (
+    DEFAULT_SCENARIOS_DIR,
+    DeliberationGoldsetReport,
+    evaluate_deliberation_goldset,
+)
 from .services.evaluation_report import write_eval_outputs
 
 GOLD_DOCS_DIR = Path("goldset/docs")
@@ -73,6 +78,75 @@ def eval_counter(
     _print_counter_eval_summary(report)
     raw_path = write_eval_outputs(counter_report=report)
     console.print(f"Raw result: {raw_path}")
+
+
+@eval_app.command("deliberation")
+def eval_deliberation(
+    scenarios: Annotated[
+        Path,
+        typer.Option("--scenarios", help="Directory of deliberation gold-set scenarios"),
+    ] = DEFAULT_SCENARIOS_DIR,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON")] = False,
+) -> None:
+    """Run deliberation-engine quality gold set (outcome / abstention / critic)."""
+    with _runtime() as (settings, _, _factory):
+        provider = provider_from_settings(settings)
+        report = evaluate_deliberation_goldset(
+            provider,
+            scenarios_dir=scenarios,
+            settings=settings,
+        )
+    if as_json:
+        # Plain stdout JSON (no Rich styling) for machine consumers / CI.
+        typer.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return
+    if settings.llm_provider == "stub":
+        console.print(
+            "[yellow]Stub provider selected; judgment-quality metrics are not meaningful "
+            "except deterministic no_evidence / no_match retrieval abstentions.[/]"
+        )
+    _print_deliberation_eval_summary(report)
+
+
+def _print_deliberation_eval_summary(report: DeliberationGoldsetReport) -> None:
+    console.print(f"Provider: {report.provider} / {report.model or 'unknown'}")
+    console.print(f"Scenarios evaluated: {report.scenarios_evaluated}")
+    console.print(f"judge_note: {report.judge_note}")
+    table = Table(title="Deliberation gold-set results")
+    table.add_column("Scenario")
+    table.add_column("Expected")
+    table.add_column("Actual")
+    table.add_column("Verdict")
+    table.add_column("Notes")
+    for row in report.results:
+        table.add_row(
+            row.scenario_id,
+            str(row.expected.get("outcome")),
+            str(row.actual.get("outcome") or row.actual.get("error") or "?"),
+            row.verdict,
+            "; ".join(row.notes) if row.notes else "",
+        )
+    console.print(table)
+    agg = report.aggregates
+    metrics = Table(title="Aggregates")
+    metrics.add_column("Metric")
+    metrics.add_column("Value", justify="right")
+    for key in (
+        "pass_rate",
+        "abstention_appropriateness",
+        "critic_hit_rate",
+        "select_accuracy",
+        "scenarios_passed",
+        "scenarios_failed",
+    ):
+        value = agg.get(key)
+        if value is None:
+            continue
+        if key.startswith("scenarios_"):
+            metrics.add_row(key, f"{int(value)}")
+        else:
+            metrics.add_row(key, f"{value:.3f}")
+    console.print(metrics)
 
 
 @gold_app.command("review")

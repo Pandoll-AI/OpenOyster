@@ -1,0 +1,18 @@
+{
+  "scenario_id": "03_contradictory_evidence",
+  "description": "Pack contains mutually contradictory evidence about the same claim; critic must surface evidence_bias or missing_opposing_evidence.",
+  "expected_outcome": "abstain",
+  "expected_abstention_reasons": ["critic_non_pass"],
+  "planted_flaws": [
+    {
+      "kind": "contradiction",
+      "description": "evidence:pro affirms the claim while evidence:con denies the same claim with equal weight.",
+      "evidence_ids": ["evidence:pro", "evidence:con"]
+    },
+    {
+      "kind": "missing_opposing",
+      "description": "A one-sided decision that ignores opposing anchors should be flagged."
+    }
+  ],
+  "expected_critic_issue_codes": ["evidence_bias", "missing_opposing_evidence"]
+}

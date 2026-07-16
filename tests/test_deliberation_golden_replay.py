@@ -38,11 +38,16 @@ MISSION_PATH = PROJECT_ROOT / "tests/fixtures/deliberation_d1/mission_happy.json
 # Update rule: when the dossier contract intentionally changes, re-run this
 # module, print the new digests from a failing assertion, and commit the new
 # constants only after confirming the delta is intentional.
+# 2026-07-16: rebased for the intentional `retrieval_trace` dossier key (W-A1
+# query-expansion provenance), then the D3 flip-condition `predicate` field and
+# prompt template v9, then the policy-snapshot max_llm_attempts change as the core
+# (10) and auxiliary (4) budgets were split; each delta verified as intentional
+# contract growth.
 GOLDEN_SELECT_DOSSIER_JSON_DIGEST = (
-    "d28478664de3883c21409f64a1a9688031702ac31116d6af5922a8e4addb214d"
+    "5baf4fefa82054d72335ad21040ec7b608b3e1aae52177fa072d8b1047086873"
 )
 GOLDEN_NO_EVIDENCE_DOSSIER_JSON_DIGEST = (
-    "fb109e40d9f7644022c468178f1b25e012f854afd3b15cbbfdf4f909d71518da"
+    "b9313d0573f4b9632242d67d1fd6e671c1476caed8798502e51aa3a8fcd3f1a1"
 )
 
 

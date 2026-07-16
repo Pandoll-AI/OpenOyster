@@ -11,6 +11,14 @@ from sqlalchemy.orm import Session
 from openoyster.models import PackEdge, PackEvidence, PackInstall, PackNode
 from openoyster.scoring import clamp, tokenize
 
+# Search routing only — never evidence body / citation surface.
+MATCHED_VIA_LEXICAL: str = "lexical"
+MATCHED_VIA_MANIFEST_HINT: str = "manifest_hint"
+
+# Admission/search caps for optional manifest retrieval_hints (routing aids only).
+MAX_RETRIEVAL_HINTS: int = 32
+MAX_RETRIEVAL_HINT_CHARS: int = 200
+
 
 @dataclass(frozen=True)
 class PackRetrievalHit:
@@ -25,6 +33,7 @@ class PackRetrievalHit:
     text: str
     matched_terms: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    matched_via: str = MATCHED_VIA_LEXICAL
 
 
 @dataclass
@@ -98,6 +107,35 @@ def _evidence_surface(row: PackEvidence) -> str:
         json_safe_surface(location),
     ]
     return " ".join(part for part in parts if part)
+
+
+def normalize_retrieval_hints(raw: Any) -> list[str]:
+    """Accept only a list of non-empty strings; otherwise return empty.
+
+    Invalid shapes are ignored (admission records diagnostics separately).
+    Hints are search routing aids — never citation-grade evidence text.
+    Caps: at most MAX_RETRIEVAL_HINTS items, each at most MAX_RETRIEVAL_HINT_CHARS.
+    """
+    if not isinstance(raw, list):
+        return []
+    hints: list[str] = []
+    for item in raw:
+        if len(hints) >= MAX_RETRIEVAL_HINTS:
+            break
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                hints.append(text[:MAX_RETRIEVAL_HINT_CHARS])
+    return hints
+
+
+def install_retrieval_hints(install: PackInstall) -> list[str]:
+    manifest = install.original_manifest_json or {}
+    return normalize_retrieval_hints(manifest.get("retrieval_hints"))
+
+
+def _hints_surface(hints: list[str]) -> str:
+    return " ".join(hints)
 
 
 def _active_installs(
@@ -189,6 +227,17 @@ def search_pack_context(
     matched_local_nodes: set[tuple[int, str]] = set()
     matched_local_evidence: set[tuple[int, str]] = set()
 
+    # 1st defense: optional manifest retrieval_hints as install-level search surface.
+    # Hints route to evidence; they never become hit.text / citation body.
+    hint_match_by_install: dict[int, tuple[float, list[str], list[str]]] = {}
+    for install in installs:
+        hints = install_retrieval_hints(install)
+        if not hints:
+            continue
+        score, matched = _lexical_score(query, _hints_surface(hints))
+        if score >= minimum_score:
+            hint_match_by_install[install.id] = (score, matched, hints)
+
     for node in nodes:
         score, matched = _lexical_score(query, _node_surface(node))
         if score < minimum_score:
@@ -206,7 +255,12 @@ def search_pack_context(
                 score=score,
                 text=_node_surface(node),
                 matched_terms=matched,
-                metadata={"node_type": node.node_type, "space": node.space},
+                metadata={
+                    "node_type": node.node_type,
+                    "space": node.space,
+                    "matched_via": MATCHED_VIA_LEXICAL,
+                },
+                matched_via=MATCHED_VIA_LEXICAL,
             )
         )
         matched_node_ids.add(node.id)
@@ -229,11 +283,70 @@ def search_pack_context(
                 score=score,
                 text=_evidence_surface(row),
                 matched_terms=matched,
-                metadata={"kind": row.kind},
+                metadata={"kind": row.kind, "matched_via": MATCHED_VIA_LEXICAL},
+                matched_via=MATCHED_VIA_LEXICAL,
             )
         )
         matched_evidence_ids.add(row.id)
         matched_local_evidence.add((row.pack_install_id, row.local_evidence_id))
+
+    # Hint-only routing: promote pack evidence/nodes when query matches hints.
+    for install_id, (hint_score, hint_matched, _hints) in hint_match_by_install.items():
+        install = install_by_id[install_id]
+        for node in nodes:
+            if node.pack_install_id != install_id:
+                continue
+            if node.id in matched_node_ids:
+                continue
+            hits.append(
+                PackRetrievalHit(
+                    kind="node",
+                    local_id=node.local_node_id,
+                    global_id=node.global_node_id,
+                    pack_id=install.pack_id,
+                    declared_version=install.declared_version,
+                    source_digest=install.source_digest,
+                    pack_install_id=install.id,
+                    score=hint_score,
+                    text=_node_surface(node),
+                    matched_terms=list(hint_matched),
+                    metadata={
+                        "node_type": node.node_type,
+                        "space": node.space,
+                        "matched_via": MATCHED_VIA_MANIFEST_HINT,
+                    },
+                    matched_via=MATCHED_VIA_MANIFEST_HINT,
+                )
+            )
+            matched_node_ids.add(node.id)
+            matched_local_nodes.add((node.pack_install_id, node.local_node_id))
+        for row in evidence_rows:
+            if row.pack_install_id != install_id:
+                continue
+            if row.id in matched_evidence_ids:
+                continue
+            hits.append(
+                PackRetrievalHit(
+                    kind="evidence",
+                    local_id=row.local_evidence_id,
+                    global_id=row.global_evidence_id,
+                    pack_id=install.pack_id,
+                    declared_version=install.declared_version,
+                    source_digest=install.source_digest,
+                    pack_install_id=install.id,
+                    score=hint_score,
+                    # Evidence surface only — never the hint strings themselves.
+                    text=_evidence_surface(row),
+                    matched_terms=list(hint_matched),
+                    metadata={
+                        "kind": row.kind,
+                        "matched_via": MATCHED_VIA_MANIFEST_HINT,
+                    },
+                    matched_via=MATCHED_VIA_MANIFEST_HINT,
+                )
+            )
+            matched_evidence_ids.add(row.id)
+            matched_local_evidence.add((row.pack_install_id, row.local_evidence_id))
 
     hits.sort(key=lambda hit: (-hit.score, hit.kind, hit.global_id))
     hits = hits[:top_k]
@@ -271,6 +384,9 @@ def search_pack_context(
     selected_edges.sort(key=lambda item: (item.pack_install_id, item.local_edge_id))
     selected_evidence.sort(key=lambda item: (item.pack_install_id, item.local_evidence_id))
 
+    hint_hit_count = sum(
+        1 for hit in hits if hit.matched_via == MATCHED_VIA_MANIFEST_HINT
+    )
     return PackRetrievalResult(
         query=query,
         pack_scope=pack_scope,
@@ -287,6 +403,8 @@ def search_pack_context(
             "install_count": len(installs),
             "minimum_score": minimum_score,
             "top_k": top_k,
+            "manifest_hint_install_count": len(hint_match_by_install),
+            "manifest_hint_hit_count": hint_hit_count,
             **diagnostics_extra,
         },
     )

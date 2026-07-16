@@ -6,26 +6,47 @@ import json
 from enum import StrEnum
 from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from openoyster.utils import sha256_text
 
 CONTRACT_VERSION: Final = "deliberation-d1-v1"
-PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v8"
+PROMPT_TEMPLATE_VERSION: Final = "deliberation-prompts-d1-v9"
 
 MAX_BELIEFS: Final = 20
 MAX_OPTIONS: Final = 5
 MAX_SCENARIOS_PER_OPTION: Final = 3
 MAX_EVIDENCE_SNAPSHOTS: Final = 24
 MAX_PROMPT_CHARS: Final = 100_000
-MAX_LLM_ATTEMPTS: Final = 10
+# Core 5-stage budget (beliefs/options/scenarios/critic/decision x up to 2 attempts).
+# Expansion and secondary critic use a separate auxiliary budget so they cannot
+# starve the core path when every stage needs a retry.
+CORE_STAGE_MAX_ATTEMPTS: Final = 10  # 5 stages x 2
+# Expansion (1) + secondary critic x 2 attempts + small headroom.
+AUXILIARY_LLM_MAX_ATTEMPTS: Final = 4
+# Total call ceiling for policy/docs accounting (core + auxiliary). Not used as
+# the core-stage budget gate — see CORE_STAGE_MAX_ATTEMPTS / AUXILIARY_*.
+MAX_LLM_ATTEMPTS: Final = CORE_STAGE_MAX_ATTEMPTS + AUXILIARY_LLM_MAX_ATTEMPTS
 MIN_QUOTE_CHARS: Final = 12
+MAX_RETRIEVAL_EXPANSION_QUERIES: Final = 5
+MAX_RETRIEVAL_EXPANSION_QUERY_CHARS: Final = 200
+MAX_FLIP_PREDICATE_TERMS: Final = 8
+MAX_FLIP_PREDICATE_TERM_CHARS: Final = 100
+MAX_ACTIVE_FLIP_WATCHES: Final = 200
 
 STAGE_BELIEFS: Final = "deliberation_beliefs"
 STAGE_OPTIONS: Final = "deliberation_options"
 STAGE_SCENARIOS: Final = "deliberation_scenarios"
 STAGE_CRITIC: Final = "deliberation_critic"
 STAGE_DECISION: Final = "deliberation_decision"
+STAGE_RETRIEVAL_QUERY_EXPANSION: Final = "retrieval_query_expansion"
 
 DELIBERATION_STAGES: Final[tuple[str, ...]] = (
     STAGE_BELIEFS,
@@ -45,6 +66,7 @@ ARTIFACT_KINDS: Final[frozenset[str]] = frozenset(
         "flip_conditions",
         "knowledge_requests",
         "cognitive_transition",
+        "retrieval_trace",
     }
 )
 
@@ -148,7 +170,8 @@ class Mission(StrictModel):
     preferences: list[str] = Field(default_factory=list)
     deadline: str | None = None
     context: str | None = None
-    mission_charter_id: int | None = None
+    # Strict positive int only: reject bool, numeric strings, 0, negatives.
+    mission_charter_id: StrictInt | None = Field(default=None, gt=0)
 
     @field_validator("constraints", "preferences", mode="before")
     @classmethod
@@ -316,9 +339,43 @@ class CriticStagePayload(StrictModel):
     findings: list[NarrativeAssertion] = Field(default_factory=list)
 
 
+class FlipPredicate(StrictModel):
+    """Deterministic FTS watch predicate for flip-condition monitoring (D3).
+
+    Absent predicate means the flip condition is dossier-only (not watched).
+    """
+
+    query_terms: list[str] = Field(min_length=1, max_length=MAX_FLIP_PREDICATE_TERMS)
+    note: str | None = None
+
+    @field_validator("query_terms")
+    @classmethod
+    def _term_bounds(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("query_terms must contain at least one term")
+        if len(value) > MAX_FLIP_PREDICATE_TERMS:
+            raise ValueError(
+                f"at most {MAX_FLIP_PREDICATE_TERMS} query_terms allowed"
+            )
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("query_terms must be strings")
+            text = item.strip()
+            if not text:
+                raise ValueError("query_terms must not contain empty strings")
+            if len(text) > MAX_FLIP_PREDICATE_TERM_CHARS:
+                raise ValueError(
+                    f"query_term exceeds {MAX_FLIP_PREDICATE_TERM_CHARS} chars"
+                )
+            cleaned.append(text)
+        return cleaned
+
+
 class FlipCondition(StrictModel):
     local_key: str = Field(min_length=1)
     condition: NarrativeAssertion
+    predicate: FlipPredicate | None = None
 
 
 class KnowledgeRequest(StrictModel):
@@ -360,6 +417,33 @@ class DecisionStagePayload(StrictModel):
         return self
 
 
+class RetrievalQueryExpansionPayload(StrictModel):
+    """LLM-generated alternative lexical queries (search terms only)."""
+
+    queries: list[str] = Field(default_factory=list, max_length=MAX_RETRIEVAL_EXPANSION_QUERIES)
+
+    @field_validator("queries")
+    @classmethod
+    def _query_bounds(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_RETRIEVAL_EXPANSION_QUERIES:
+            raise ValueError(
+                f"at most {MAX_RETRIEVAL_EXPANSION_QUERIES} expansion queries allowed"
+            )
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("expansion queries must be strings")
+            text = item.strip()
+            if not text:
+                continue
+            if len(text) > MAX_RETRIEVAL_EXPANSION_QUERY_CHARS:
+                raise ValueError(
+                    f"expansion query exceeds {MAX_RETRIEVAL_EXPANSION_QUERY_CHARS} chars"
+                )
+            cleaned.append(text)
+        return cleaned
+
+
 STAGE_PAYLOAD_TYPES: Final[dict[str, type[StrictModel]]] = {
     STAGE_BELIEFS: BeliefsStagePayload,
     STAGE_OPTIONS: OptionsStagePayload,
@@ -367,6 +451,13 @@ STAGE_PAYLOAD_TYPES: Final[dict[str, type[StrictModel]]] = {
     STAGE_CRITIC: CriticStagePayload,
     STAGE_DECISION: DecisionStagePayload,
 }
+
+
+def parse_retrieval_query_expansion(payload: Any) -> RetrievalQueryExpansionPayload:
+    """Validate expansion response; raises ValueError on schema violations."""
+    if not isinstance(payload, dict):
+        raise ValueError("retrieval_query_expansion response must be a JSON object")
+    return RetrievalQueryExpansionPayload.model_validate(payload)
 
 
 def canonical_json(value: Any) -> str:

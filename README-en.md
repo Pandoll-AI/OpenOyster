@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Pandoll-AI/OpenOyster)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11--3.13-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-282%20passing-brightgreen.svg)](tests)
 [![API](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](docs/API_REFERENCE.md)
 
 > This is the English overview. The Korean-first README is [README.md](README.md).
@@ -173,7 +173,7 @@ Use macOS `launchd`, containers, or a remote deployment path for formal long-run
 PATH="$PWD/.venv/bin:$PATH" make check
 ```
 
-The current gate covers Ruff, mypy, 204 tests, D1/D2 contracts/runtime/migrations/CLI/API,
+The current gate covers Ruff, mypy, 282 tests, D1/D2 contracts/runtime/migrations/CLI/API,
 adversarial gate and persistence-parity suites, a golden replay test, Pack-source immutability,
 and sdist/wheel builds.
 

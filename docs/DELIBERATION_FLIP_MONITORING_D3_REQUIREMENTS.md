@@ -1,6 +1,6 @@
 # Flip Condition Monitoring D3 요구사항
 
-상태: 요구사항 초안 (구현 전)
+상태: 구현 중 (W-B1 — 결정적 FTS 스캔; LLM 확인 stage는 범위 밖)
 작성일: 2026-07-16
 
 ## 1. 제품 정의
@@ -33,7 +33,6 @@ D3는 결정을 자동으로 뒤집지 않는다. 재숙의(`deliberate continue
   "condition": { "text": "...", "classification": "proposal", ... },
   "predicate": {
     "query_terms": ["복구 시간", "recovery time"],
-    "expected_change": "new_evidence_matching_terms",
     "note": "예상 복구 시간에 대한 새 근거가 들어오면 재검토"
   }
 }
@@ -41,9 +40,11 @@ D3는 결정을 자동으로 뒤집지 않는다. 재숙의(`deliberate continue
 
 - `predicate`는 선택이다. 없으면 해당 flip condition은 감시되지 않고 dossier에만
   남는다 (기존 동작 보존).
-- `query_terms`는 FTS 질의로 결정적으로 실행 가능해야 한다.
-- predicate는 LLM이 생성하지만, 저장 전에 기존 stage gate와 동일하게 검증한다
-  (빈 term 거부, term 수 상한).
+- `query_terms`는 1..8개의 비어 있지 않은 문자열이며, 각 term은 100자 이하.
+  FTS/lexical 질의로 결정적으로 실행 가능해야 한다.
+- `note`는 선택 설명 문자열이다.
+- predicate는 LLM이 생성하지만, 저장 전에 기존 stage 계약과 동일하게 검증한다
+  (빈 term 거부, term 수 상한, term 길이 상한).
 
 ## 4. 감시 흐름
 
@@ -51,31 +52,34 @@ D3는 결정을 자동으로 뒤집지 않는다. 재숙의(`deliberate continue
 새 Pack install 완료
   ↓
 FlipWatch 스캔: 감시 중인 predicate의 query_terms를
-새 install의 evidence에 대해 FTS 실행 (결정적)
+새 install의 evidence에 대해 lexical 매칭 실행 (결정적; _lexical_score 재사용)
   ↓ 매치 있음
-FlipTrigger 후보 생성 (status=candidate, 매치 evidence ID 기록)
-  ↓ (선택) 확인 stage: 유계 LLM 판정 — 후보 evidence가 실제로
-  condition 텍스트와 관련되는지. 인용 게이트 동일 적용.
+FlipTrigger 후보 생성 + watch status=triggered_candidate
+(매치 evidence ID 기록)
   ↓
-사용자 알림 (CLI/API 조회 + 이벤트 로그)
+사용자 알림 (CLI/API 조회 + 이벤트 로그 flip_trigger_candidate)
   ↓
 사용자가 confirm(→ deliberate continue/new run 수동 실행) 또는 dismiss
 ```
 
-- 결정적 스캔이 1차 필터다. LLM 확인은 설정으로 끌 수 있고, 꺼져 있으면
-  candidate 상태까지만 만든다.
-- LLM 확인 stage의 출력도 quote/pointer anchor를 요구하며, anchor가 검증
-  실패하면 candidate는 승격되지 않는다.
+### 4.1 이번 구현 범위 (W-B1)
+
+- **포함**: 결정적 lexical/FTS 스캔, watch 생성, trigger 후보, dismiss, CLI/API.
+- **제외**: optional LLM 확인 stage. LLM 확인이 꺼진(또는 미구현) 상태에서
+  candidate까지만 만들고 LLM 호출은 0회다.
+- 향후 LLM 확인 stage를 추가할 경우: 후보 evidence가 condition 텍스트와
+  관련되는지 유계 판정, 인용 게이트 동일 적용, anchor 검증 실패 시 승격 금지.
 
 ## 5. 데이터 계약
 
 - `deliberation_flip_watches`: run_id, flip_local_key, predicate_json,
   status(`watching|triggered_candidate|confirmed|dismissed|expired`),
-  created_at, updated_at.
+  dismiss_reason (nullable, dismiss 시 감사 기록), created_at, updated_at.
 - `deliberation_flip_triggers`: watch_id, pack_install_id,
-  matched_evidence_ids, confirmation(`none|llm_supported|llm_unsupported`),
-  confirmation_anchors, created_at.
+  matched_evidence_ids (JSON list), created_at.
 - 두 테이블 모두 immutable append + status 전이만 허용. 삭제 없음.
+- LLM confirmation 컬럼(`confirmation`, `confirmation_anchors`)은 W-B1에서
+  두지 않는다. LLM 확인 stage 도입 시 별도 migration으로 확장한다.
 
 ## 6. CLI/API 계약
 
@@ -87,34 +91,38 @@ openoyster deliberate watch dismiss WATCH_ID --reason TEXT
 ```
 
 - `GET /v1/deliberations/{id}/flip-watches`
-- `GET /v1/flip-triggers?status=candidate`
-- `POST /v1/flip-watches/{id}/dismiss`
+- `GET /v1/flip-triggers?status=candidate` (watch status 필터; `candidate`는
+  `triggered_candidate` 별칭)
+- `POST /v1/flip-watches/{id}/dismiss` body: `{"reason": "..."}`
 
 API 응답은 D1 sanitizer를 통과하며 raw Pack body, prompt, 경로를 포함하지
 않는다. trigger 알림은 기존 events 테이블에 `flip_trigger_candidate` kind로
-기록한다.
+기록한다. dismiss는 `flip_watch_dismissed` 이벤트 + `dismiss_reason` 컬럼으로
+감사한다.
 
 ## 7. 안전 원칙
 
-- 읽기(스캔)와 해석(LLM 확인)과 제안(알림)만 자동화한다.
+- 읽기(스캔)와 제안(알림)만 자동화한다. W-B1에서 해석(LLM 확인)은 하지 않는다.
 - 재숙의, Pack 갱신, 외부 전송은 자동화하지 않는다.
 - 스캔은 새 install 이벤트당 1회이며 감시 predicate 수에 비례하는 상한을 둔다
-  (기본 예: watch 200개 초과 시 오래된 것부터 expired 처리 + 경고).
+  (기본: watching 상태 watch 200개 초과 시 오래된 것부터 expired 처리 + 경고
+  이벤트 `flip_watches_expired`).
+- replay는 flip watch/trigger 테이블을 읽거나 쓰지 않는다.
 
 ## 8. 범위 밖
 
 - 자동 `deliberate continue` 실행
+- LLM 확인 stage (본 문서 4.1)
 - Pack content diff 기반 촉발 (D2와 동일하게 citation/FTS scope만)
 - 외부 알림 채널 (이벤트 로그·CLI·API 조회까지만; 채널 연동은 별도)
 - 시계열 예측, 확률 추정
 
 ## 9. 수용 기준
 
-- predicate 없는 기존 run·dossier는 동작이 변하지 않는다.
-- 새 Pack 설치 후 매치되는 watching predicate가 candidate로 전이되고 매치
-  evidence ID가 기록된다.
+- predicate 없는 기존 run·dossier는 watch를 만들지 않는다 (기존 동작 보존).
+- 새 Pack 설치 후 매치되는 watching predicate가 `triggered_candidate`로 전이되고
+  매치 evidence ID가 기록된다.
 - 매치 없는 설치는 어떤 상태도 바꾸지 않는다.
-- LLM 확인이 꺼진 설정에서 LLM 호출이 0회다.
-- LLM 확인의 anchor 검증 실패는 승격을 막고 실패 코드를 남긴다.
-- dismiss/confirm 전이는 감사 가능하게 기록된다.
+- W-B1에서 LLM 호출은 flip 스캔 경로에 없다.
+- dismiss 전이는 reason과 이벤트로 감사 가능하게 기록된다.
 - replay는 D3 테이블을 변경하지 않는다.

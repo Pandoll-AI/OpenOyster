@@ -1,0 +1,12 @@
+{
+  "goal": "Evaluate acceptance under a binding hard constraint that forbids acceptance",
+  "decision_question": "Should we accept the claim that expansion is ready?",
+  "constraints": [
+    "HARD: Never accept expansion under any circumstance",
+    "Do not invent facts outside Pack evidence"
+  ],
+  "preferences": [
+    "Prefer compliance with hard constraints over action"
+  ],
+  "context": "Hard constraint fixture; acceptance is forbidden."
+}

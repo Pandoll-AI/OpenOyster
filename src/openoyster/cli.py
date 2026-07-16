@@ -76,12 +76,22 @@ hypothesis_app = typer.Typer(help="Inspect hypotheses and evidence.")
 artifact_app = typer.Typer(help="Inspect artifacts and provenance.")
 pack_app = typer.Typer(help="Validate, install, inspect, and query trusted OpenCrab Pack directories.")
 deliberate_app = typer.Typer(help="Run and audit Autonomous Deliberation D1 decisions.")
+deliberate_watch_app = typer.Typer(help="Monitor flip-condition watches (D3).")
+deliberate_outcome_app = typer.Typer(
+    help="Record and inspect decision outcome ledger entries (usage records, not evidence)."
+)
+charter_app = typer.Typer(
+    help="Manage deliberation charters (sustained concern grouping; not evidence)."
+)
 app.add_typer(policy_app, name="policy")
 app.add_typer(db_app, name="db")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(artifact_app, name="artifact")
 app.add_typer(pack_app, name="pack")
 app.add_typer(deliberate_app, name="deliberate")
+deliberate_app.add_typer(deliberate_watch_app, name="watch")
+deliberate_app.add_typer(deliberate_outcome_app, name="outcome")
+app.add_typer(charter_app, name="charter")
 app.add_typer(eval_app, name="eval")
 app.add_typer(gold_app, name="gold")
 console = Console()
@@ -923,6 +933,8 @@ def pack_install(
                 profile=profile,
             )
             session.commit()
+            # Post-commit flip scan owns its own commit; failures never affect install.
+            opencrab_packs.scan_installed_pack(session, result.pack_install_id)
         except opencrab_packs.PackValidationError as exc:
             session.rollback()
             _print_pack_json(
@@ -1069,6 +1081,11 @@ def deliberate_run(
         _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
         raise typer.Exit(code=1) from exc
     except Exception as exc:
+        from .services import charters as charter_service
+
+        if isinstance(exc, charter_service.CharterError):
+            _print_pack_json({"status": "failed_input", "error": {"code": exc.code}})
+            raise typer.Exit(code=2) from exc
         _print_pack_json({"status": "indeterminate", "error": {"code": "deliberation_failed"}})
         raise typer.Exit(code=1) from exc
 
@@ -1124,6 +1141,11 @@ def deliberate_continue(
         _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
         raise typer.Exit(code=1) from exc
     except Exception as exc:
+        from .services import charters as charter_service
+
+        if isinstance(exc, charter_service.CharterError):
+            _print_pack_json({"status": "failed_input", "error": {"code": exc.code}})
+            raise typer.Exit(code=2) from exc
         _print_pack_json({"status": "indeterminate", "error": {"code": "deliberation_failed"}})
         raise typer.Exit(code=1) from exc
 
@@ -1240,6 +1262,331 @@ def deliberate_knowledge_requests(
         else:
             payload = raw
     _print_pack_json(_sanitize_deliberation_value(payload))
+
+
+@deliberate_watch_app.command("list")
+def deliberate_watch_list(
+    status: Annotated[str | None, typer.Option(help="Filter by watch status.")] = None,
+    charter: Annotated[
+        int | None,
+        typer.Option("--charter", help="Filter by mission_charter_id on the parent run."),
+    ] = None,
+) -> None:
+    """List flip-condition watches (D3). Never re-runs deliberation."""
+    from .services import flip_monitoring
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            watches = flip_monitoring.list_watches(
+                session, status=status, mission_charter_id=charter
+            )
+            payload = {
+                "watches": [
+                    _sanitize_deliberation_value(flip_monitoring.watch_public_payload(w))
+                    for w in watches
+                ]
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("show")
+def deliberate_watch_show(watch_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show one flip-condition watch and its triggers."""
+    from .services import flip_monitoring
+
+    with _runtime() as (_, _, factory), factory() as session:
+        watch = flip_monitoring.get_watch(session, watch_id)
+        if watch is None:
+            _print_pack_json({"error": {"code": "watch_not_found"}})
+            raise typer.Exit(code=2)
+        triggers = flip_monitoring.list_triggers(session, watch_id=watch_id)
+        payload = {
+            "watch": _sanitize_deliberation_value(flip_monitoring.watch_public_payload(watch)),
+            "triggers": [
+                _sanitize_deliberation_value(
+                    flip_monitoring.trigger_public_payload(trigger, parent)
+                )
+                for trigger, parent in triggers
+            ],
+        }
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("scan")
+def deliberate_watch_scan(
+    pack_install: Annotated[
+        int | None,
+        typer.Option("--pack-install", help="Pack install ID to scan against watching predicates."),
+    ] = None,
+) -> None:
+    """Manually scan watching flip predicates against a Pack install (deterministic)."""
+    from .services import flip_monitoring
+
+    if pack_install is None:
+        _print_pack_json({"error": {"code": "pack_install_required"}})
+        raise typer.Exit(code=2)
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            triggers = flip_monitoring.scan_pack_install(session, pack_install)
+            session.commit()
+            trigger_payloads = []
+            for trigger in triggers:
+                watch = flip_monitoring.get_watch(session, trigger.watch_id)
+                if watch is None:
+                    continue
+                trigger_payloads.append(
+                    _sanitize_deliberation_value(
+                        flip_monitoring.trigger_public_payload(trigger, watch)
+                    )
+                )
+            payload = {
+                "pack_install_id": pack_install,
+                "triggered": len(triggers),
+                "triggers": trigger_payloads,
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_watch_app.command("dismiss")
+def deliberate_watch_dismiss(
+    watch_id: Annotated[int, typer.Argument(min=1)],
+    reason: Annotated[str, typer.Option(help="Audit reason for dismissing this watch.")],
+) -> None:
+    """Dismiss a flip watch with a required audit reason. Does not re-deliberate."""
+    from .services import flip_monitoring
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            watch = flip_monitoring.dismiss_watch(session, watch_id, reason=reason)
+            session.commit()
+            payload = {
+                "watch": _sanitize_deliberation_value(flip_monitoring.watch_public_payload(watch))
+            }
+    except flip_monitoring.FlipWatchError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_outcome_app.command("record")
+def deliberate_outcome_record(
+    run_id: Annotated[int, typer.Argument(min=1)],
+    label: Annotated[
+        str,
+        typer.Option(
+            "--label",
+            help="Outcome label: adopted|adopted_modified|not_adopted|reversed|expired",
+        ),
+    ],
+    scenario: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--scenario",
+            help="Scenario assessment as key=status (e.g. expected=materialized).",
+        ),
+    ] = None,
+    abstention: Annotated[
+        str | None,
+        typer.Option(
+            "--abstention",
+            help="Abstention assessment: abstention_was_right|information_arrived_late|should_have_selected",
+        ),
+    ] = None,
+    note: Annotated[str | None, typer.Option("--note", help="Optional free-text note.")] = None,
+    idempotency_key: Annotated[
+        str | None,
+        typer.Option("--idempotency-key", help="Optional idempotency key for safe retries."),
+    ] = None,
+    noted_by: Annotated[
+        str,
+        typer.Option("--noted-by", help="Who recorded this outcome."),
+    ] = "user",
+) -> None:
+    """Append one outcome ledger entry for a completed run (usage record, not evidence)."""
+    from .services import outcome_ledger
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            row = outcome_ledger.record_outcome(
+                session,
+                run_id,
+                outcome_label=label,
+                scenario_assessments=list(scenario or []),
+                abstention_assessment=abstention,
+                note=note,
+                noted_by=noted_by,
+                idempotency_key=idempotency_key,
+            )
+            session.commit()
+            payload = {
+                "outcome": _sanitize_deliberation_value(
+                    outcome_ledger.outcome_public_payload(row)
+                )
+            }
+    except outcome_ledger.OutcomeLedgerError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"status": "failed_database", "error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@deliberate_outcome_app.command("show")
+def deliberate_outcome_show(run_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """List append-only outcome ledger entries for one run."""
+    from .services import outcome_ledger
+
+    with _runtime() as (_, _, factory), factory() as session:
+        rows = outcome_ledger.list_outcomes(session, run_id)
+        payload = {
+            "run_id": run_id,
+            "outcomes": [
+                _sanitize_deliberation_value(outcome_ledger.outcome_public_payload(row))
+                for row in rows
+            ],
+        }
+    _print_pack_json(payload)
+
+
+@deliberate_app.command("calibration")
+def deliberate_calibration(
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="Only outcomes noted at or after this ISO date."),
+    ] = None,
+    charter: Annotated[
+        int | None,
+        typer.Option("--charter", help="Filter by mission_charter_id from mission snapshot."),
+    ] = None,
+) -> None:
+    """Deterministic calibration aggregates from the outcome ledger (no LLM)."""
+    from datetime import datetime
+
+    from .services import outcome_ledger
+
+    since_dt = None
+    if since is not None and since.strip():
+        try:
+            since_dt = datetime.fromisoformat(since.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            _print_pack_json({"error": {"code": "invalid_since_date"}})
+            raise typer.Exit(code=2) from exc
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            report = outcome_ledger.calibration_report(
+                session,
+                since=since_dt,
+                mission_charter_id=charter,
+            )
+    except Exception as exc:
+        from .services import charters as charter_service
+
+        if isinstance(exc, charter_service.CharterError):
+            _print_pack_json({"error": {"code": exc.code}})
+            raise typer.Exit(code=2) from exc
+        raise
+    _print_pack_json(_sanitize_deliberation_value(report))
+
+
+@charter_app.command("create")
+def charter_create(
+    title: Annotated[str, typer.Option("--title", help="Required charter title.")],
+    description: Annotated[
+        str | None, typer.Option("--description", help="Optional description.")
+    ] = None,
+) -> None:
+    """Create an active deliberation charter (control-plane grouping only)."""
+    from .services import charters
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            row = charters.create_charter(session, title=title, description=description)
+            session.commit()
+            payload = {
+                "charter": _sanitize_deliberation_value(charters.charter_public_payload(row))
+            }
+    except charters.CharterError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
+
+
+@charter_app.command("list")
+def charter_list(
+    status: Annotated[
+        str | None,
+        typer.Option("--status", help="Filter by status: active or archived."),
+    ] = None,
+) -> None:
+    """List deliberation charters."""
+    from .services import charters
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            rows = charters.list_charters(session, status=status)
+            payload = {
+                "charters": [
+                    _sanitize_deliberation_value(charters.charter_public_payload(row))
+                    for row in rows
+                ]
+            }
+    except charters.CharterError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    _print_pack_json(payload)
+
+
+@charter_app.command("show")
+def charter_show(charter_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Show one deliberation charter."""
+    from .services import charters
+
+    with _runtime() as (_, _, factory), factory() as session:
+        row = charters.get_charter(session, charter_id)
+        if row is None:
+            _print_pack_json({"error": {"code": charters.ERROR_UNKNOWN_CHARTER}})
+            raise typer.Exit(code=2)
+        payload = {
+            "charter": _sanitize_deliberation_value(charters.charter_public_payload(row))
+        }
+    _print_pack_json(payload)
+
+
+@charter_app.command("archive")
+def charter_archive(charter_id: Annotated[int, typer.Argument(min=1)]) -> None:
+    """Archive a charter (soft-delete; no hard delete)."""
+    from .services import charters
+
+    try:
+        with _runtime() as (_, _, factory), factory() as session:
+            row = charters.archive_charter(session, charter_id)
+            session.commit()
+            payload = {
+                "charter": _sanitize_deliberation_value(charters.charter_public_payload(row))
+            }
+    except charters.CharterError as exc:
+        _print_pack_json({"error": {"code": exc.code}})
+        raise typer.Exit(code=2) from exc
+    except SQLAlchemyError as exc:
+        _print_pack_json({"error": {"code": "database_error"}})
+        raise typer.Exit(code=1) from exc
+    _print_pack_json(payload)
 
 
 def _print_results(results) -> None:

@@ -1,0 +1,8 @@
+{
+  "scenario_id": "01_clear_select",
+  "description": "Clear Pack-grounded evidence supports the decision question; select is the correct outcome.",
+  "expected_outcome": "select",
+  "expected_abstention_reasons": [],
+  "planted_flaws": [],
+  "expected_critic_issue_codes": []
+}

@@ -889,3 +889,114 @@ class DeliberationReplayResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     run: Mapped[DeliberationRun] = relationship(back_populates="replay_results")
+
+
+class DeliberationFlipWatch(Base):
+    """Append-only flip-condition watch; status transitions only (D3)."""
+
+    __tablename__ = "deliberation_flip_watches"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "flip_local_key",
+            name="uq_deliberation_flip_watches_run_key",
+        ),
+        Index("ix_deliberation_flip_watches_status", "status"),
+        Index("ix_deliberation_flip_watches_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    flip_local_key: Mapped[str] = mapped_column(String(120))
+    predicate_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(40), default="watching")
+    dismiss_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    triggers: Mapped[list[DeliberationFlipTrigger]] = relationship(
+        back_populates="watch", cascade="all, delete-orphan"
+    )
+
+
+class DeliberationFlipTrigger(Base):
+    """Append-only match record for a flip watch against a Pack install (D3)."""
+
+    __tablename__ = "deliberation_flip_triggers"
+    __table_args__ = (
+        UniqueConstraint(
+            "watch_id",
+            "pack_install_id",
+            name="uq_deliberation_flip_triggers_watch_install",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    watch_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_flip_watches.id", ondelete="CASCADE"), index=True
+    )
+    pack_install_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_installs.id", ondelete="RESTRICT"), index=True
+    )
+    matched_evidence_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    watch: Mapped[DeliberationFlipWatch] = relationship(back_populates="triggers")
+
+
+class DeliberationCharter(Base):
+    """First-class sustained concern grouping for deliberation missions.
+
+    Control-plane grouping only — never Pack evidence, never injected into
+    stage prompts. Soft-delete via status=archived (no hard delete).
+    """
+
+    __tablename__ = "deliberation_charters"
+    __table_args__ = (
+        Index("ix_deliberation_charters_status", "status"),
+        Index("ix_deliberation_charters_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(250))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class DeliberationOutcome(Base):
+    """Append-only user-recorded result for a completed deliberation run.
+
+    Usage record only — never Pack evidence, never injected into prompts.
+    """
+
+    __tablename__ = "deliberation_outcomes"
+    __table_args__ = (
+        # Global unique (nullable): NULL keys do not collide; non-NULL keys are
+        # single-use across all runs so concurrent cross-run inserts race at DB.
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_deliberation_outcomes_idempotency_key",
+        ),
+        Index("ix_deliberation_outcomes_noted_at", "noted_at"),
+        Index("ix_deliberation_outcomes_outcome_label", "outcome_label"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("deliberation_runs.id", ondelete="CASCADE"), index=True
+    )
+    outcome_label: Mapped[str] = mapped_column(String(40))
+    scenario_assessments: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    abstention_assessment: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    noted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    noted_by: Mapped[str] = mapped_column(String(120), default="user")
+    idempotency_key: Mapped[str | None] = mapped_column(String(250), nullable=True)

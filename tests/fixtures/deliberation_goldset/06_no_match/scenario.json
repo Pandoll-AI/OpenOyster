@@ -1,0 +1,9 @@
+{
+  "scenario_id": "06_no_match",
+  "description": "Pack has evidence but none is lexically relevant to the decision question; must abstain with no_evidence and retrieval_status no_match_in_pack_evidence.",
+  "expected_outcome": "abstain",
+  "expected_abstention_reasons": ["no_evidence"],
+  "expected_retrieval_status": "no_match_in_pack_evidence",
+  "planted_flaws": [],
+  "expected_critic_issue_codes": []
+}

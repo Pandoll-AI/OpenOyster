@@ -9,9 +9,12 @@ import pytest
 from pydantic import ValidationError
 
 from openoyster.deliberation_contracts import (
+    AUXILIARY_LLM_MAX_ATTEMPTS,
     CONTRACT_VERSION,
+    CORE_STAGE_MAX_ATTEMPTS,
     MAX_BELIEFS,
     MAX_EVIDENCE_SNAPSHOTS,
+    MAX_LLM_ATTEMPTS,
     MAX_OPTIONS,
     MAX_SCENARIOS_PER_OPTION,
     MIN_QUOTE_CHARS,
@@ -48,12 +51,17 @@ def _grounded_assertion(text: str = "The claim is supported.") -> dict[str, Any]
 
 def test_contract_version_constants_are_frozen() -> None:
     assert CONTRACT_VERSION == "deliberation-d1-v1"
-    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v8"
+    assert PROMPT_TEMPLATE_VERSION == "deliberation-prompts-d1-v9"
     assert MAX_BELIEFS == 20
     assert MAX_OPTIONS == 5
     assert MAX_SCENARIOS_PER_OPTION == 3
     assert MAX_EVIDENCE_SNAPSHOTS == 24
     assert MIN_QUOTE_CHARS == 12
+    # Core five-stage retries and auxiliary (expansion/critic2) calls use separate
+    # budgets so auxiliary calls can never starve a core-stage retry.
+    assert CORE_STAGE_MAX_ATTEMPTS == 10  # 5 stages x 2
+    assert AUXILIARY_LLM_MAX_ATTEMPTS == 4
+    assert MAX_LLM_ATTEMPTS == CORE_STAGE_MAX_ATTEMPTS + AUXILIARY_LLM_MAX_ATTEMPTS
 
 
 def test_mission_requires_goal_and_decision_question() -> None:
@@ -95,6 +103,23 @@ def test_mission_forbids_extra_fields() -> None:
                 "extra_field": "nope",
             }
         )
+
+
+def test_mission_charter_id_strict_positive_int() -> None:
+    """#9: bool / numeric strings / 0 / negatives rejected; positive int accepted."""
+    ok = Mission.model_validate(
+        {"goal": "g", "decision_question": "q", "mission_charter_id": 7}
+    )
+    assert ok.mission_charter_id == 7
+    assert Mission.model_validate(
+        {"goal": "g", "decision_question": "q", "mission_charter_id": None}
+    ).mission_charter_id is None
+
+    for bad in (True, False, "1", "7", 0, -1, 1.5, "true"):
+        with pytest.raises(ValidationError):
+            Mission.model_validate(
+                {"goal": "g", "decision_question": "q", "mission_charter_id": bad}
+            )
 
 
 def test_citation_anchor_requires_quote_or_pointer_not_both_empty() -> None:

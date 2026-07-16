@@ -1,0 +1,11 @@
+{
+  "goal": "Decide whether to accept the supported claim as decision basis",
+  "decision_question": "Should we accept the claim supported by the installed Pack?",
+  "constraints": [
+    "Do not invent facts outside Pack evidence"
+  ],
+  "preferences": [
+    "Prefer options that remain reversible"
+  ],
+  "context": "Control background only; never cite as evidence."
+}
