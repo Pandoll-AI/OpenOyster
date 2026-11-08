@@ -30,3 +30,7 @@ file:memdb*
 .DS_Store
 .idea/
 .vscode/
+
+# Local AI agent state
+.claude/
+.codex/
